@@ -1,30 +1,78 @@
+<?xml version="1.0" encoding="UTF-8"?>
 <project xmlns="http://maven.apache.org/POM/4.0.0"
          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0
+         http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
 
+    <!-- 继承 Spring Boot 4.0.6，统一版本管理 -->
     <parent>
-        <groupId>com.sealmail</groupId>
-        <artifactId>sealmail-parent</artifactId>
-        <version>1.0.0-SNAPSHOT</version>
-        <relativePath>../pom.xml</relativePath> </parent>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-parent</artifactId>
+        <version>4.0.6</version>
+        <relativePath/>
+    </parent>
 
+    <groupId>com.sealmail</groupId>
     <artifactId>sealmail-backend</artifactId>
+    <version>1.0.0-SNAPSHOT</version>
+    <packaging>pom</packaging>
 
-    <dependencies>
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-web</artifactId>
-        </dependency>
+    <name>Sealmail Backend</name>
+    <description>邮件网关后端多模块父项目</description>
 
-    </dependencies>
+    <!-- 聚合后端子模块 -->
+    <modules>
+        <module>sealmail-base</module>
+        <module>sealmail-core</module>
+        <module>sealmail-boot</module>
+    </modules>
+
+    <properties>
+        <java.version>21</java.version>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <!-- 内部模块版本（自动与父项目版本保持一致） -->
+        <sealmail.version>${project.version}</sealmail.version>
+    </properties>
+
+    <dependencyManagement>
+        <dependencies>
+            <!-- 内部模块版本锁定 -->
+            <dependency>
+                <groupId>com.sealmail</groupId>
+                <artifactId>sealmail-base</artifactId>
+                <version>${sealmail.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.sealmail</groupId>
+                <artifactId>sealmail-core</artifactId>
+                <version>${sealmail.version}</version>
+            </dependency>
+            <!-- 后续可在此处添加第三方依赖版本管理 -->
+        </dependencies>
+    </dependencyManagement>
 
     <build>
-        <plugins>
-            <plugin>
-                <groupId>org.springframework.boot</groupId>
-                <artifactId>spring-boot-maven-plugin</artifactId>
-            </plugin>
-        </plugins>
+        <pluginManagement>
+            <plugins>
+                <plugin>
+                    <groupId>org.springframework.boot</groupId>
+                    <artifactId>spring-boot-maven-plugin</artifactId>
+                    <configuration>
+                        <!-- 避免 JMX 端口冲突 -->
+                        <jvmArguments>-Dspring.jmx.enabled=false</jvmArguments>
+                    </configuration>
+                </plugin>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-compiler-plugin</artifactId>
+                    <version>3.13.0</version>
+                    <configuration>
+                        <source>${java.version}</source>
+                        <target>${java.version}</target>
+                    </configuration>
+                </plugin>
+            </plugins>
+        </pluginManagement>
     </build>
 </project>
