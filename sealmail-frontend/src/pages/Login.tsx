@@ -4,6 +4,7 @@ import { LockOutlined, MailOutlined } from '@ant-design/icons';
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigate, Navigate } from 'react-router-dom';
 import SealMailLogo from '../components/Brand/SealMailLogo';
+import './Login.css';
 
 const { Text } = Typography;
 
@@ -29,27 +30,24 @@ const Login: React.FC = () => {
   };
 
   return (
-    <div
-      style={{
-        minHeight: '100vh',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-      }}
-    >
-      <Card
-        style={{
-          width: 400,
-          boxShadow: '0 8px 32px rgba(0,0,0,0.1)',
-          borderRadius: 12,
-        }}
-      >
-        <div style={{ textAlign: 'center', marginBottom: 32 }}>
+    <main className="login-page">
+      <div className="login-scene" aria-hidden="true">
+        <span className="login-scene__gateway" />
+        <span className="login-scene__gateway login-scene__gateway--inner" />
+        <span className="login-scene__stream login-scene__stream--one" />
+        <span className="login-scene__stream login-scene__stream--two" />
+        <span className="login-scene__stream login-scene__stream--three" />
+        <span className="login-scene__node login-scene__node--one" />
+        <span className="login-scene__node login-scene__node--two" />
+        <span className="login-scene__node login-scene__node--three" />
+      </div>
+
+      <Card className="login-card" bordered={false}>
+        <div className="login-card__brand">
           <SealMailLogo variant="login" subtitle="邮件安全网关管理系统" />
         </div>
 
-        <Form name="login" onFinish={onFinish} autoComplete="off" size="large">
+        <Form className="login-form" name="login" onFinish={onFinish} autoComplete="off" size="large">
           <Form.Item
             name="username"
             rules={[{ required: true, message: '请输入用户名' }]}
@@ -68,19 +66,19 @@ const Login: React.FC = () => {
             <Button
               type="primary"
               htmlType="submit"
-              style={{ width: '100%', height: 48 }}
+              className="login-form__submit"
               loading={loading}
             >
               登录
             </Button>
           </Form.Item>
 
-          <div style={{ textAlign: 'center', marginTop: 16 }}>
+          <div className="login-form__hint">
             <Text type="secondary">测试账号: superadmin / super123</Text>
           </div>
         </Form>
       </Card>
-    </div>
+    </main>
   );
 };
 

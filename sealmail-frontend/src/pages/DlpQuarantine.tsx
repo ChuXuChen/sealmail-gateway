@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   Table,
   Button,
@@ -19,12 +19,16 @@ import {
   EyeOutlined,
   LockOutlined,
 } from '@ant-design/icons';
-import type { TableColumnsType } from 'antd';
+import type { MenuProps, TableColumnsType } from 'antd';
 import { QuarantineItem } from '../types';
 import { dlpQuarantineApi } from '../api/client';
 
 const { Title } = Typography;
 const { Option } = Select;
+type DlpQuarantineActionKey = 'release' | 'release-encrypted' | 'reject';
+
+const isDlpQuarantineActionKey = (key: string): key is DlpQuarantineActionKey =>
+  key === 'release' || key === 'release-encrypted' || key === 'reject';
 
 const getErrorMessage = (error: unknown, fallback: string) => {
   if (
@@ -47,11 +51,7 @@ const DlpQuarantine: React.FC = () => {
   const [detailVisible, setDetailVisible] = useState(false);
   const [selectedItem, setSelectedItem] = useState<QuarantineItem | null>(null);
 
-  useEffect(() => {
-    loadData();
-  }, [pagination.page, pagination.size, reasonFilter]);
-
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     setLoading(true);
     try {
       const response = await dlpQuarantineApi.list({
@@ -73,7 +73,11 @@ const DlpQuarantine: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [pagination.page, pagination.size, reasonFilter]);
+
+  useEffect(() => {
+    void Promise.resolve().then(loadData);
+  }, [loadData]);
 
   const handleRelease = async (id: string, encryptBeforeRelease = false) => {
     try {
@@ -125,6 +129,24 @@ const DlpQuarantine: React.FC = () => {
   const canRelease = (record: QuarantineItem) =>
     record.status === 'QUARANTINED' && record.canRelease !== false;
 
+  const handleActionClick = (key: string, record: QuarantineItem) => {
+    if (!isDlpQuarantineActionKey(key)) {
+      return;
+    }
+
+    const releaseDisabled = !canRelease(record);
+    if ((key === 'release' || key === 'release-encrypted') && releaseDisabled) {
+      return;
+    }
+
+    if (key === 'reject') {
+      confirmReject(record);
+      return;
+    }
+
+    confirmRelease(record, key === 'release-encrypted');
+  };
+
   const confirmRelease = (record: QuarantineItem, encryptBeforeRelease = false) => {
     Modal.confirm({
       title: encryptBeforeRelease ? '确定要加密后放行此邮件吗？' : '确定要直接放行此邮件吗？',
@@ -173,6 +195,37 @@ const DlpQuarantine: React.FC = () => {
     };
     return <Tag color={colorMap[status] || 'default'}>{labelMap[status] || status}</Tag>;
   };
+
+  const getActionItems = (
+    record: QuarantineItem,
+    releaseDisabled: boolean
+  ): MenuProps['items'] => [
+    {
+      key: 'release',
+      icon: <CheckCircleOutlined />,
+      label: releaseDisabled
+        ? record.releaseUnavailableReason || '不可放行'
+        : '直接放行',
+      disabled: releaseDisabled,
+    },
+    {
+      key: 'release-encrypted',
+      icon: <LockOutlined />,
+      label: releaseDisabled
+        ? record.releaseUnavailableReason || '不可加密放行'
+        : '加密放行',
+      disabled: releaseDisabled,
+    },
+    {
+      type: 'divider',
+    },
+    {
+      key: 'reject',
+      danger: true,
+      icon: <CloseCircleOutlined />,
+      label: '拒绝',
+    },
+  ];
 
   const columns: TableColumnsType<QuarantineItem> = [
     {
@@ -242,36 +295,8 @@ const DlpQuarantine: React.FC = () => {
               <Dropdown
                 trigger={['click']}
                 menu={{
-                  items: [
-                    {
-                      key: 'release',
-                      icon: <CheckCircleOutlined />,
-                      label: releaseDisabled
-                        ? record.releaseUnavailableReason || '不可放行'
-                        : '直接放行',
-                      disabled: releaseDisabled,
-                      onClick: () => confirmRelease(record),
-                    },
-                    {
-                      key: 'release-encrypted',
-                      icon: <LockOutlined />,
-                      label: releaseDisabled
-                        ? record.releaseUnavailableReason || '不可加密放行'
-                        : '加密放行',
-                      disabled: releaseDisabled,
-                      onClick: () => confirmRelease(record, true),
-                    },
-                    {
-                      type: 'divider',
-                    },
-                    {
-                      key: 'reject',
-                      danger: true,
-                      icon: <CloseCircleOutlined />,
-                      label: '拒绝',
-                      onClick: () => confirmReject(record),
-                    },
-                  ],
+                  items: getActionItems(record, releaseDisabled),
+                  onClick: ({ key }) => handleActionClick(key, record),
                 }}
               >
                 <Button size="small">

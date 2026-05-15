@@ -65,8 +65,8 @@ public class EncryptStep implements MailPipelineStep {
 
             String prefStr = (String) message.getHeaders().get("preferredAlgorithm");
             PreferredAlgorithm preference = prefStr != null ? PreferredAlgorithm.valueOf(prefStr) : PreferredAlgorithm.AUTO;
-            if ((recipientCerts == null || recipientCerts.isEmpty()) && mustEncrypt) {
-                RecipientCertificateSelection selection = loadRecipientCertificates(envelope);
+            if (mustEncrypt) {
+                RecipientCertificateSelection selection = loadRecipientCertificates(envelope, preference);
                 recipientCerts = selection.certificates();
                 recipientThumbprints = selection.thumbprints();
             }
@@ -89,6 +89,16 @@ public class EncryptStep implements MailPipelineStep {
                 }
                 return PipelineResult.success(message.getPayload());
             }
+            if (mustEncrypt) {
+                List<String> missingRecipients = missingRecipients(envelope, recipientCerts);
+                if (!missingRecipients.isEmpty()) {
+                    return PipelineResult.quarantine(
+                            message.getPayload(),
+                            "CERTIFICATE_MISSING",
+                            "DLP MUST_ENCRYPT: 未找到以下收件人加密证书: " + String.join(", ", missingRecipients),
+                            mustEncryptFailureDisposition());
+                }
+            }
 
             // 根据算法偏好过滤证书
             Map<EmailAddress, String> filteredCerts = new java.util.HashMap<>();
@@ -96,8 +106,8 @@ public class EncryptStep implements MailPipelineStep {
                 try {
                     String alg = PemUtils.parseCertificate(entry.getValue()).getPublicKey().getAlgorithm();
                     log.info("收件人 {} 证书算法: {}", entry.getKey(), alg);
-                    boolean isGm = "EC".equals(alg) || "ECDSA".equals(alg);
-                    boolean isStandard = "RSA".equals(alg);
+                    boolean isGm = isGmAlgorithm(alg);
+                    boolean isStandard = isRsaAlgorithm(alg);
 
                     if (preference == PreferredAlgorithm.GM_ONLY && isGm) {
                         filteredCerts.put(entry.getKey(), entry.getValue());
@@ -145,6 +155,17 @@ public class EncryptStep implements MailPipelineStep {
                 }
                 filteredCerts = recipientCerts;
             }
+            if (mustEncrypt) {
+                List<String> missingRecipients = missingRecipients(envelope, filteredCerts);
+                if (!missingRecipients.isEmpty()) {
+                    return PipelineResult.quarantine(
+                            message.getPayload(),
+                            "CERTIFICATE_MISSING",
+                            "DLP MUST_ENCRYPT: 以下收件人没有符合算法偏好的加密证书: "
+                                    + String.join(", ", missingRecipients),
+                            mustEncryptFailureDisposition());
+                }
+            }
 
             byte[] payload = message.getPayload();
             int originalSize = payload.length;
@@ -177,18 +198,64 @@ public class EncryptStep implements MailPipelineStep {
         return "encrypt";
     }
 
-    private RecipientCertificateSelection loadRecipientCertificates(MailEnvelope envelope) {
+    private RecipientCertificateSelection loadRecipientCertificates(MailEnvelope envelope,
+                                                                    PreferredAlgorithm preference) {
         Map<EmailAddress, String> certificates = new java.util.HashMap<>();
         Map<EmailAddress, String> thumbprints = new java.util.HashMap<>();
         for (EmailAddress recipient : envelope.getRecipients()) {
-            certificateRepository.findTrustedForEncryption(recipient).stream()
-                    .findFirst()
-                    .ifPresent(certificate -> {
-                        certificates.put(recipient, certificate.getPemContent());
-                        thumbprints.put(recipient, certificate.getId().getThumbprint());
-                    });
+            Certificate selected = selectCertificate(
+                    certificateRepository.findTrustedForEncryption(recipient),
+                    preference);
+            if (selected != null) {
+                certificates.put(recipient, selected.getPemContent());
+                thumbprints.put(recipient, selected.getId().getThumbprint());
+            }
         }
         return new RecipientCertificateSelection(certificates, thumbprints);
+    }
+
+    private Certificate selectCertificate(List<Certificate> certificates, PreferredAlgorithm preference) {
+        if (certificates == null || certificates.isEmpty()) {
+            return null;
+        }
+        if (preference == PreferredAlgorithm.GM_ONLY) {
+            return certificates.stream()
+                    .filter(certificate -> isGmAlgorithm(certificateAlgorithm(certificate)))
+                    .findFirst()
+                    .orElse(null);
+        }
+        if (preference == PreferredAlgorithm.STANDARD_ONLY) {
+            return certificates.stream()
+                    .filter(certificate -> isRsaAlgorithm(certificateAlgorithm(certificate)))
+                    .findFirst()
+                    .orElse(null);
+        }
+        return certificates.stream()
+                .filter(certificate -> isGmAlgorithm(certificateAlgorithm(certificate)))
+                .findFirst()
+                .or(() -> certificates.stream()
+                        .filter(certificate -> isRsaAlgorithm(certificateAlgorithm(certificate)))
+                        .findFirst())
+                .orElse(certificates.getFirst());
+    }
+
+    private String certificateAlgorithm(Certificate certificate) {
+        if (certificate.getAlgorithm() != null && !certificate.getAlgorithm().isBlank()) {
+            return certificate.getAlgorithm();
+        }
+        try {
+            return PemUtils.parseCertificate(certificate.getPemContent()).getPublicKey().getAlgorithm();
+        } catch (Exception e) {
+            return "UNKNOWN";
+        }
+    }
+
+    private boolean isGmAlgorithm(String algorithm) {
+        return "EC".equals(algorithm) || "ECDSA".equals(algorithm) || "SM2".equals(algorithm);
+    }
+
+    private boolean isRsaAlgorithm(String algorithm) {
+        return "RSA".equals(algorithm);
     }
 
     private List<MailEncrypted> encryptedEvents(MailEnvelope envelope,
@@ -208,6 +275,14 @@ public class EncryptStep implements MailPipelineStep {
             }
         });
         return events;
+    }
+
+    private List<String> missingRecipients(MailEnvelope envelope, Map<EmailAddress, String> recipientCerts) {
+        return envelope.getRecipients().stream()
+                .filter(recipient -> !recipientCerts.containsKey(recipient))
+                .map(EmailAddress::getValue)
+                .distinct()
+                .toList();
     }
 
     private MailRecordDisposition mustEncryptFailureDisposition() {

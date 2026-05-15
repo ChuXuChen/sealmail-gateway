@@ -4,8 +4,13 @@ import com.sealmail.app.exception.BusinessException;
 
 public class QuarantineReleaseRelayException extends BusinessException {
 
+    public QuarantineReleaseRelayException(String id, String message) {
+        super("QUARANTINE_RELEASE_RELAY_FAILED",
+                "Failed to relay quarantined mail: " + id + ". " + message);
+    }
+
     public QuarantineReleaseRelayException(String id, Throwable cause) {
         super("QUARANTINE_RELEASE_RELAY_FAILED",
-                "Failed to relay quarantined mail: " + id, cause);
+                "Failed to relay quarantined mail: " + id + ". " + cause.getMessage(), cause);
     }
 }

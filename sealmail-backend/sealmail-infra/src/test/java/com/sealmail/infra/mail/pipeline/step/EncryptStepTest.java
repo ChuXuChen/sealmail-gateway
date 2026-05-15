@@ -181,6 +181,41 @@ class EncryptStepTest {
         verify(smimeOperations).encryptMultiple(same(payload), any());
     }
 
+    @Test
+    void mustEncryptQuarantinesWhenAnyRecipientCertificateIsMissing() {
+        SMIMEOperations smimeOperations = mock(SMIMEOperations.class);
+        CertificateRepository certificateRepository = mock(CertificateRepository.class);
+        EncryptStep encryptStep = new EncryptStep(smimeOperations, certificateRepository, new DlpProperties());
+
+        EmailAddress recipientA = new EmailAddress("a@example.com");
+        EmailAddress recipientB = new EmailAddress("b@example.com");
+        byte[] payload = "hello".getBytes();
+        when(certificateRepository.findTrustedForEncryption(recipientA))
+                .thenReturn(List.of(certificate(recipientA, "cert-A")));
+        when(certificateRepository.findTrustedForEncryption(recipientB))
+                .thenReturn(List.of());
+
+        Message<byte[]> message = MessageBuilder.withPayload(payload)
+                .setHeader("mailEnvelope", new MailEnvelope(
+                        "msg-" + UUID.randomUUID() + "@example.com",
+                        new EmailAddress("sender@example.com"),
+                        List.of(recipientA, recipientB),
+                        "127.0.0.1",
+                        "helo",
+                        Instant.now(),
+                        payload
+                ))
+                .setHeader("mustEncrypt", "true")
+                .build();
+
+        PipelineResult result = encryptStep.execute(message);
+
+        assertEquals(false, result.success());
+        assertEquals("CERTIFICATE_MISSING", result.quarantineReason());
+        assertTrue(result.quarantineDetail().contains("b@example.com"));
+        verify(smimeOperations, never()).encryptMultiple(any(), any());
+    }
+
     private static Certificate certificate(EmailAddress owner, String pemContent) {
         Certificate cert = Certificate.importCertificate(
                 new CertificateId(UUID.randomUUID().toString()),

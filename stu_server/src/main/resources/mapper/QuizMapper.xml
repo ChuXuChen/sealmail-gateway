@@ -1,0 +1,158 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.auggie.student_server.mapper.QuizMapper">
+    <resultMap id="QuizResultMap" type="Quiz">
+        <id property="quizId" column="quiz_id"/>
+        <result property="ctid" column="ctid"/>
+        <result property="quizTitle" column="quiz_title"/>
+        <result property="quizDescription" column="quiz_description"/>
+        <result property="startTime" column="start_time"/>
+        <result property="endTime" column="end_time"/>
+        <result property="duration" column="duration"/>
+        <result property="totalScore" column="total_score"/>
+        <result property="status" column="status"/>
+        <result property="createTime" column="create_time"/>
+        <result property="updateTime" column="update_time"/>
+        <result property="isAIGenerated" column="is_ai_generated"/>
+        <result property="aiModel" column="ai_model"/>
+        <result property="difficultyLevel" column="difficulty_level"/>
+        <result property="questionStructure" column="question_structure"/>
+        <result property="courseName" column="courseName"/>
+        <result property="teacherName" column="teacherName"/>
+        <result property="term" column="term"/>
+    </resultMap>
+
+    <select id="findAll" resultMap="QuizResultMap">
+        SELECT * FROM studentms.quiz;
+    </select>
+
+    <select id="findById" resultMap="QuizResultMap">
+        SELECT
+            q.*,
+            c.cname as courseName,
+            t.tname as teacherName,
+            ct.term
+        FROM studentms.quiz q
+        INNER JOIN studentms.ct ct ON q.ctid = ct.ctid
+        INNER JOIN studentms.c c ON ct.cid = c.cid
+        INNER JOIN studentms.t t ON ct.tid = t.tid
+        WHERE q.quiz_id = #{quizId};
+    </select>
+
+    <select id="findBySearch" resultMap="QuizResultMap">
+        SELECT * FROM studentms.quiz
+        <where>
+            <if test="quiz.quizId != null">
+                quiz_id = #{quiz.quizId}
+            </if>
+            <if test="quiz.ctid != null">
+                AND ctid = #{quiz.ctid}
+            </if>
+            <if test="quiz.quizTitle != null">
+                <if test="fuzzy == 0">
+                    AND quiz_title = #{quiz.quizTitle}
+                </if>
+                <if test="fuzzy == 1">
+                    AND quiz_title LIKE CONCAT('%', #{quiz.quizTitle}, '%')
+                </if>
+            </if>
+            <if test="quiz.quizDescription != null">
+                <if test="fuzzy == 0">
+                    AND quiz_description = #{quiz.quizDescription}
+                </if>
+                <if test="fuzzy == 1">
+                    AND quiz_description LIKE CONCAT('%', #{quiz.quizDescription}, '%')
+                </if>
+            </if>
+        </where>
+        ORDER BY create_time DESC;
+    </select>
+
+    <select id="findByCtid" resultMap="QuizResultMap">
+        SELECT * FROM studentms.quiz WHERE ctid = #{ctid} ORDER BY create_time DESC;
+    </select>
+
+    <select id="findByTeacher" resultMap="QuizResultMap">
+        SELECT
+            q.*,
+            c.cname as courseName,
+            t.tname as teacherName,
+            ct.term
+        FROM studentms.quiz q
+        INNER JOIN studentms.ct ct ON q.ctid = ct.ctid
+        INNER JOIN studentms.c c ON ct.cid = c.cid
+        INNER JOIN studentms.t t ON ct.tid = t.tid
+        WHERE ct.tid = #{tid}
+        ORDER BY q.create_time DESC;
+    </select>
+
+    <select id="findByStudent" resultMap="QuizResultMap">
+        SELECT
+            q.*,
+            c.cname as courseName,
+            t.tname as teacherName,
+            ct.term
+        FROM studentms.quiz q
+        INNER JOIN studentms.ct ct ON q.ctid = ct.ctid
+        INNER JOIN studentms.c c ON ct.cid = c.cid
+        INNER JOIN studentms.t t ON ct.tid = t.tid
+        INNER JOIN studentms.sct sct ON ct.cid = sct.cid AND ct.tid = sct.tid AND ct.term = sct.term
+        WHERE sct.sid = #{sid}
+          AND q.status = 1
+        ORDER BY q.create_time DESC;
+    </select>
+
+    <update id="updateById">
+        UPDATE studentms.quiz
+        <set>
+            <if test="quiz.ctid != null">
+                ctid = #{quiz.ctid},
+            </if>
+            <if test="quiz.quizTitle != null and quiz.quizTitle != ''">
+                quiz_title = #{quiz.quizTitle},
+            </if>
+            <if test="quiz.quizDescription != null">
+                quiz_description = #{quiz.quizDescription},
+            </if>
+            <if test="quiz.startTime != null">
+                start_time = #{quiz.startTime},
+            </if>
+            <if test="quiz.endTime != null">
+                end_time = #{quiz.endTime},
+            </if>
+            <if test="quiz.duration != null">
+                duration = #{quiz.duration},
+            </if>
+            <if test="quiz.totalScore != null">
+                total_score = #{quiz.totalScore},
+            </if>
+            <if test="quiz.status != null">
+                status = #{quiz.status},
+            </if>
+            <if test="quiz.isAIGenerated != null">
+                is_ai_generated = #{quiz.isAIGenerated},
+            </if>
+            <if test="quiz.aiModel != null">
+                ai_model = #{quiz.aiModel},
+            </if>
+            <if test="quiz.difficultyLevel != null">
+                difficulty_level = #{quiz.difficultyLevel},
+            </if>
+            <if test="quiz.questionStructure != null">
+                question_structure = #{quiz.questionStructure},
+            </if>
+        </set>
+        WHERE quiz_id = #{quiz.quizId};
+    </update>
+
+    <insert id="save" useGeneratedKeys="true" keyProperty="quiz.quizId">
+        INSERT INTO studentms.quiz (ctid, quiz_title, quiz_description, start_time, end_time, duration, total_score, status, is_ai_generated, ai_model, difficulty_level, question_structure)
+        VALUES (#{quiz.ctid}, #{quiz.quizTitle}, #{quiz.quizDescription}, #{quiz.startTime}, #{quiz.endTime}, #{quiz.duration}, #{quiz.totalScore}, #{quiz.status}, #{quiz.isAIGenerated}, #{quiz.aiModel}, #{quiz.difficultyLevel}, #{quiz.questionStructure})
+    </insert>
+
+    <delete id="deleteById">
+        DELETE FROM studentms.quiz WHERE quiz_id = #{quizId}
+    </delete>
+</mapper>

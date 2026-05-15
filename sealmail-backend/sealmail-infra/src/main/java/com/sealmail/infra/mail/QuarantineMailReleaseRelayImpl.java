@@ -1,129 +1,148 @@
 package com.sealmail.infra.mail;
 
 import com.sealmail.app.usecase.quarantine.QuarantineMailReleaseRelay;
-import com.sealmail.domain.certificate.Certificate;
-import com.sealmail.domain.certificate.CertificateRepository;
-import com.sealmail.domain.certificate.spi.SMIMEOperations;
 import com.sealmail.domain.mailsecurity.MailDirection;
+import com.sealmail.domain.mailsecurity.MailEnvelope;
+import com.sealmail.domain.mailsecurity.ProcessingResult;
 import com.sealmail.domain.quarantine.QuarantinedMail;
-import com.sealmail.domain.shared.model.EmailAddress;
-import com.sealmail.infra.config.properties.PostfixProperties;
-import com.sealmail.infra.config.properties.RelayProperties;
-import com.sealmail.infra.mail.relay.SmtpRelayClient;
-import com.sealmail.infra.mail.relay.SmtpRelayConnectionSettings;
-import com.sealmail.infra.mail.relay.SmtpRelayException;
-import com.sealmail.infra.mail.relay.SmtpRelayRequest;
+import com.sealmail.infra.mail.pipeline.PipelineResult;
+import com.sealmail.infra.mail.pipeline.PipelineStepTracker;
+import com.sealmail.infra.mail.pipeline.RoutingService;
+import com.sealmail.infra.mail.pipeline.step.DkimSignStep;
+import com.sealmail.infra.mail.pipeline.step.EncryptStep;
+import com.sealmail.infra.mail.pipeline.step.RelayStep;
+import com.sealmail.infra.mail.pipeline.step.SignStep;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.messaging.Message;
+import org.springframework.messaging.support.MessageBuilder;
 import org.springframework.stereotype.Component;
 
+/**
+ * Releases DLP-quarantined mail by resuming the normal delivery path after DLP.
+ */
 @Component
 public class QuarantineMailReleaseRelayImpl implements QuarantineMailReleaseRelay {
 
-    private final RelayProperties relayProperties;
-    private final PostfixProperties postfixProperties;
-    private final SmtpRelayClient smtpRelayClient;
-    private final SMIMEOperations smimeOperations;
-    private final CertificateRepository certificateRepository;
+    private static final Logger log = LoggerFactory.getLogger(QuarantineMailReleaseRelayImpl.class);
 
-    public QuarantineMailReleaseRelayImpl(RelayProperties relayProperties,
-                                          PostfixProperties postfixProperties,
-                                          SmtpRelayClient smtpRelayClient,
-                                          SMIMEOperations smimeOperations,
-                                          CertificateRepository certificateRepository) {
-        this.relayProperties = relayProperties;
-        this.postfixProperties = postfixProperties;
-        this.smtpRelayClient = smtpRelayClient;
-        this.smimeOperations = smimeOperations;
-        this.certificateRepository = certificateRepository;
+    private final RoutingService routingService;
+    private final PipelineStepTracker stepTracker;
+    private final SignStep signStep;
+    private final EncryptStep encryptStep;
+    private final DkimSignStep dkimSignStep;
+    private final RelayStep relayStep;
+
+    public QuarantineMailReleaseRelayImpl(RoutingService routingService,
+                                          PipelineStepTracker stepTracker,
+                                          SignStep signStep,
+                                          EncryptStep encryptStep,
+                                          DkimSignStep dkimSignStep,
+                                          RelayStep relayStep) {
+        this.routingService = routingService;
+        this.stepTracker = stepTracker;
+        this.signStep = signStep;
+        this.encryptStep = encryptStep;
+        this.dkimSignStep = dkimSignStep;
+        this.relayStep = relayStep;
     }
 
     @Override
     public void relay(QuarantinedMail mail, boolean encryptBeforeRelay) {
-        SmtpRelayConnectionSettings connection = connectionSettings(mail);
-        SmtpRelayRequest request = new SmtpRelayRequest(
-                connection,
-                envelopeFrom(mail),
-                mail.getRecipients().stream()
-                        .map(address -> address.getValue())
-                        .toList(),
-                releasePayload(mail, encryptBeforeRelay)
-        );
-        try {
-            smtpRelayClient.send(request);
-        } catch (SmtpRelayException e) {
-            throw new QuarantineReleaseRelayException(mail.getId(), e);
+        Message<byte[]> routed = route(mail, encryptBeforeRelay);
+        byte[] payload = routed.getPayload();
+
+        if (direction(mail) == MailDirection.OUTBOUND) {
+            payload = runStep(mail, stepTracker.executeWithTracking(messageWithPayload(routed, payload), signStep), "sign");
+            payload = runStep(mail, stepTracker.executeWithTracking(messageWithPayload(routed, payload), encryptStep), "encrypt");
+            payload = runStep(mail, stepTracker.executeWithTracking(messageWithPayload(routed, payload), dkimSignStep), "dkim-sign");
+        } else if (encryptBeforeRelay) {
+            payload = runStep(mail, stepTracker.executeWithTracking(messageWithPayload(routed, payload), encryptStep), "encrypt");
         }
+
+        runStep(mail, stepTracker.executeWithTracking(messageWithPayload(routed, payload), relayStep), "relay");
+        stepTracker.completeProcessing(stringHeader(routed, "processingId"), ProcessingResult.SUCCESS);
     }
 
-    private byte[] releasePayload(QuarantinedMail mail, boolean encryptBeforeRelay) {
-        if (!encryptBeforeRelay) {
-            return mail.getRawContent();
-        }
+    private Message<byte[]> route(QuarantinedMail mail, boolean encryptBeforeRelay) {
+        Message<byte[]> message = MessageBuilder
+                .withPayload(mail.getRawContent())
+                .setHeader("mailEnvelope", envelope(mail))
+                .setHeader("submissionType", "dlp_quarantine_release")
+                .setHeader("mailDirection", direction(mail).name())
+                .setHeader("remoteAddress", mail.getRemoteAddress())
+                .build();
 
-        try {
-            return smimeOperations.encryptMultiple(mail.getRawContent(), encryptionCertificates(mail));
-        } catch (QuarantineReleaseEncryptionException e) {
-            throw e;
-        } catch (Exception e) {
-            throw new QuarantineReleaseEncryptionException(mail.getId(), e);
-        }
-    }
-
-    private java.util.List<String> encryptionCertificates(QuarantinedMail mail) {
-        java.util.List<String> certificates = new java.util.ArrayList<>();
-        java.util.List<String> missingRecipients = new java.util.ArrayList<>();
-        for (EmailAddress recipient : mail.getRecipients()) {
-            certificateRepository.findTrustedForEncryption(recipient).stream()
-                    .findFirst()
-                    .map(Certificate::getPemContent)
-                    .ifPresentOrElse(certificates::add,
-                            () -> missingRecipients.add(recipient.getValue()));
-        }
-        if (!missingRecipients.isEmpty()) {
-            throw new QuarantineReleaseEncryptionException(
+        Message<byte[]> routed = direction(mail) == MailDirection.OUTBOUND
+                ? routingService.routeOutbound(message)
+                : routingService.routeInbound(message);
+        if (Boolean.TRUE.equals(routed.getHeaders().get("quarantineRequired"))) {
+            String detail = stringHeader(routed, "quarantineDetail");
+            throw new QuarantineReleaseRelayException(
                     mail.getId(),
-                    "Missing trusted encryption certificate for: " + String.join(", ", missingRecipients));
+                    detail != null ? detail : "released mail was routed back to quarantine");
         }
-        return certificates;
+
+        MessageBuilder<byte[]> builder = MessageBuilder.withPayload(routed.getPayload())
+                .copyHeaders(routed.getHeaders())
+                .setHeader("quarantineReleaseId", mail.getId());
+        if (encryptBeforeRelay) {
+            builder
+                    .setHeader("encryptionEnabled", true)
+                    .setHeader("mustEncrypt", "true");
+        }
+        return builder.build();
     }
 
-    private SmtpRelayConnectionSettings connectionSettings(QuarantinedMail mail) {
-        if (postfixProperties.isEnabled()) {
-            return new SmtpRelayConnectionSettings(
-                    postfixProperties.getHost(),
-                    postfixPort(mail),
-                    postfixProperties.isUseTls(),
-                    "",
-                    "",
-                    postfixProperties.getTimeout()
-            );
+    private byte[] runStep(QuarantinedMail mail, PipelineResult result, String stepName) {
+        if (result.success()) {
+            return result.payload();
         }
-        return new SmtpRelayConnectionSettings(
-                relayProperties.getHost(),
-                relayProperties.getPort(),
-                relayProperties.isUseTls(),
-                relayProperties.getUsername(),
-                relayProperties.getPassword(),
-                relayProperties.getTimeout()
+        String detail = result.errorMessage() != null && !result.errorMessage().isBlank()
+                ? result.errorMessage()
+                : result.quarantineDetail();
+        throw new QuarantineReleaseRelayException(
+                mail.getId(),
+                stepName + " failed" + (detail != null && !detail.isBlank() ? ": " + detail : ""));
+    }
+
+    private Message<byte[]> messageWithPayload(Message<byte[]> original, byte[] payload) {
+        return MessageBuilder.withPayload(payload)
+                .copyHeaders(original.getHeaders())
+                .build();
+    }
+
+    private MailEnvelope envelope(QuarantinedMail mail) {
+        return new MailEnvelope(
+                messageId(mail),
+                mail.getSender(),
+                mail.getRecipients(),
+                mail.getRemoteAddress(),
+                "dlp-quarantine-release",
+                mail.getCreatedAt(),
+                mail.getRawContent()
         );
     }
 
-    private int postfixPort(QuarantinedMail mail) {
-        return mail.getDirection() == MailDirection.OUTBOUND
-                ? postfixProperties.getOutboundPort()
-                : postfixProperties.getAfterFilterPort();
+    private String messageId(QuarantinedMail mail) {
+        String value = mail.getMessageId();
+        if (value != null && !value.isBlank()) {
+            return value;
+        }
+        return mail.getId() + "@sealmail.local";
     }
 
-    private String envelopeFrom(QuarantinedMail mail) {
-        if (postfixProperties.isEnabled()
-                && postfixProperties.getEnvelopeFrom() != null
-                && !postfixProperties.getEnvelopeFrom().isBlank()) {
-            return postfixProperties.getEnvelopeFrom();
+    private MailDirection direction(QuarantinedMail mail) {
+        if (mail.getDirection() != null) {
+            return mail.getDirection();
         }
-        if (!postfixProperties.isEnabled()
-                && relayProperties.getUsername() != null
-                && !relayProperties.getUsername().isBlank()) {
-            return relayProperties.getUsername();
-        }
-        return mail.getSender().getValue();
+        log.warn("Quarantined mail {} has no direction; releasing as outbound for backward compatibility",
+                mail.getId());
+        return MailDirection.OUTBOUND;
+    }
+
+    private String stringHeader(Message<byte[]> message, String headerName) {
+        Object value = message.getHeaders().get(headerName);
+        return value instanceof String stringValue ? stringValue : null;
     }
 }
