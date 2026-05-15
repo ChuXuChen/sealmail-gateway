@@ -1,0 +1,13 @@
+package com.sealmail.domain.quarantine;
+
+public enum QuarantineReason {
+    CERTIFICATE_MISSING,
+    CERTIFICATE_REVOKED,
+    ENCRYPTION_FAILED,
+    DECRYPTION_FAILED,
+    SIGNATURE_INVALID,
+    EMAIL_AUTH_FAILED,
+    DOMAIN_NOT_CONFIGURED,
+    POLICY_VIOLATION,
+    SCAN_ERROR
+}

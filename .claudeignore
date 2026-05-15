@@ -1,0 +1,126 @@
+# IDE
+.idea/
+.vscode/
+*.iml
+*.iws
+*.ipr
+*.swp
+*~
+
+# Build Output
+target/
+build/
+dist/
+*.class
+*.jar
+*.war
+*.ear
+*.nar
+
+# Dependencies
+node_modules/
+.m2/
+.gradle/
+pnpm-lock.yaml
+yarn.lock
+package-lock.json
+
+# Temporary Files
+*.log
+*.tmp
+*.temp
+*.bak
+*.pid
+Thumbs.db
+.DS_Store
+
+# Sensitive Files - Certificates & Keys
+*.pem
+*.key
+*.crt
+*.cert
+*.p12
+*.pfx
+*.jks
+*.keystore
+*.truststore
+*.asc
+*.gpg
+*.pgp
+id_rsa
+id_rsa.*
+id_dsa
+id_dsa.*
+id_ecdsa
+id_ecdsa.*
+id_ed25519
+id_ed25519.*
+*.ppk
+known_hosts
+authorized_keys
+
+# Sensitive Files - Env & Tokens
+.env
+.env.*
+!.env.example
+!.env.sample
+*.token
+*.tokens
+*.secret
+*.secrets
+secrets.*
+credentials.*
+*credentials.json
+*credentials.yml
+*credentials.yaml
+.npmrc
+.yarnrc
+.netrc
+.pypirc
+.docker/config.json
+.aws/
+.gcloud/
+.azure/
+service-account*.json
+gcp-key*.json
+firebase-adminsdk*.json
+
+# Sensitive Files - Spring/Java Configs
+*.password.properties
+application.yml
+application.yaml
+application.properties
+application-*.yml
+application-*.yaml
+application-*.properties
+bootstrap.yml
+bootstrap-*.yml
+!application-example.yml
+!application-example.yaml
+!application-sample.yml
+
+# Sensitive Files - SealMail specific
+sender_private.*
+recipient_private.*
+*-private.pem
+*-private.key
+sealmail-keystore*
+${sealmail.security.keystore.path:*
+
+# Git
+.git/
+
+# Claude (keep visible unless needed)
+# .claude/
+
+*.md
+./sealmail-backend/domain
+./sealmail-backend/infra
+./sealmail-backend/app
+./sealmail-backend/web
+./frontend
+./sealmail-frontend/dist
+./sealmail-frontend/node_modules
+./sealmail-frontend/package-lock.json
+
+./codex

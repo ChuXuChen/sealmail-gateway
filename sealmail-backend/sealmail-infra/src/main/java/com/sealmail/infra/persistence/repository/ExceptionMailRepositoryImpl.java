@@ -1,0 +1,106 @@
+package com.sealmail.infra.persistence.repository;
+
+import com.sealmail.domain.exceptionmail.ExceptionMail;
+import com.sealmail.domain.exceptionmail.ExceptionMailRepository;
+import com.sealmail.domain.quarantine.QuarantineReason;
+import com.sealmail.infra.events.DomainEventPublisher;
+import com.sealmail.infra.persistence.entity.ExceptionMailEntity;
+import com.sealmail.infra.persistence.mapper.ExceptionMailMapper;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.PersistenceContext;
+import jakarta.persistence.TypedQuery;
+import org.springframework.stereotype.Repository;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.util.List;
+import java.util.Optional;
+
+@Repository
+@Transactional
+public class ExceptionMailRepositoryImpl implements ExceptionMailRepository {
+
+    @PersistenceContext
+    private EntityManager entityManager;
+
+    private final ExceptionMailMapper mapper;
+    private final DomainEventPublisher domainEventPublisher;
+
+    public ExceptionMailRepositoryImpl(ExceptionMailMapper mapper, DomainEventPublisher domainEventPublisher) {
+        this.mapper = mapper;
+        this.domainEventPublisher = domainEventPublisher;
+    }
+
+    @Override
+    public ExceptionMail save(ExceptionMail exceptionMail) {
+        ExceptionMailEntity entity = mapper.toEntity(exceptionMail);
+        ExceptionMailEntity existing = entityManager.find(ExceptionMailEntity.class, entity.getId());
+        if (existing != null) {
+            entity.setCreatedAt(existing.getCreatedAt());
+            entity.setVersion(existing.getVersion());
+            entityManager.merge(entity);
+        } else {
+            entityManager.persist(entity);
+        }
+        domainEventPublisher.publishEvents(exceptionMail);
+        return exceptionMail;
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Optional<ExceptionMail> findById(String id) {
+        ExceptionMailEntity entity = entityManager.find(ExceptionMailEntity.class, id);
+        return Optional.ofNullable(entity).map(mapper::toDomain);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<ExceptionMail> findByMessageId(String messageId) {
+        TypedQuery<ExceptionMailEntity> query = entityManager.createQuery(
+                "SELECT e FROM ExceptionMailEntity e WHERE e.messageId = :messageId ORDER BY e.createdAt DESC",
+                ExceptionMailEntity.class
+        );
+        query.setParameter("messageId", messageId);
+        return query.getResultList().stream().map(mapper::toDomain).toList();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<ExceptionMail> findAll(int offset, int limit) {
+        TypedQuery<ExceptionMailEntity> query = entityManager.createQuery(
+                "SELECT e FROM ExceptionMailEntity e ORDER BY e.createdAt DESC",
+                ExceptionMailEntity.class
+        );
+        query.setFirstResult(offset);
+        query.setMaxResults(limit);
+        return query.getResultList().stream().map(mapper::toDomain).toList();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<ExceptionMail> findByReason(QuarantineReason reason, int offset, int limit) {
+        TypedQuery<ExceptionMailEntity> query = entityManager.createQuery(
+                "SELECT e FROM ExceptionMailEntity e WHERE e.reason = :reason ORDER BY e.createdAt DESC",
+                ExceptionMailEntity.class
+        );
+        query.setParameter("reason", reason.name());
+        query.setFirstResult(offset);
+        query.setMaxResults(limit);
+        return query.getResultList().stream().map(mapper::toDomain).toList();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public long count() {
+        return entityManager.createQuery(
+                "SELECT COUNT(e) FROM ExceptionMailEntity e", Long.class
+        ).getSingleResult();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public long countByReason(QuarantineReason reason) {
+        return entityManager.createQuery(
+                "SELECT COUNT(e) FROM ExceptionMailEntity e WHERE e.reason = :reason", Long.class
+        ).setParameter("reason", reason.name()).getSingleResult();
+    }
+}

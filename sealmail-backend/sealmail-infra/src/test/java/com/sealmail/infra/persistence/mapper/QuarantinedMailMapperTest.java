@@ -1,0 +1,77 @@
+package com.sealmail.infra.persistence.mapper;
+
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.sealmail.domain.mailsecurity.MailDirection;
+import com.sealmail.domain.quarantine.QuarantineReason;
+import com.sealmail.domain.quarantine.QuarantineStatus;
+import com.sealmail.domain.quarantine.QuarantinedMail;
+import com.sealmail.domain.shared.model.EmailAddress;
+import com.sealmail.infra.persistence.entity.QuarantinedMailEntity;
+import org.junit.jupiter.api.Test;
+
+import java.time.Instant;
+import java.util.Base64;
+import java.util.List;
+
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+
+class QuarantinedMailMapperTest {
+
+    private final QuarantinedMailMapper mapper = new QuarantinedMailMapper(new ObjectMapper());
+
+    @Test
+    void toDomainPreservesStoredStatusAndTimes() {
+        Instant createdAt = Instant.parse("2026-05-14T08:00:00Z");
+        Instant resolvedAt = Instant.parse("2026-05-14T09:00:00Z");
+        byte[] rawContent = "raw-mail".getBytes();
+
+        QuarantinedMailEntity entity = new QuarantinedMailEntity();
+        entity.setId("q-1");
+        entity.setMessageId("msg-1");
+        entity.setSubject("subject");
+        entity.setSenderEmail("sender@example.com");
+        entity.setRecipients("[\"recipient@example.com\"]");
+        entity.setDirection(MailDirection.OUTBOUND.name());
+        entity.setRemoteAddress("127.0.0.1");
+        entity.setReason(QuarantineReason.EMAIL_AUTH_FAILED.name());
+        entity.setDetail("detail");
+        entity.setStatus(QuarantineStatus.RELEASED.name());
+        entity.setCreatedAt(createdAt);
+        entity.setResolvedAt(resolvedAt);
+        entity.setProcessedBy("admin");
+        entity.setProcessComment("ok");
+        entity.setRawContent(Base64.getEncoder().encodeToString(rawContent));
+
+        QuarantinedMail mail = mapper.toDomain(entity);
+
+        assertEquals(QuarantineStatus.RELEASED, mail.getStatus());
+        assertEquals(MailDirection.OUTBOUND, mail.getDirection());
+        assertEquals(createdAt, mail.getCreatedAt());
+        assertEquals(resolvedAt, mail.getResolvedAt());
+        assertEquals("admin", mail.getProcessedBy());
+        assertArrayEquals(rawContent, mail.getRawContent());
+        assertEquals(0, mail.getDomainEvents().size());
+    }
+
+    @Test
+    void toEntitySerializesRawContent() {
+        byte[] rawContent = "raw-mail".getBytes();
+        QuarantinedMail mail = QuarantinedMail.create(
+                "q-1",
+                "msg-1",
+                "subject",
+                new EmailAddress("sender@example.com"),
+                List.of(new EmailAddress("recipient@example.com")),
+                "127.0.0.1",
+                QuarantineReason.POLICY_VIOLATION,
+                "DLP QUARANTINE: detail",
+                rawContent
+        );
+
+        QuarantinedMailEntity entity = mapper.toEntity(mail);
+
+        assertEquals(Base64.getEncoder().encodeToString(rawContent), entity.getRawContent());
+        assertEquals(null, entity.getDirection());
+    }
+}

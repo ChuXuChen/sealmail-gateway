@@ -23,9 +23,10 @@
 
     <!-- 聚合后端子模块 -->
     <modules>
-        <module>sealmail-base</module>
-        <module>sealmail-core</module>
-        <module>sealmail-boot</module>
+        <module>sealmail-domain</module>
+        <module>sealmail-infra</module>
+        <module>sealmail-app</module>
+        <module>sealmail-web</module>
     </modules>
 
     <properties>
@@ -40,15 +41,36 @@
             <!-- 内部模块版本锁定 -->
             <dependency>
                 <groupId>com.sealmail</groupId>
-                <artifactId>sealmail-base</artifactId>
+                <artifactId>sealmail-domain</artifactId>
                 <version>${sealmail.version}</version>
             </dependency>
             <dependency>
                 <groupId>com.sealmail</groupId>
-                <artifactId>sealmail-core</artifactId>
+                <artifactId>sealmail-infra</artifactId>
                 <version>${sealmail.version}</version>
             </dependency>
-            <!-- 后续可在此处添加第三方依赖版本管理 -->
+            <dependency>
+                <groupId>com.sealmail</groupId>
+                <artifactId>sealmail-app</artifactId>
+                <version>${sealmail.version}</version>
+            </dependency>
+            <!-- MapStruct for DTO mapping -->
+            <dependency>
+                <groupId>org.mapstruct</groupId>
+                <artifactId>mapstruct</artifactId>
+                <version>1.6.2</version>
+            </dependency>
+            <dependency>
+                <groupId>org.mapstruct</groupId>
+                <artifactId>mapstruct-processor</artifactId>
+                <version>1.6.2</version>
+            </dependency>
+            <!-- SubEtha SMTP server -->
+            <dependency>
+                <groupId>org.subethamail</groupId>
+                <artifactId>subethasmtp</artifactId>
+                <version>3.1.7</version>
+            </dependency>
         </dependencies>
     </dependencyManagement>
 
@@ -59,6 +81,7 @@
                     <groupId>org.springframework.boot</groupId>
                     <artifactId>spring-boot-maven-plugin</artifactId>
                     <configuration>
+                        <skip>true</skip>
                         <!-- 避免 JMX 端口冲突 -->
                         <jvmArguments>-Dspring.jmx.enabled=false</jvmArguments>
                     </configuration>

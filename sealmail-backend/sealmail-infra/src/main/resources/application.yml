@@ -1,0 +1,290 @@
+server:
+  port: 8080
+  shutdown: graceful
+
+jwt:
+  token-validity-in-seconds: 86400
+
+spring:
+  application:
+    name: sealmail-gateway
+
+  profiles:
+    active: postgres
+
+  datasource:
+    url: jdbc:postgresql://localhost:5432/sealmail
+    username: sealmail
+    password: sealmail
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      maximum-pool-size: 20
+      minimum-idle: 5
+      connection-timeout: 30000
+      idle-timeout: 600000
+      max-lifetime: 1800000
+
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    show-sql: false
+    open-in-view: false
+    properties:
+      hibernate:
+        format_sql: true
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        jdbc:
+          batch_size: 50
+
+  flyway:
+    enabled: true
+    baseline-on-migrate: true
+    baseline-version: 6
+    validate-on-migrate: true
+
+# SealMail Configuration
+sealmail:
+  # SMTP Server Configuration
+  smtp:
+    server:
+      bind-address: 0.0.0.0
+      port: 10025
+      host-name: sealmail-gateway
+      max-connections: 100
+      max-message-size: 52428800
+      # TLS Configuration (enable for STARTTLS support)
+      enable-start-tls: false
+      require-tls: false
+      # Option 1: Use PKCS12 keystore
+      keystore-path:
+      keystore-password:
+      key-alias: sealmail-smtp
+      key-password:
+      # Option 2: Use PEM files (simpler)
+      certificate-path:
+      private-key-path:
+      private-key-password:
+
+  # Certificate Validation Security Settings
+  security:
+    crl:
+      enabled: true
+    ocsp:
+      enabled: true
+      timeout: 10000
+
+  # Postfix integration: Postfix receives on 25, sends through content_filter to 10025,
+  # app processes mail, then reinjects back to Postfix on 10026/10027.
+  postfix:
+    enabled: true
+    host: 127.0.0.1
+    after-filter-port: 10026
+    outbound-port: 10027
+    envelope-from: cxc1234567892022@163.com
+    use-tls: false
+    timeout: 10000
+
+  # Direct downstream relay fallback when Postfix integration is disabled
+  relay:
+    host: smtp.163.com
+    port: 465
+    use-tls: true
+    username: cxc1234567892022@163.com
+    password: VJwin35dA5ftGHwB
+    timeout: 10000
+
+  # Pipeline Configuration
+  pipeline:
+    inbound:
+      decrypt-enabled: true
+      verify-enabled: true
+      quarantine-enabled: true
+    outbound:
+      sign-enabled: true
+      encrypt-enabled: true
+
+  auth:
+    users:
+      - user-id: super-admin
+        username: superadmin
+        email: superadmin@sealmail.local
+        password: super123
+        roles:
+          - SUPER_ADMIN
+      - user-id: pki-admin
+        username: pkiadmin
+        email: pkiadmin@sealmail.local
+        password: admin123
+        roles:
+          - PKI_ADMIN
+      - user-id: domain-admin
+        username: domainadmin
+        email: domainadmin@sealmail.local
+        password: domain123
+        roles:
+          - DOMAIN_ADMIN
+        managed-domains:
+          - qq.com
+          - 163.com
+      - user-id: auditor
+        username: auditor
+        email: auditor@sealmail.local
+        password: auditor123
+        roles:
+          - AUDITOR
+
+  mail-auth:
+    enabled: true
+    authserv-id: sealmail-gateway
+    # Content-filter deployments usually see Postfix's local IP, not the original
+    # client IP. Keep this enabled unless the gateway receives SMTP directly.
+    skip-private-relay: true
+    spf:
+      enabled: true
+      max-dns-lookups: 10
+    dkim:
+      enabled: true
+      selector: sealmail
+      private-key-path:
+      private-key-pem:
+      signed-headers:
+        - from
+        - to
+        - subject
+        - date
+        - message-id
+    dmarc:
+      enabled: true
+      quarantine-reject-policy: true
+
+  dlp:
+    quarantine-encryption-failures: true
+
+  # Quarantine Settings
+  quarantine:
+    auto-release-after: 86400000
+    max-retention-days: 30
+    notification-enabled: false
+
+  # Internal CA Settings
+  ca:
+    # Prefix for CRL Distribution Point URLs embedded in issued certs.
+    # Full URL = {crl-base-url}{caCertId}; serve at GET /api/v1/crl/{caCertId}
+    crl-base-url: http://localhost:8080/api/v1/crl/
+    default-root-validity-days: 3650
+    default-intermediate-validity-days: 1825
+    default-end-entity-validity-days: 365
+
+# Management Endpoints
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+  endpoint:
+    health:
+      show-details: always
+
+# Logging Configuration
+logging:
+  level:
+    root: INFO
+    com.sealmail: DEBUG
+    com.sealmail.app.usecase: DEBUG
+    com.sealmail.infra.crypto: DEBUG
+    com.sealmail.infra.mail.pipeline: DEBUG
+    org.springframework.integration: INFO
+    org.springframework.transaction: INFO
+    org.hibernate.SQL: WARN
+    org.flywaydb.core: INFO
+
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n"
+
+---
+# Development Profile
+spring:
+  config:
+    activate:
+      on-profile: dev
+
+  jpa:
+    show-sql: true
+
+logging:
+  level:
+    com.sealmail: DEBUG
+    org.springframework.integration: INFO
+
+---
+# PostgreSQL Profile (default)
+spring:
+  config:
+    activate:
+      on-profile: postgres
+
+  datasource:
+    url: jdbc:postgresql://localhost:5432/sealmail
+    username: sealmail
+    password: sealmail
+    driver-class-name: org.postgresql.Driver
+
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    show-sql: true
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+
+---
+# PostgreSQL-backed test profile
+spring:
+  config:
+    activate:
+      on-profile: test
+
+  datasource:
+    url: jdbc:postgresql://localhost:5432/sealmail
+    username: sealmail
+    password: sealmail
+    driver-class-name: org.postgresql.Driver
+
+  flyway:
+    schemas: sealmail_test
+    default-schema: sealmail_test
+    clean-disabled: false
+    baseline-on-migrate: false
+
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        default_schema: sealmail_test
+
+logging:
+  level:
+    com.sealmail: DEBUG
+    org.springframework.integration: INFO
+
+---
+# Production Profile
+spring:
+  config:
+    activate:
+      on-profile: prod
+
+  jpa:
+    show-sql: false
+
+sealmail:
+  smtp:
+    server:
+      enable-start-tls: true
+      require-tls: true
+
+logging:
+  level:
+    root: WARN
+    com.sealmail: INFO

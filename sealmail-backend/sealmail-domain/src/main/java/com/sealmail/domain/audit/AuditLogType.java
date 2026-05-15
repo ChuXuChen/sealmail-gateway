@@ -1,0 +1,48 @@
+package com.sealmail.domain.audit;
+
+/**
+ * 审计日志类型枚举
+ */
+public enum AuditLogType {
+
+    // 用户认证
+    USER_LOGIN,
+    USER_LOGOUT,
+    USER_LOGIN_FAILED,
+
+    // 用户管理
+    USER_CREATED,
+    USER_UPDATED,
+    USER_DELETED,
+    USER_PASSWORD_CHANGED,
+    USER_UNLOCKED,
+    USER_ROLE_CHANGED,
+
+    // 证书管理
+    CERTIFICATE_ISSUED,
+    CERTIFICATE_IMPORTED,
+    CERTIFICATE_TRUSTED,
+    CERTIFICATE_UNTRUSTED,
+    CERTIFICATE_REVOKED,
+    CERTIFICATE_DELETED,
+
+    // 邮件处理
+    EMAIL_RECEIVED,
+    EMAIL_DELIVERED,
+    EMAIL_RELEASED,
+    EMAIL_REJECTED,
+    EMAIL_QUARANTINED,
+    EMAIL_ENCRYPTED,
+    EMAIL_DECRYPTED,
+    EMAIL_SIGNED,
+    EMAIL_VERIFIED,
+    DLP_VIOLATION,
+
+    // 系统操作
+    SYSTEM_CONFIG_CHANGED,
+    SYSTEM_STARTUP,
+    SYSTEM_SHUTDOWN,
+
+    // 其他
+    OTHER
+}

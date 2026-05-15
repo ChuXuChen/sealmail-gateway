@@ -6,17 +6,55 @@
         <sourceOutputDir name="target/generated-sources/annotations" />
         <sourceTestOutputDir name="target/generated-test-sources/test-annotations" />
         <outputRelativeToContentRoot value="true" />
-        <module name="sealmail-core" />
-        <module name="sealmail-base" />
-        <module name="sealmail-boot" />
+        <module name="sealmail-domain" />
+      </profile>
+      <profile name="Annotation profile for sealmail-app" enabled="true">
+        <sourceOutputDir name="target/generated-sources/annotations" />
+        <sourceTestOutputDir name="target/generated-test-sources/test-annotations" />
+        <outputRelativeToContentRoot value="true" />
+        <processorPath useClasspath="false">
+          <entry name="/home/cxc/.m2/repository/org/projectlombok/lombok/1.18.46/lombok-1.18.46.jar" />
+          <entry name="/home/cxc/.m2/repository/org/mapstruct/mapstruct-processor/1.6.2/mapstruct-processor-1.6.2.jar" />
+        </processorPath>
+        <module name="sealmail-app" />
+      </profile>
+      <profile name="Annotation profile for sealmail-web" enabled="true">
+        <sourceOutputDir name="target/generated-sources/annotations" />
+        <sourceTestOutputDir name="target/generated-test-sources/test-annotations" />
+        <outputRelativeToContentRoot value="true" />
+        <processorPath useClasspath="false">
+          <entry name="/home/cxc/.m2/repository/org/projectlombok/lombok/1.18.30/lombok-1.18.30.jar" />
+        </processorPath>
+        <module name="sealmail-web" />
+      </profile>
+      <profile name="Annotation profile for Sealmail Gateway" enabled="true">
+        <sourceOutputDir name="target/generated-sources/annotations" />
+        <sourceTestOutputDir name="target/generated-test-sources/test-annotations" />
+        <outputRelativeToContentRoot value="true" />
+        <processorPath useClasspath="false">
+          <entry name="/home/cxc/.m2/repository/org/mapstruct/mapstruct-processor/1.5.5.Final/mapstruct-processor-1.5.5.Final.jar" />
+          <entry name="/home/cxc/.m2/repository/org/projectlombok/lombok/1.18.30/lombok-1.18.30.jar" />
+          <entry name="/home/cxc/.m2/repository/org/projectlombok/lombok-mapstruct-binding/0.2.0/lombok-mapstruct-binding-0.2.0.jar" />
+        </processorPath>
+        <module name="sealmail-infra" />
       </profile>
     </annotationProcessing>
+    <bytecodeTargetLevel>
+      <module name="sealmail-base" target="21" />
+      <module name="sealmail-boot" target="21" />
+      <module name="sealmail-core" target="21" />
+    </bytecodeTargetLevel>
   </component>
   <component name="JavacSettings">
     <option name="ADDITIONAL_OPTIONS_OVERRIDE">
+      <module name="sealmail-app" options="-parameters" />
+      <module name="sealmail-backend" options="" />
       <module name="sealmail-base" options="-parameters" />
       <module name="sealmail-boot" options="-parameters" />
       <module name="sealmail-core" options="-parameters" />
+      <module name="sealmail-domain" options="-parameters" />
+      <module name="sealmail-infra" options="-parameters" />
+      <module name="sealmail-web" options="-parameters" />
     </option>
   </component>
 </project>
