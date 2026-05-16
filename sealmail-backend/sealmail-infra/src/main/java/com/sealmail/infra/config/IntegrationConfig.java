@@ -1,6 +1,7 @@
 package com.sealmail.infra.config;
 
-import com.sealmail.infra.mail.pipeline.MailPipelineFlow;
+import com.sealmail.infra.mail.pipeline.MailFlowErrorChannelInterceptor;
+import com.sealmail.infra.mail.pipeline.MailIntegrationFlows;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.integration.channel.DirectChannel;
@@ -13,13 +14,13 @@ import org.springframework.messaging.MessageChannel;
 public class IntegrationConfig {
 
     @Bean
-    public MessageChannel mailInboundChannel() {
-        return new DirectChannel();
+    public MessageChannel mailInboundChannel(MailFlowErrorChannelInterceptor errorInterceptor) {
+        return interceptedChannel(errorInterceptor);
     }
 
     @Bean
-    public MessageChannel mailOutboundChannel() {
-        return new DirectChannel();
+    public MessageChannel mailOutboundChannel(MailFlowErrorChannelInterceptor errorInterceptor) {
+        return interceptedChannel(errorInterceptor);
     }
 
     @Bean
@@ -28,8 +29,8 @@ public class IntegrationConfig {
     }
 
     @Bean
-    public MessageChannel quarantineReleaseChannel() {
-        return new DirectChannel();
+    public MessageChannel quarantineReleaseChannel(MailFlowErrorChannelInterceptor errorInterceptor) {
+        return interceptedChannel(errorInterceptor);
     }
 
     @Bean
@@ -43,44 +44,43 @@ public class IntegrationConfig {
     }
 
     @Bean
-    public IntegrationFlow inboundProcessingFlow(MailPipelineFlow pipelineFlow,
+    public IntegrationFlow inboundProcessingFlow(MailIntegrationFlows mailIntegrationFlows,
                                                   MessageChannel mailInboundChannel,
                                                   MessageChannel quarantineChannel,
-                                                  MessageChannel relayChannel,
-                                                  MessageChannel errorChannel) {
-        return pipelineFlow.inboundFlow(mailInboundChannel, quarantineChannel, relayChannel, errorChannel);
+                                                  MessageChannel relayChannel) {
+        return mailIntegrationFlows.inboundFlow(mailInboundChannel, quarantineChannel, relayChannel);
     }
 
     @Bean
-    public IntegrationFlow outboundProcessingFlow(MailPipelineFlow pipelineFlow,
+    public IntegrationFlow outboundProcessingFlow(MailIntegrationFlows mailIntegrationFlows,
                                                    MessageChannel mailOutboundChannel,
                                                    MessageChannel quarantineChannel,
-                                                   MessageChannel relayChannel,
-                                                   MessageChannel errorChannel) {
-        return pipelineFlow.outboundFlow(mailOutboundChannel, quarantineChannel, relayChannel, errorChannel);
+                                                   MessageChannel relayChannel) {
+        return mailIntegrationFlows.outboundFlow(mailOutboundChannel, quarantineChannel, relayChannel);
     }
 
     @Bean
-    public IntegrationFlow quarantineProcessingFlow(MailPipelineFlow pipelineFlow,
-                                                     MessageChannel quarantineChannel,
-                                                     MessageChannel errorChannel) {
-        return pipelineFlow.quarantineFlow(quarantineChannel, errorChannel);
+    public IntegrationFlow quarantineProcessingFlow(MailIntegrationFlows mailIntegrationFlows,
+                                                     MessageChannel quarantineChannel) {
+        return mailIntegrationFlows.quarantineFlow(quarantineChannel);
     }
 
     @Bean
-    public IntegrationFlow relayProcessingFlow(MailPipelineFlow pipelineFlow,
+    public IntegrationFlow relayProcessingFlow(MailIntegrationFlows mailIntegrationFlows,
                                                 MessageChannel relayChannel,
-                                                MessageChannel quarantineChannel,
-                                                MessageChannel errorChannel) {
-        return pipelineFlow.relayFlow(relayChannel, quarantineChannel, errorChannel);
+                                                MessageChannel quarantineChannel) {
+        return mailIntegrationFlows.relayFlow(relayChannel, quarantineChannel);
     }
 
     @Bean
-    public IntegrationFlow quarantineReleaseProcessingFlow(MailPipelineFlow pipelineFlow,
-                                                           MessageChannel quarantineReleaseChannel,
-                                                           MessageChannel errorChannel) {
-        return pipelineFlow.quarantineReleaseFlow(
-                quarantineReleaseChannel,
-                errorChannel);
+    public IntegrationFlow quarantineReleaseProcessingFlow(MailIntegrationFlows mailIntegrationFlows,
+                                                           MessageChannel quarantineReleaseChannel) {
+        return mailIntegrationFlows.quarantineReleaseFlow(quarantineReleaseChannel);
+    }
+
+    private MessageChannel interceptedChannel(MailFlowErrorChannelInterceptor errorInterceptor) {
+        DirectChannel channel = new DirectChannel();
+        channel.addInterceptor(errorInterceptor);
+        return channel;
     }
 }

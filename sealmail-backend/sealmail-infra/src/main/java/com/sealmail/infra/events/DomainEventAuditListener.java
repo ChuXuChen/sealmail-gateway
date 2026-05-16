@@ -34,6 +34,7 @@ import com.sealmail.domain.policy.event.RelayPolicyChanged;
 import com.sealmail.domain.policy.event.SigningDisabled;
 import com.sealmail.domain.policy.event.SigningEnabled;
 import com.sealmail.domain.quarantine.event.QuarantineCreated;
+import com.sealmail.domain.quarantine.event.QuarantineReleaseRestored;
 import com.sealmail.domain.quarantine.event.QuarantineRejected;
 import com.sealmail.domain.quarantine.event.QuarantineReleased;
 import com.sealmail.domain.shared.event.AuditEvent;
@@ -175,6 +176,15 @@ public class DomainEventAuditListener {
                     "QUARANTINE",
                     quarantineReleased.getQuarantineId(),
                     quarantineReleased.getComment());
+        }
+        if (event instanceof QuarantineReleaseRestored quarantineReleaseRestored) {
+            return audit(
+                    AuditLogType.EMAIL_RELEASE_RESTORED,
+                    actorFor(quarantineReleaseRestored.getRestoredBy(), actor),
+                    ipAddress,
+                    "QUARANTINE",
+                    quarantineReleaseRestored.getQuarantineId(),
+                    quarantineReleaseRestored.getComment());
         }
         if (event instanceof QuarantineRejected quarantineRejected) {
             return audit(

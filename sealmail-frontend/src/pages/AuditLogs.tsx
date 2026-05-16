@@ -1,30 +1,38 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  Button,
   Descriptions,
-  Drawer,
   Input,
   Segmented,
   Select,
   Space,
-  Table,
-  Tag,
-  Typography,
   message,
+  Typography,
 } from 'antd';
-import {
-  CheckCircleOutlined,
-  CloseCircleOutlined,
-  ReloadOutlined,
-} from '@ant-design/icons';
+import type { TableColumnsType } from 'antd';
 import { AuditLog } from '../types';
 import { auditLogApi } from '../api/client';
 import { getApiErrorMessage } from '../api/errors';
+import {
+  AuditResultTag,
+  DataTable,
+  DetailDrawer,
+  FilterBar,
+  PageHeader,
+  PageShell,
+  createListPagination,
+} from '../components/Page';
 
-const { Text, Title } = Typography;
+const { Text } = Typography;
 
 type CategoryKey = 'ALL' | 'AUTH' | 'USER' | 'CERTIFICATE' | 'EMAIL' | 'SYSTEM';
 type StatusFilter = 'ALL' | 'SUCCESS' | 'FAILED';
+
+interface ActiveFilterItem {
+  key: string;
+  label: React.ReactNode;
+  onClose: () => void;
+  value: React.ReactNode;
+}
 
 const categories: { value: CategoryKey; label: string }[] = [
   { value: 'ALL', label: '全部' },
@@ -157,10 +165,17 @@ const AuditLogs: React.FC = () => {
     return groups.map(({ label, options }) => ({ label, options }));
   }, [category]);
 
+  const eventLabelByValue = useMemo(
+    () => new Map(eventGroups.flatMap((group) =>
+      group.options.map((option) => [option.value, option.label] as const)
+    )),
+    [],
+  );
+
   const hasProcessingId = processingId.trim().length > 0;
   const hasFilters = category !== 'ALL' || eventType || status !== 'ALL' || hasProcessingId;
 
-  const loadAllLogs = async () => {
+  const loadAllLogs = useCallback(async () => {
     const pageSize = 100;
     const first = await auditLogApi.list({ page: 1, size: pageSize });
     const page = first.data.data;
@@ -173,9 +188,9 @@ const AuditLogs: React.FC = () => {
     }
 
     return items;
-  };
+  }, []);
 
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     setLoading(true);
     try {
       if (hasProcessingId) {
@@ -217,12 +232,21 @@ const AuditLogs: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [
+    category,
+    eventType,
+    hasFilters,
+    hasProcessingId,
+    loadAllLogs,
+    pagination.page,
+    pagination.size,
+    processingId,
+    status,
+  ]);
 
   useEffect(() => {
     void Promise.resolve().then(loadData);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pagination.page, pagination.size, category, eventType, status, processingId]);
+  }, [loadData]);
 
   const clearFilters = () => {
     setCategory('ALL');
@@ -233,7 +257,48 @@ const AuditLogs: React.FC = () => {
     setPagination((prev) => ({ ...prev, page: 1 }));
   };
 
-  const columns = [
+  const activeFilters = ([
+    category !== 'ALL' ? {
+      key: 'category',
+      label: '范围',
+      value: categories.find((item) => item.value === category)?.label || category,
+      onClose: () => {
+        setCategory('ALL');
+        setEventType(undefined);
+        setPagination((prev) => ({ ...prev, page: 1 }));
+      },
+    } : null,
+    eventType ? {
+      key: 'eventType',
+      label: '事件',
+      value: eventLabelByValue.get(eventType) || eventType,
+      onClose: () => {
+        setEventType(undefined);
+        setPagination((prev) => ({ ...prev, page: 1 }));
+      },
+    } : null,
+    status !== 'ALL' ? {
+      key: 'status',
+      label: '结果',
+      value: statusOptions.find((item) => item.value === status)?.label || status,
+      onClose: () => {
+        setStatus('ALL');
+        setPagination((prev) => ({ ...prev, page: 1 }));
+      },
+    } : null,
+    hasProcessingId ? {
+      key: 'processingId',
+      label: 'processingId',
+      value: processingId,
+      onClose: () => {
+        setProcessingId('');
+        setProcessingIdInput('');
+        setPagination((prev) => ({ ...prev, page: 1 }));
+      },
+    } : null,
+  ] as Array<ActiveFilterItem | null>).filter((filter): filter is ActiveFilterItem => Boolean(filter));
+
+  const columns: TableColumnsType<AuditLog> = [
     {
       title: '时间',
       dataIndex: 'occurredAt',
@@ -281,36 +346,25 @@ const AuditLogs: React.FC = () => {
     {
       title: '结果',
       key: 'success',
-      render: (_: unknown, record: AuditLog) =>
-        record.success ? (
-          <Tag icon={<CheckCircleOutlined />} color="success">成功</Tag>
-        ) : (
-          <Tag icon={<CloseCircleOutlined />} color="error">失败</Tag>
-        ),
+      render: (_: unknown, record: AuditLog) => <AuditResultTag success={record.success} />,
       width: 90,
     },
   ];
 
   return (
-    <div style={{ padding: 24 }}>
-      <div style={{ marginBottom: 18 }}>
-        <Title level={3} style={{ marginBottom: 4 }}>
-          审计日志
-        </Title>
-        <Text type="secondary">按事件范围、结果和具体行为快速定位系统操作记录。</Text>
-      </div>
+    <PageShell>
+      <PageHeader
+        title="审计日志"
+        description="按事件范围、结果和具体行为快速定位系统操作记录。"
+      />
 
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          gap: 12,
-          marginBottom: 16,
-          flexWrap: 'wrap',
-        }}
+      <FilterBar
+        activeFilters={activeFilters}
+        onReset={clearFilters}
+        onRefresh={loadData}
+        refreshLoading={loading}
+        resetDisabled={!hasFilters}
       >
-        <Space size={12} wrap>
           <Segmented
             value={category}
             options={categories}
@@ -360,19 +414,9 @@ const AuditLogs: React.FC = () => {
               setPagination((prev) => ({ ...prev, page: 1 }));
             }}
           />
-        </Space>
+      </FilterBar>
 
-        <Space>
-          <Button disabled={!hasFilters} onClick={clearFilters}>
-            清空
-          </Button>
-          <Button icon={<ReloadOutlined />} onClick={loadData}>
-            刷新
-          </Button>
-        </Space>
-      </div>
-
-      <Table
+      <DataTable<AuditLog>
         columns={columns}
         dataSource={data}
         rowKey="id"
@@ -385,20 +429,13 @@ const AuditLogs: React.FC = () => {
           },
           style: { cursor: 'pointer' },
         })}
-        pagination={{
-          current: pagination.page,
-          pageSize: pagination.size,
-          total: pagination.total,
-          showSizeChanger: true,
-          showQuickJumper: true,
-          showTotal: (total) => `共 ${total} 条`,
-          onChange: (page, size) => setPagination((prev) => ({ ...prev, page, size })),
-        }}
+        pagination={createListPagination(pagination, (page, size) =>
+          setPagination((prev) => ({ ...prev, page, size }))
+        )}
       />
 
-      <Drawer
+      <DetailDrawer
         title="日志详情"
-        width={620}
         open={detailVisible}
         onClose={() => {
           setDetailVisible(false);
@@ -408,9 +445,7 @@ const AuditLogs: React.FC = () => {
         {selectedLog && (
           <Space direction="vertical" size={16} style={{ width: '100%' }}>
             <Space>
-              <Tag color={selectedLog.success ? 'success' : 'error'}>
-                {selectedLog.success ? '成功' : '失败'}
-              </Tag>
+              <AuditResultTag success={selectedLog.success} />
               <Text strong>{selectedLog.typeDisplayName}</Text>
             </Space>
             <Descriptions column={1} bordered size="small">
@@ -431,8 +466,8 @@ const AuditLogs: React.FC = () => {
             </Descriptions>
           </Space>
         )}
-      </Drawer>
-    </div>
+      </DetailDrawer>
+    </PageShell>
   );
 };
 

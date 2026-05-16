@@ -19,6 +19,10 @@ import static org.mockito.Mockito.when;
 
 class QueryQuarantineUseCaseTest {
 
+    private static final List<QuarantineStatus> ACTIVE_REVIEW_STATUSES = List.of(
+            QuarantineStatus.QUARANTINED,
+            QuarantineStatus.RELEASING);
+
     private final QuarantineRepository repository = mock(QuarantineRepository.class);
     private final QueryQuarantineUseCase useCase = new QueryQuarantineUseCase(
             repository,
@@ -29,28 +33,28 @@ class QueryQuarantineUseCaseTest {
     @Test
     void usesOneBasedPageNumberForOffset() {
         PageRequest pageRequest = PageRequest.builder().page(1).size(20).build();
-        when(repository.findByStatus(QuarantineStatus.QUARANTINED, 0, 20)).thenReturn(List.of());
-        when(repository.countByStatus(QuarantineStatus.QUARANTINED)).thenReturn(0L);
+        when(repository.findByStatuses(ACTIVE_REVIEW_STATUSES, 0, 20)).thenReturn(List.of());
+        when(repository.countByStatuses(ACTIVE_REVIEW_STATUSES)).thenReturn(0L);
 
         var response = useCase.findAll(pageRequest, admin());
 
         assertEquals(1, response.getPage());
-        verify(repository).findByStatus(QuarantineStatus.QUARANTINED, 0, 20);
+        verify(repository).findByStatuses(ACTIVE_REVIEW_STATUSES, 0, 20);
     }
 
     @Test
     void appliesReasonFilterToItemsAndTotal() {
         PageRequest pageRequest = PageRequest.builder().page(2).size(10).build();
-        when(repository.findByStatusAndReason(QuarantineStatus.QUARANTINED, QuarantineReason.EMAIL_AUTH_FAILED, 10, 10))
+        when(repository.findByStatusesAndReason(ACTIVE_REVIEW_STATUSES, QuarantineReason.EMAIL_AUTH_FAILED, 10, 10))
                 .thenReturn(List.of());
-        when(repository.countByStatusAndReason(QuarantineStatus.QUARANTINED, QuarantineReason.EMAIL_AUTH_FAILED))
+        when(repository.countByStatusesAndReason(ACTIVE_REVIEW_STATUSES, QuarantineReason.EMAIL_AUTH_FAILED))
                 .thenReturn(12L);
 
         var response = useCase.findAll(pageRequest, QuarantineReason.EMAIL_AUTH_FAILED, admin());
 
         assertEquals(12, response.getTotal());
-        verify(repository).findByStatusAndReason(QuarantineStatus.QUARANTINED, QuarantineReason.EMAIL_AUTH_FAILED, 10, 10);
-        verify(repository).countByStatusAndReason(QuarantineStatus.QUARANTINED, QuarantineReason.EMAIL_AUTH_FAILED);
+        verify(repository).findByStatusesAndReason(ACTIVE_REVIEW_STATUSES, QuarantineReason.EMAIL_AUTH_FAILED, 10, 10);
+        verify(repository).countByStatusesAndReason(ACTIVE_REVIEW_STATUSES, QuarantineReason.EMAIL_AUTH_FAILED);
     }
 
     private static UserContext admin() {

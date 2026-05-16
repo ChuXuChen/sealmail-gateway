@@ -54,8 +54,8 @@ import static org.mockito.Mockito.reset;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-@SpringJUnitConfig(classes = MailPipelineFlowCharacterizationTest.Config.class)
-class MailPipelineFlowCharacterizationTest {
+@SpringJUnitConfig(classes = MailIntegrationFlowsCharacterizationTest.Config.class)
+class MailIntegrationFlowsCharacterizationTest {
 
     @Autowired
     MessageChannel mailOutboundChannel;
@@ -279,12 +279,13 @@ class MailPipelineFlowCharacterizationTest {
     @Test
     void flowSourceNoLongerUsesOldPipelineAbstractions() throws Exception {
         String source = Files.readString(Path.of(
-                "src/main/java/com/sealmail/infra/mail/pipeline/MailPipelineFlow.java"));
+                "src/main/java/com/sealmail/infra/mail/pipeline/MailIntegrationFlows.java"));
 
         assertFalse(source.contains("PipelineResult"));
         assertFalse(source.contains("PipelineStepTracker"));
         assertFalse(source.contains("MailPipelineStep"));
         assertFalse(source.contains("executeMessageWithTracking"));
+        assertFalse(source.contains("sendError("));
     }
 
     @Test
@@ -529,18 +530,18 @@ class MailPipelineFlowCharacterizationTest {
     static class Config {
 
         @Bean
-        MessageChannel mailOutboundChannel() {
-            return new DirectChannel();
+        MessageChannel mailOutboundChannel(MailFlowErrorChannelInterceptor errorInterceptor) {
+            return interceptedChannel(errorInterceptor);
         }
 
         @Bean
-        MessageChannel mailInboundChannel() {
-            return new DirectChannel();
+        MessageChannel mailInboundChannel(MailFlowErrorChannelInterceptor errorInterceptor) {
+            return interceptedChannel(errorInterceptor);
         }
 
         @Bean
-        MessageChannel quarantineReleaseChannel() {
-            return new DirectChannel();
+        MessageChannel quarantineReleaseChannel(MailFlowErrorChannelInterceptor errorInterceptor) {
+            return interceptedChannel(errorInterceptor);
         }
 
         @Bean
@@ -559,43 +560,40 @@ class MailPipelineFlowCharacterizationTest {
         }
 
         @Bean
-        IntegrationFlow outboundProcessingFlow(MailPipelineFlow pipelineFlow,
+        IntegrationFlow outboundProcessingFlow(MailIntegrationFlows mailIntegrationFlows,
                                                MessageChannel mailOutboundChannel,
                                                QueueChannel quarantineChannel,
-                                               QueueChannel relayChannel,
-                                               QueueChannel errorChannel) {
-            return pipelineFlow.outboundFlow(mailOutboundChannel, quarantineChannel, relayChannel, errorChannel);
+                                               QueueChannel relayChannel) {
+            return mailIntegrationFlows.outboundFlow(mailOutboundChannel, quarantineChannel, relayChannel);
         }
 
         @Bean
-        IntegrationFlow inboundProcessingFlow(MailPipelineFlow pipelineFlow,
+        IntegrationFlow inboundProcessingFlow(MailIntegrationFlows mailIntegrationFlows,
                                               MessageChannel mailInboundChannel,
                                               QueueChannel quarantineChannel,
-                                              QueueChannel relayChannel,
-                                              QueueChannel errorChannel) {
-            return pipelineFlow.inboundFlow(mailInboundChannel, quarantineChannel, relayChannel, errorChannel);
+                                              QueueChannel relayChannel) {
+            return mailIntegrationFlows.inboundFlow(mailInboundChannel, quarantineChannel, relayChannel);
         }
 
         @Bean
-        IntegrationFlow quarantineReleaseProcessingFlow(MailPipelineFlow pipelineFlow,
-                                                        MessageChannel quarantineReleaseChannel,
-                                                        QueueChannel errorChannel) {
-            return pipelineFlow.quarantineReleaseFlow(quarantineReleaseChannel, errorChannel);
+        IntegrationFlow quarantineReleaseProcessingFlow(MailIntegrationFlows mailIntegrationFlows,
+                                                        MessageChannel quarantineReleaseChannel) {
+            return mailIntegrationFlows.quarantineReleaseFlow(quarantineReleaseChannel);
         }
 
         @Bean
-        MailPipelineFlow pipelineFlow(DecryptStep decryptStep,
-                                      VerifyStep verifyStep,
-                                      SignStep signStep,
-                                      EncryptStep encryptStep,
-                                      QuarantineStep quarantineStep,
-                                      RelayStep relayStep,
-                                      DlpStep dlpStep,
-                                      MailAuthenticationStep mailAuthenticationStep,
-                                      DkimSignStep dkimSignStep,
-                                      RoutingService routingService,
-                                      MailProcessingTracker tracker) {
-            return new MailPipelineFlow(
+        MailIntegrationFlows mailIntegrationFlows(DecryptStep decryptStep,
+                                                  VerifyStep verifyStep,
+                                                  SignStep signStep,
+                                                  EncryptStep encryptStep,
+                                                  QuarantineStep quarantineStep,
+                                                  RelayStep relayStep,
+                                                  DlpStep dlpStep,
+                                                  MailAuthenticationStep mailAuthenticationStep,
+                                                  DkimSignStep dkimSignStep,
+                                                  RoutingService routingService,
+                                                  MailProcessingTracker tracker) {
+            return new MailIntegrationFlows(
                     decryptStep,
                     verifyStep,
                     signStep,
@@ -607,6 +605,17 @@ class MailPipelineFlowCharacterizationTest {
                     dkimSignStep,
                     routingService,
                     tracker);
+        }
+
+        @Bean
+        MailFlowErrorChannelInterceptor errorInterceptor(QueueChannel errorChannel) {
+            return new MailFlowErrorChannelInterceptor(errorChannel);
+        }
+
+        private MessageChannel interceptedChannel(MailFlowErrorChannelInterceptor errorInterceptor) {
+            DirectChannel channel = new DirectChannel();
+            channel.addInterceptor(errorInterceptor);
+            return channel;
         }
 
         @Bean

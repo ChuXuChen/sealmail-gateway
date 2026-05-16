@@ -42,8 +42,14 @@ public class QuarantineDtoMapper {
     }
 
     private String releaseUnavailableReason(QuarantinedMail mail, boolean hasRawContent) {
-        if (mail.getStatus() != QuarantineStatus.QUARANTINED) {
-            return null;
+        if (mail.getStatus() == QuarantineStatus.RELEASING) {
+            return "邮件释放状态待人工确认";
+        }
+        if (mail.getStatus() == QuarantineStatus.RELEASED) {
+            return "邮件已放行";
+        }
+        if (mail.getStatus() == QuarantineStatus.REJECTED) {
+            return "邮件已拒绝";
         }
         if (!hasRawContent) {
             return "原始邮件内容缺失，无法重新投递";
@@ -57,6 +63,7 @@ public class QuarantineDtoMapper {
         return QuarantineStatsResponse.builder()
                 .total(repository.count())
                 .pending(repository.countByStatus(QuarantineStatus.QUARANTINED))
+                .releasing(repository.countByStatus(QuarantineStatus.RELEASING))
                 .released(repository.countByStatus(QuarantineStatus.RELEASED))
                 .rejected(repository.countByStatus(QuarantineStatus.REJECTED))
                 .byReason(byReason)

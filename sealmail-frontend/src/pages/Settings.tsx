@@ -31,13 +31,14 @@ import {
 } from '@ant-design/icons';
 import { mailTestApi, runtimePolicyApi, systemSettingsApi } from '../api/client';
 import { getApiErrorMessage } from '../api/errors';
+import { PageHeader, PageShell } from '../components/Page';
 import type {
   QuarantinePolicy,
   RelayPolicy,
   SystemSettings as SystemSettingsSnapshot,
 } from '../types';
 
-const { Title, Text } = Typography;
+const { Text } = Typography;
 const { TextArea } = Input;
 
 type SectionKey = 'runtime' | 'mail' | 'security' | 'tools';
@@ -288,9 +289,11 @@ const Settings: React.FC = () => {
 
   if (loading) {
     return (
-      <div style={{ textAlign: 'center', padding: 100 }}>
-        <Spin size="large" />
-      </div>
+      <PageShell>
+        <div className="page-loading">
+          <Spin size="large" />
+        </div>
+      </PageShell>
     );
   }
 
@@ -556,20 +559,18 @@ const Settings: React.FC = () => {
   };
 
   return (
-    <div>
-      <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
-        <div>
-          <Title level={3} style={{ margin: 0 }}>
-            系统设置
-          </Title>
-          <div style={{ ...pageTextStyle, marginTop: 4 }}>当前运行配置与调试入口</div>
-        </div>
-        <Button icon={<ReloadOutlined />} onClick={loadSettings} loading={refreshing}>
-          刷新
-        </Button>
-      </div>
+    <PageShell>
+      <PageHeader
+        title="系统设置"
+        description="当前运行配置与调试入口。"
+        actions={(
+          <Button icon={<ReloadOutlined />} onClick={loadSettings} loading={refreshing}>
+            刷新
+          </Button>
+        )}
+      />
 
-      <Row gutter={[16, 16]} style={{ marginBottom: 16 }}>
+      <Row gutter={[16, 16]}>
         <Col xs={24} md={12} xl={6}>
           <Card style={summaryCardStyle}>
             <span style={summaryLabelStyle}>收件地址</span>
@@ -727,7 +728,7 @@ const Settings: React.FC = () => {
           </Form.Item>
         </Form>
       </Modal>
-    </div>
+    </PageShell>
   );
 };
 

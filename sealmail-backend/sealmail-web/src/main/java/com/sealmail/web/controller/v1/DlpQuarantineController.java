@@ -3,12 +3,14 @@ package com.sealmail.web.controller.v1;
 import com.sealmail.app.dto.common.PageRequest;
 import com.sealmail.app.dto.common.PageResponse;
 import com.sealmail.app.dto.request.RejectQuarantineRequest;
+import com.sealmail.app.dto.request.RepairQuarantineReleaseRequest;
 import com.sealmail.app.dto.request.ReleaseQuarantineRequest;
 import com.sealmail.app.dto.response.QuarantineItemResponse;
 import com.sealmail.app.dto.response.QuarantineStatsResponse;
 import com.sealmail.app.security.UserContext;
 import com.sealmail.app.usecase.quarantine.QueryQuarantineUseCase;
 import com.sealmail.app.usecase.quarantine.RejectQuarantineUseCase;
+import com.sealmail.app.usecase.quarantine.RepairQuarantineReleaseUseCase;
 import com.sealmail.app.usecase.quarantine.ReleaseQuarantineUseCase;
 import com.sealmail.web.util.ApiResponse;
 import io.swagger.v3.oas.annotations.Operation;
@@ -32,6 +34,7 @@ public class DlpQuarantineController {
     private final QueryQuarantineUseCase queryQuarantineUseCase;
     private final ReleaseQuarantineUseCase releaseQuarantineUseCase;
     private final RejectQuarantineUseCase rejectQuarantineUseCase;
+    private final RepairQuarantineReleaseUseCase repairQuarantineReleaseUseCase;
 
     @GetMapping("/stats")
     @Operation(summary = "DLP 隔离队列统计")
@@ -92,6 +95,32 @@ public class DlpQuarantineController {
         return ApiResponse.ok(rejectQuarantineUseCase.execute(
                 id,
                 request != null ? request : new RejectQuarantineRequest(),
+                user));
+    }
+
+    @PostMapping("/{id}/release/complete")
+    @Operation(summary = "人工确认释放中邮件已投递")
+    public ApiResponse<QuarantineItemResponse> completeRelease(
+            @Parameter(description = "DLP 隔离队列邮件 ID") @PathVariable String id,
+            @RequestBody(required = false) RepairQuarantineReleaseRequest request,
+            @AuthenticationPrincipal UserContext user) {
+
+        return ApiResponse.ok(repairQuarantineReleaseUseCase.complete(
+                id,
+                request != null ? request : new RepairQuarantineReleaseRequest(),
+                user));
+    }
+
+    @PostMapping("/{id}/release/restore")
+    @Operation(summary = "人工恢复释放中邮件为待处理")
+    public ApiResponse<QuarantineItemResponse> restoreRelease(
+            @Parameter(description = "DLP 隔离队列邮件 ID") @PathVariable String id,
+            @RequestBody(required = false) RepairQuarantineReleaseRequest request,
+            @AuthenticationPrincipal UserContext user) {
+
+        return ApiResponse.ok(repairQuarantineReleaseUseCase.restore(
+                id,
+                request != null ? request : new RepairQuarantineReleaseRequest(),
                 user));
     }
 

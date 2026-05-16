@@ -168,6 +168,7 @@ public class QueryAuditLogUseCase {
                     AuditLogType.EMAIL_DELIVERED,
                     AuditLogType.EMAIL_RELAYED,
                     AuditLogType.EMAIL_RELEASED,
+                    AuditLogType.EMAIL_RELEASE_RESTORED,
                     AuditLogType.EMAIL_REJECTED,
                     AuditLogType.EMAIL_QUARANTINED,
                     AuditLogType.EMAIL_ENCRYPTED,

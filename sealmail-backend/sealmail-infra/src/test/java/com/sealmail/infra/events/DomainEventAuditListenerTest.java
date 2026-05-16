@@ -18,6 +18,7 @@ import com.sealmail.domain.policy.event.MailAuthConfigChanged;
 import com.sealmail.domain.policy.event.QuarantinePolicyChanged;
 import com.sealmail.domain.policy.event.RelayPolicyChanged;
 import com.sealmail.domain.quarantine.QuarantineReason;
+import com.sealmail.domain.quarantine.event.QuarantineReleaseRestored;
 import com.sealmail.domain.quarantine.event.QuarantineReleased;
 import com.sealmail.domain.shared.model.EmailAddress;
 import org.junit.jupiter.api.Test;
@@ -68,6 +69,20 @@ class DomainEventAuditListenerTest {
 
         AuditLog saved = repository.single();
         assertEquals(AuditLogType.EMAIL_RELEASED, saved.getType());
+        assertEquals("QUARANTINE", saved.getResourceType());
+        assertEquals("q-1", saved.getResourceId());
+        assertEquals("admin-1", saved.getUserId());
+    }
+
+    @Test
+    void recordsQuarantineReleaseRestoreAuditLog() {
+        listener.onDomainEvent(new QuarantineReleaseRestored(
+                "q-1",
+                "admin-1",
+                "verified not delivered"));
+
+        AuditLog saved = repository.single();
+        assertEquals(AuditLogType.EMAIL_RELEASE_RESTORED, saved.getType());
         assertEquals("QUARANTINE", saved.getResourceType());
         assertEquals("q-1", saved.getResourceId());
         assertEquals("admin-1", saved.getUserId());

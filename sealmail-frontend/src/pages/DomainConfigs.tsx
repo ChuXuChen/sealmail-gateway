@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import {
   Table,
   Button,
-  Typography,
   Space,
   Tag,
   Modal,
@@ -32,8 +31,8 @@ import {
 import { DnsRecord, DomainConfig, MailAuthConfig } from '../types';
 import { domainConfigApi, mailAuthApi } from '../api/client';
 import { getApiErrorMessage } from '../api/errors';
+import { PageHeader, PageShell } from '../components/Page';
 
-const { Title } = Typography;
 const { Option } = Select;
 
 const normalizeDomain = (value: string) =>
@@ -469,20 +468,21 @@ const DomainConfigs: React.FC = () => {
   ];
 
   return (
-    <div style={{ padding: 24 }}>
-      <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <Title level={3} style={{ margin: 0 }}>
-          域名配置
-        </Title>
-        <Space>
-          <Button icon={<MailOutlined />} onClick={showMailAuthModal}>
-            邮件认证
-          </Button>
-          <Button type="primary" icon={<PlusOutlined />} onClick={showCreateModal}>
-            添加域名
-          </Button>
-        </Space>
-      </div>
+    <PageShell>
+      <PageHeader
+        title="域名配置"
+        description="维护本地域和远程域的加密策略、签名开关与邮件认证配置。"
+        actions={(
+          <Space>
+            <Button icon={<MailOutlined />} onClick={showMailAuthModal}>
+              邮件认证
+            </Button>
+            <Button type="primary" icon={<PlusOutlined />} onClick={showCreateModal}>
+              添加域名
+            </Button>
+          </Space>
+        )}
+      />
 
       <Table
         columns={columns}
@@ -865,7 +865,7 @@ const DomainConfigs: React.FC = () => {
           </Descriptions>
         )}
       </Drawer>
-    </div>
+    </PageShell>
   );
 };
 

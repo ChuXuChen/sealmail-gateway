@@ -22,6 +22,8 @@ class Phase10HardeningRulesTest {
                         "PipelineResult",
                         "MailPipelineStep",
                         "PipelineStepTracker",
+                        "MailPipelineFlow",
+                        "sendError(",
                         "executeWithTracking",
                         "executeMessageWithTracking",
                         "ConcurrentHashMap.newKeySet",
@@ -29,6 +31,18 @@ class Phase10HardeningRulesTest {
                 .toList();
 
         assertTrue(violations.isEmpty(), () -> "Old pipeline pattern violations: " + violations);
+    }
+
+    @Test
+    void productionCodeDoesNotUseStringClassNameReflection() throws IOException {
+        List<Path> violations = productionJavaFiles(BACKEND_ROOT).stream()
+                .filter(path -> containsAny(path,
+                        "Class.forName(",
+                        "getDeclaredFields(",
+                        "setAccessible(true)"))
+                .toList();
+
+        assertTrue(violations.isEmpty(), () -> "String/reflection bypass violations: " + violations);
     }
 
     @Test
@@ -111,6 +125,36 @@ class Phase10HardeningRulesTest {
     }
 
     @Test
+    void runtimeSettingsDoNotAdvertiseRemovedYamlFallback() throws IOException {
+        List<Path> violations = productionJavaFiles(BACKEND_ROOT).stream()
+                .filter(path -> containsAny(path,
+                        "application.yml deployment fallback",
+                        "YAML fallback",
+                        "yaml fallback"))
+                .toList();
+
+        assertTrue(violations.isEmpty(), () -> "Removed YAML fallback is still advertised: " + violations);
+    }
+
+    @Test
+    void migrationsDropLegacyDkimPlaintextKeyColumnForward() throws IOException {
+        List<Path> migrations = migrationFiles();
+        int lastPemMention = migrations.stream()
+                .filter(path -> containsAny(path, "dkim_private_key_pem"))
+                .mapToInt(Phase10HardeningRulesTest::flywayVersion)
+                .max()
+                .orElse(-1);
+        int lastPemDrop = migrations.stream()
+                .filter(path -> containsAny(path, "DROP COLUMN IF EXISTS dkim_private_key_pem"))
+                .mapToInt(Phase10HardeningRulesTest::flywayVersion)
+                .max()
+                .orElse(-1);
+
+        assertTrue(lastPemMention < 0 || lastPemDrop >= lastPemMention,
+                () -> "Legacy DKIM PEM column is mentioned after its last forward drop migration");
+    }
+
+    @Test
     void repositoryDoesNotContainPlainSensitiveMaterialFiles() throws IOException {
         List<Path> violations = Files.walk(REPO_ROOT)
                 .filter(Files::isRegularFile)
@@ -130,6 +174,24 @@ class Phase10HardeningRulesTest {
                     .filter(path -> path.toString().endsWith(".java"))
                     .toList();
         }
+    }
+
+    private static List<Path> migrationFiles() throws IOException {
+        try (var stream = Files.walk(BACKEND_ROOT)) {
+            return stream
+                    .filter(Files::isRegularFile)
+                    .filter(path -> path.toString().contains("/src/main/resources/db/migration/"))
+                    .filter(path -> path.getFileName().toString().matches("V\\d+__.*\\.sql"))
+                    .toList();
+        }
+    }
+
+    private static int flywayVersion(Path path) {
+        var matcher = Pattern.compile("V(\\d+)__").matcher(path.getFileName().toString());
+        if (!matcher.find()) {
+            return -1;
+        }
+        return Integer.parseInt(matcher.group(1));
     }
 
     private static boolean containsAny(Path path, String... needles) {

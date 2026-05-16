@@ -12,14 +12,20 @@ import com.sealmail.domain.quarantine.QuarantineRepository;
 import com.sealmail.domain.quarantine.QuarantineStatus;
 import com.sealmail.domain.quarantine.QuarantinedMail;
 import com.sealmail.domain.quarantine.spi.QuarantineMailReleaseRelay;
-import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionDefinition;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionOperations;
+import org.springframework.transaction.support.TransactionTemplate;
+
+import java.time.Instant;
 
 @Service
-@RequiredArgsConstructor
 @Transactional(readOnly = true)
 public class ReleaseQuarantineUseCase {
 
@@ -30,8 +36,40 @@ public class ReleaseQuarantineUseCase {
     private final PermissionChecker permissionChecker;
     private final QuarantineMailReleaseRelay releaseRelay;
     private final QuarantinePolicyPort quarantinePolicyPort;
+    private final TransactionOperations releaseStateTransaction;
 
-    @Transactional
+    @Autowired
+    public ReleaseQuarantineUseCase(QuarantineRepository quarantineRepository,
+                                    QuarantineDtoMapper mapper,
+                                    PermissionChecker permissionChecker,
+                                    QuarantineMailReleaseRelay releaseRelay,
+                                    QuarantinePolicyPort quarantinePolicyPort,
+                                    PlatformTransactionManager transactionManager) {
+        this(quarantineRepository, mapper, permissionChecker, releaseRelay, quarantinePolicyPort,
+                releaseStateTransaction(transactionManager));
+    }
+
+    ReleaseQuarantineUseCase(QuarantineRepository quarantineRepository,
+                             QuarantineDtoMapper mapper,
+                             PermissionChecker permissionChecker,
+                             QuarantineMailReleaseRelay releaseRelay,
+                             QuarantinePolicyPort quarantinePolicyPort,
+                             TransactionOperations releaseStateTransaction) {
+        this.quarantineRepository = quarantineRepository;
+        this.mapper = mapper;
+        this.permissionChecker = permissionChecker;
+        this.releaseRelay = releaseRelay;
+        this.quarantinePolicyPort = quarantinePolicyPort;
+        this.releaseStateTransaction = releaseStateTransaction;
+    }
+
+    private static TransactionOperations releaseStateTransaction(PlatformTransactionManager transactionManager) {
+        TransactionTemplate template = new TransactionTemplate(transactionManager);
+        template.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
+        return template;
+    }
+
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
     public QuarantineItemResponse execute(
             String id,
             ReleaseQuarantineRequest request,
@@ -42,12 +80,33 @@ public class ReleaseQuarantineUseCase {
                 ? request
                 : new ReleaseQuarantineRequest();
 
+        PendingRelease pendingRelease = releaseStateTransaction.execute(status ->
+                beginRelease(id, effectiveRequest, user));
+
+        try {
+            releaseRelay.relay(pendingRelease.mail(), pendingRelease.encryptBeforeRelease());
+        } catch (RuntimeException e) {
+            restoreAfterRelayFailure(pendingRelease, e);
+            throw e;
+        }
+
+        QuarantinedMail released = releaseStateTransaction.execute(status ->
+                completeRelease(pendingRelease));
+
+        log.info("User [{}] released quarantined mail: {}", user.getUserId(), id);
+
+        return mapper.toResponse(released);
+    }
+
+    private PendingRelease beginRelease(String id, ReleaseQuarantineRequest effectiveRequest, UserContext user) {
         QuarantinedMail mail = quarantineRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("QuarantinedMail", id));
 
-        // Validate state
         if (mail.getStatus() == QuarantineStatus.RELEASED) {
             throw QuarantineStateException.alreadyReleased(id);
+        }
+        if (mail.getStatus() == QuarantineStatus.RELEASING) {
+            throw QuarantineStateException.invalidStateForOperation(id, "release");
         }
         if (mail.getStatus() == QuarantineStatus.REJECTED) {
             if (!Boolean.TRUE.equals(effectiveRequest.getForce())) {
@@ -67,15 +126,52 @@ public class ReleaseQuarantineUseCase {
 
         boolean encryptBeforeRelease = Boolean.TRUE.equals(effectiveRequest.getEncryptBeforeRelease())
                 || quarantinePolicyPort.getSettings().releaseRequiresEncryption();
-        releaseRelay.relay(mail, encryptBeforeRelease);
+        String releaseComment = releaseComment(effectiveRequest.getComment(), encryptBeforeRelease);
+        QuarantineStatus previousStatus = mail.getStatus();
+        Instant previousResolvedAt = mail.getResolvedAt();
+        String previousProcessedBy = mail.getProcessedBy();
+        String previousProcessComment = mail.getProcessComment();
 
-        mail.release(releasedBy, releaseComment(effectiveRequest.getComment(), encryptBeforeRelease),
-                Boolean.TRUE.equals(effectiveRequest.getForce()));
+        mail.startRelease(releasedBy, releaseComment, Boolean.TRUE.equals(effectiveRequest.getForce()));
         quarantineRepository.save(mail);
 
-        log.info("User [{}] released quarantined mail: {}", user.getUserId(), id);
+        return new PendingRelease(mail, encryptBeforeRelease, releasedBy, releaseComment,
+                previousStatus, previousResolvedAt, previousProcessedBy, previousProcessComment);
+    }
 
-        return mapper.toResponse(mail);
+    private QuarantinedMail completeRelease(PendingRelease pendingRelease) {
+        QuarantinedMail mail = quarantineRepository.findById(pendingRelease.mail().getId())
+                .orElseThrow(() -> new ResourceNotFoundException("QuarantinedMail", pendingRelease.mail().getId()));
+        if (mail.getStatus() == QuarantineStatus.RELEASED) {
+            return mail;
+        }
+        if (mail.getStatus() != QuarantineStatus.RELEASING) {
+            throw QuarantineStateException.invalidStateForOperation(mail.getId(), "complete release");
+        }
+        mail.release(pendingRelease.releasedBy(), pendingRelease.releaseComment());
+        quarantineRepository.save(mail);
+        return mail;
+    }
+
+    private void restoreAfterRelayFailure(PendingRelease pendingRelease, RuntimeException relayFailure) {
+        try {
+            releaseStateTransaction.executeWithoutResult(status -> {
+                quarantineRepository.findById(pendingRelease.mail().getId())
+                        .filter(mail -> mail.getStatus() == QuarantineStatus.RELEASING)
+                        .ifPresent(mail -> {
+                            mail.restoreAfterFailedRelease(
+                                    pendingRelease.previousStatus(),
+                                    pendingRelease.previousResolvedAt(),
+                                    pendingRelease.previousProcessedBy(),
+                                    pendingRelease.previousProcessComment());
+                            quarantineRepository.save(mail);
+                        });
+            });
+        } catch (RuntimeException restoreFailure) {
+            relayFailure.addSuppressed(restoreFailure);
+            log.warn("Failed to restore quarantine release state for mail {} after relay failure",
+                    pendingRelease.mail().getId(), restoreFailure);
+        }
     }
 
     private String releaseComment(String comment, boolean encryptBeforeRelease) {
@@ -86,5 +182,16 @@ public class ReleaseQuarantineUseCase {
             return "Encrypted before release";
         }
         return comment + " | Encrypted before release";
+    }
+
+    private record PendingRelease(
+            QuarantinedMail mail,
+            boolean encryptBeforeRelease,
+            String releasedBy,
+            String releaseComment,
+            QuarantineStatus previousStatus,
+            Instant previousResolvedAt,
+            String previousProcessedBy,
+            String previousProcessComment) {
     }
 }

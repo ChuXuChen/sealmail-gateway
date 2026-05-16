@@ -2,6 +2,7 @@ package com.sealmail.domain.quarantine;
 
 import com.sealmail.domain.mailsecurity.MailDirection;
 import com.sealmail.domain.quarantine.event.QuarantineCreated;
+import com.sealmail.domain.quarantine.event.QuarantineReleaseRestored;
 import com.sealmail.domain.quarantine.event.QuarantineReleased;
 import com.sealmail.domain.quarantine.event.QuarantineRejected;
 import com.sealmail.domain.shared.exception.DomainException;
@@ -93,10 +94,10 @@ public class QuarantinedMail extends AggregateRoot<String> {
         if (createdAt == null) {
             throw new IllegalArgumentException("CreatedAt cannot be null");
         }
-        if (status != QuarantineStatus.QUARANTINED && resolvedAt == null) {
+        if (isResolvedStatus(status) && resolvedAt == null) {
             throw new IllegalArgumentException("ResolvedAt cannot be null for resolved quarantine mail");
         }
-        if (status != QuarantineStatus.QUARANTINED && (processedBy == null || processedBy.isBlank())) {
+        if (isResolvedStatus(status) && (processedBy == null || processedBy.isBlank())) {
             throw new IllegalArgumentException("ProcessedBy cannot be blank for resolved quarantine mail");
         }
         QuarantinedMail mail = new QuarantinedMail(id, messageId, subject, sender,
@@ -106,6 +107,10 @@ public class QuarantinedMail extends AggregateRoot<String> {
         mail.processedBy = processedBy;
         mail.processComment = processComment;
         return mail;
+    }
+
+    private static boolean isResolvedStatus(QuarantineStatus status) {
+        return status == QuarantineStatus.RELEASED || status == QuarantineStatus.REJECTED;
     }
 
     private static void validateRequired(String messageId, EmailAddress sender,
@@ -128,8 +133,23 @@ public class QuarantinedMail extends AggregateRoot<String> {
         release(releasedBy, comment, false);
     }
 
+    public void startRelease(String releasedBy, String comment, boolean force) {
+        if (status != QuarantineStatus.QUARANTINED
+                && !(force && status == QuarantineStatus.REJECTED)) {
+            throw new DomainException("Cannot release mail that is not quarantined. Current status: " + status);
+        }
+        if (releasedBy == null || releasedBy.isBlank()) {
+            throw new IllegalArgumentException("ReleasedBy cannot be blank");
+        }
+        this.status = QuarantineStatus.RELEASING;
+        this.resolvedAt = null;
+        this.processedBy = releasedBy;
+        this.processComment = comment;
+    }
+
     public void release(String releasedBy, String comment, boolean force) {
         if (status != QuarantineStatus.QUARANTINED
+                && status != QuarantineStatus.RELEASING
                 && !(force && status == QuarantineStatus.REJECTED)) {
             throw new DomainException("Cannot release mail that is not quarantined. Current status: " + status);
         }
@@ -141,6 +161,40 @@ public class QuarantinedMail extends AggregateRoot<String> {
         this.processedBy = releasedBy;
         this.processComment = comment;
         registerEvent(new QuarantineReleased(getId(), releasedBy, comment));
+    }
+
+    public void restoreAfterFailedRelease(QuarantineStatus previousStatus, Instant previousResolvedAt,
+                                          String previousProcessedBy, String previousProcessComment) {
+        if (status != QuarantineStatus.RELEASING) {
+            throw new DomainException("Cannot restore release attempt. Current status: " + status);
+        }
+        if (previousStatus != QuarantineStatus.QUARANTINED && previousStatus != QuarantineStatus.REJECTED) {
+            throw new IllegalArgumentException("Previous status must be QUARANTINED or REJECTED");
+        }
+        this.status = previousStatus;
+        if (previousStatus == QuarantineStatus.REJECTED) {
+            this.resolvedAt = previousResolvedAt;
+            this.processedBy = previousProcessedBy;
+            this.processComment = previousProcessComment;
+        } else {
+            this.resolvedAt = null;
+            this.processedBy = null;
+            this.processComment = null;
+        }
+    }
+
+    public void restoreReleaseForRetry(String restoredBy, String comment) {
+        if (status != QuarantineStatus.RELEASING) {
+            throw new DomainException("Cannot restore release attempt. Current status: " + status);
+        }
+        if (restoredBy == null || restoredBy.isBlank()) {
+            throw new IllegalArgumentException("RestoredBy cannot be blank");
+        }
+        this.status = QuarantineStatus.QUARANTINED;
+        this.resolvedAt = null;
+        this.processedBy = null;
+        this.processComment = null;
+        registerEvent(new QuarantineReleaseRestored(getId(), restoredBy, comment));
     }
 
     public void reject(String rejectedBy, String comment) {

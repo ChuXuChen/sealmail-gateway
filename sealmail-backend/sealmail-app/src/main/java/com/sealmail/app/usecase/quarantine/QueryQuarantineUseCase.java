@@ -28,6 +28,9 @@ import java.util.Map;
 public class QueryQuarantineUseCase {
 
     private static final Logger log = LoggerFactory.getLogger(QueryQuarantineUseCase.class);
+    private static final List<QuarantineStatus> ACTIVE_REVIEW_STATUSES = List.of(
+            QuarantineStatus.QUARANTINED,
+            QuarantineStatus.RELEASING);
 
     private final QuarantineRepository quarantineRepository;
     private final QuarantineDtoMapper mapper;
@@ -68,16 +71,16 @@ public class QueryQuarantineUseCase {
 
     private List<QuarantinedMail> findItems(QuarantineReason reason, int offset, int size) {
         if (reason != null) {
-            return quarantineRepository.findByStatusAndReason(QuarantineStatus.QUARANTINED, reason, offset, size);
+            return quarantineRepository.findByStatusesAndReason(ACTIVE_REVIEW_STATUSES, reason, offset, size);
         }
-        return quarantineRepository.findByStatus(QuarantineStatus.QUARANTINED, offset, size);
+        return quarantineRepository.findByStatuses(ACTIVE_REVIEW_STATUSES, offset, size);
     }
 
     private long countItems(QuarantineReason reason) {
         if (reason != null) {
-            return quarantineRepository.countByStatusAndReason(QuarantineStatus.QUARANTINED, reason);
+            return quarantineRepository.countByStatusesAndReason(ACTIVE_REVIEW_STATUSES, reason);
         }
-        return quarantineRepository.countByStatus(QuarantineStatus.QUARANTINED);
+        return quarantineRepository.countByStatuses(ACTIVE_REVIEW_STATUSES);
     }
 
     public QuarantineItemResponse findById(String id, UserContext user) {
@@ -100,6 +103,7 @@ public class QueryQuarantineUseCase {
         return QuarantineStatsResponse.builder()
                 .total(quarantineRepository.count())
                 .pending(quarantineRepository.countByStatus(QuarantineStatus.QUARANTINED))
+                .releasing(quarantineRepository.countByStatus(QuarantineStatus.RELEASING))
                 .released(quarantineRepository.countByStatus(QuarantineStatus.RELEASED))
                 .rejected(quarantineRepository.countByStatus(QuarantineStatus.REJECTED))
                 .byReason(byReason)

@@ -1,20 +1,20 @@
-import React, { useEffect, useState } from 'react';
-import { Button, Form, Input, InputNumber, Modal, Popconfirm, Select, Space, Switch, Table, Tag, Typography, message } from 'antd';
-import { DeleteOutlined, EditOutlined, PlusOutlined } from '@ant-design/icons';
+import React, { useCallback, useEffect, useState } from 'react';
+import { Button, Form, Input, InputNumber, Modal, Select, Space, Switch, message } from 'antd';
+import { DeleteOutlined, EditOutlined, PlusOutlined, ReloadOutlined } from '@ant-design/icons';
 import type { TableColumnsType } from 'antd';
 import { dlpApi } from '../api/client';
 import { getApiErrorMessage } from '../api/errors';
 import { DlpPattern } from '../types';
+import {
+  DataTable,
+  DlpActionTag,
+  EnabledTag,
+  PageHeader,
+  PageShell,
+  confirmDeleteAction,
+} from '../components/Page';
 
-const { Title } = Typography;
 const { TextArea } = Input;
-
-const actionColors: Record<string, string> = {
-  WARN: 'blue',
-  MUST_ENCRYPT: 'gold',
-  QUARANTINE: 'orange',
-  BLOCK: 'red',
-};
 
 const actionLabels: Record<string, string> = {
   WARN: '告警',
@@ -35,7 +35,7 @@ const DlpPatterns: React.FC = () => {
   const [editing, setEditing] = useState<DlpPattern | null>(null);
   const [form] = Form.useForm();
 
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     setLoading(true);
     try {
       const response = await dlpApi.listPatterns();
@@ -45,11 +45,11 @@ const DlpPatterns: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     void Promise.resolve().then(loadData);
-  }, []);
+  }, [loadData]);
 
   const showCreate = () => {
     setEditing(null);
@@ -78,7 +78,7 @@ const DlpPatterns: React.FC = () => {
       }
       message.success('DLP 规则已保存');
       setModalOpen(false);
-      loadData();
+      void loadData();
     } catch (error) {
       message.error(getApiErrorMessage(error, '保存 DLP 规则失败'));
     }
@@ -88,7 +88,7 @@ const DlpPatterns: React.FC = () => {
     try {
       await dlpApi.deletePattern(id);
       message.success('DLP 规则已删除');
-      loadData();
+      void loadData();
     } catch (error) {
       message.error(getApiErrorMessage(error, '删除 DLP 规则失败'));
     }
@@ -103,11 +103,7 @@ const DlpPatterns: React.FC = () => {
       dataIndex: 'action',
       key: 'action',
       width: 120,
-      render: (action: string) => (
-        <Tag color={actionColors[action] || 'default'}>
-          {actionLabels[action] || action}
-        </Tag>
-      ),
+      render: (action: string) => <DlpActionTag action={action} />,
     },
     { title: '级别', dataIndex: 'severity', key: 'severity', width: 80 },
     { title: '优先级', dataIndex: 'priority', key: 'priority', width: 90 },
@@ -116,7 +112,7 @@ const DlpPatterns: React.FC = () => {
       dataIndex: 'enabled',
       key: 'enabled',
       width: 90,
-      render: (enabled: boolean) => <Tag color={enabled ? 'green' : 'default'}>{enabled ? '启用' : '停用'}</Tag>,
+      render: (enabled: boolean) => <EnabledTag enabled={enabled} />,
     },
     {
       title: '操作',
@@ -126,27 +122,40 @@ const DlpPatterns: React.FC = () => {
       render: (_: unknown, record: DlpPattern) => (
         <Space size={4} wrap={false}>
           <Button type="link" size="small" icon={<EditOutlined />} onClick={() => showEdit(record)}>编辑</Button>
-          <Popconfirm title="确认删除该规则？" onConfirm={() => remove(record.id)} okText="确认" cancelText="取消">
-            <Button type="link" size="small" danger icon={<DeleteOutlined />}>删除</Button>
-          </Popconfirm>
+          <Button
+            type="link"
+            size="small"
+            danger
+            icon={<DeleteOutlined />}
+            onClick={() => confirmDeleteAction('确认删除该规则？', () => remove(record.id), record.name)}
+          >
+            删除
+          </Button>
         </Space>
       ),
     },
   ];
 
   return (
-    <div style={{ padding: 24 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 16 }}>
-        <Title level={3} style={{ margin: 0 }}>DLP 检测规则</Title>
-        <Button type="primary" icon={<PlusOutlined />} onClick={showCreate}>添加规则</Button>
-      </div>
+    <PageShell>
+      <PageHeader
+        title="DLP 检测规则"
+        description="维护用于识别敏感内容的检测规则和命中动作。"
+        actions={(
+          <Space wrap>
+            <Button icon={<ReloadOutlined />} loading={loading} onClick={loadData}>刷新</Button>
+            <Button type="primary" icon={<PlusOutlined />} onClick={showCreate}>添加规则</Button>
+          </Space>
+        )}
+      />
 
-      <Table
+      <DataTable<DlpPattern>
         rowKey="id"
         loading={loading}
         dataSource={data}
         columns={columns}
         scroll={{ x: 1150 }}
+        pagination={{ pageSize: 20, total: data.length }}
       />
 
       <Modal
@@ -188,7 +197,7 @@ const DlpPatterns: React.FC = () => {
           </Form.Item>
         </Form>
       </Modal>
-    </div>
+    </PageShell>
   );
 };
 

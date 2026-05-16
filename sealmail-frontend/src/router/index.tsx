@@ -14,6 +14,7 @@ import {
   canViewCrl,
   canViewQuarantine,
 } from '../auth/permissions';
+import { PageShell } from '../components/Page';
 
 const MainLayout = React.lazy(() => import('../components/Layout/MainLayout'));
 const Login = React.lazy(() => import('../pages/Login'));
@@ -65,9 +66,9 @@ const RoleRoute: React.FC<RoleRouteProps> = ({ check, children }) => {
 };
 
 const PageLoader = (
-  <div style={{ padding: 24 }}>
+  <PageShell>
     Loading...
-  </div>
+  </PageShell>
 );
 
 const withSuspense = (element: React.ReactNode) => (

@@ -15,6 +15,7 @@ public class QuarantineStatsResponse {
 
     private long total;
     private long pending;
+    private long releasing;
     private long released;
     private long rejected;
     private Map<String, Long> byReason;

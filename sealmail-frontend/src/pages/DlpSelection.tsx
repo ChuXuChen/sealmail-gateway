@@ -1,12 +1,17 @@
-import React, { useEffect, useState } from 'react';
-import { Button, Form, Input, Modal, Popconfirm, Select, Space, Switch, Table, Tag, Typography, message } from 'antd';
-import { DeleteOutlined, EditOutlined, PlusOutlined } from '@ant-design/icons';
+import React, { useCallback, useEffect, useState } from 'react';
+import { Button, Form, Input, Modal, Select, Space, Switch, Tag, message } from 'antd';
+import { DeleteOutlined, EditOutlined, PlusOutlined, ReloadOutlined } from '@ant-design/icons';
 import type { TableColumnsType } from 'antd';
 import { dlpApi } from '../api/client';
 import { getApiErrorMessage } from '../api/errors';
 import { DlpPattern, DlpSelection } from '../types';
-
-const { Title } = Typography;
+import {
+  DataTable,
+  EnabledTag,
+  PageHeader,
+  PageShell,
+  confirmDeleteAction,
+} from '../components/Page';
 
 const scopeLabels: Record<string, string> = {
   GLOBAL: '全局',
@@ -24,12 +29,7 @@ const DlpSelection: React.FC = () => {
   const [patternMode, setPatternMode] = useState<'ALL' | 'SELECTED'>('ALL');
   const [form] = Form.useForm();
 
-  useEffect(() => {
-    loadData();
-    loadPatterns();
-  }, []);
-
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     setLoading(true);
     try {
       const response = await dlpApi.listSelections();
@@ -39,16 +39,21 @@ const DlpSelection: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
-  const loadPatterns = async () => {
+  const loadPatterns = useCallback(async () => {
     try {
       const response = await dlpApi.listPatterns();
       setPatterns(response.data.data);
     } catch (error) {
       message.error(getApiErrorMessage(error, '加载 DLP 规则失败'));
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    void loadData();
+    void loadPatterns();
+  }, [loadData, loadPatterns]);
 
   const showCreate = () => {
     setEditing(null);
@@ -90,7 +95,7 @@ const DlpSelection: React.FC = () => {
       }
       message.success('DLP 生效范围已保存');
       setModalOpen(false);
-      loadData();
+      void loadData();
     } catch (error) {
       message.error(getApiErrorMessage(error, '保存 DLP 生效范围失败'));
     }
@@ -100,7 +105,7 @@ const DlpSelection: React.FC = () => {
     try {
       await dlpApi.deleteSelection(id);
       message.success('DLP 生效范围已删除');
-      loadData();
+      void loadData();
     } catch (error) {
       message.error(getApiErrorMessage(error, '删除 DLP 生效范围失败'));
     }
@@ -142,7 +147,7 @@ const DlpSelection: React.FC = () => {
       dataIndex: 'enabled',
       key: 'enabled',
       width: 90,
-      render: (enabled: boolean) => <Tag color={enabled ? 'green' : 'default'}>{enabled ? '启用' : '停用'}</Tag>,
+      render: (enabled: boolean) => <EnabledTag enabled={enabled} />,
     },
     {
       title: '操作',
@@ -152,27 +157,40 @@ const DlpSelection: React.FC = () => {
       render: (_: unknown, record: DlpSelection) => (
         <Space size={4} wrap={false}>
           <Button type="link" size="small" icon={<EditOutlined />} onClick={() => showEdit(record)}>编辑</Button>
-          <Popconfirm title="确认删除该范围？" onConfirm={() => remove(record.id)} okText="确认" cancelText="取消">
-            <Button type="link" size="small" danger icon={<DeleteOutlined />}>删除</Button>
-          </Popconfirm>
+          <Button
+            type="link"
+            size="small"
+            danger
+            icon={<DeleteOutlined />}
+            onClick={() => confirmDeleteAction('确认删除该范围？', () => remove(record.id), record.scopeValue || scopeLabels[record.scopeType])}
+          >
+            删除
+          </Button>
         </Space>
       ),
     },
   ];
 
   return (
-    <div style={{ padding: 24 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 16 }}>
-        <Title level={3} style={{ margin: 0 }}>DLP 生效范围</Title>
-        <Button type="primary" icon={<PlusOutlined />} onClick={showCreate}>添加范围</Button>
-      </div>
+    <PageShell>
+      <PageHeader
+        title="DLP 生效范围"
+        description="配置 DLP 规则在全局、发件域或收件域中的启用范围。"
+        actions={(
+          <Space wrap>
+            <Button icon={<ReloadOutlined />} loading={loading} onClick={loadData}>刷新</Button>
+            <Button type="primary" icon={<PlusOutlined />} onClick={showCreate}>添加范围</Button>
+          </Space>
+        )}
+      />
 
-      <Table
+      <DataTable<DlpSelection>
         rowKey="id"
         loading={loading}
         dataSource={data}
         columns={columns}
         scroll={{ x: 740 }}
+        pagination={{ pageSize: 20, total: data.length }}
       />
 
       <Modal
@@ -234,7 +252,7 @@ const DlpSelection: React.FC = () => {
           </Form.Item>
         </Form>
       </Modal>
-    </div>
+    </PageShell>
   );
 };
 

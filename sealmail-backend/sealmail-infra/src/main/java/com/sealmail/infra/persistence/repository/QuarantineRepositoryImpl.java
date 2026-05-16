@@ -103,6 +103,19 @@ public class QuarantineRepositoryImpl implements QuarantineRepository {
 
     @Override
     @Transactional(readOnly = true)
+    public List<QuarantinedMail> findByStatuses(List<QuarantineStatus> statuses, int offset, int limit) {
+        TypedQuery<QuarantinedMailEntity> query = entityManager.createQuery(
+                "SELECT q FROM QuarantinedMailEntity q WHERE q.status IN :statuses ORDER BY q.createdAt DESC",
+                QuarantinedMailEntity.class
+        );
+        query.setParameter("statuses", statusNames(statuses));
+        query.setFirstResult(offset);
+        query.setMaxResults(limit);
+        return query.getResultList().stream().map(mapper::toDomain).toList();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
     public List<QuarantinedMail> findByReason(QuarantineReason reason, int offset, int limit) {
         TypedQuery<QuarantinedMailEntity> query = entityManager.createQuery(
                 "SELECT q FROM QuarantinedMailEntity q WHERE q.reason = :reason ORDER BY q.createdAt DESC",
@@ -122,6 +135,20 @@ public class QuarantineRepositoryImpl implements QuarantineRepository {
                 QuarantinedMailEntity.class
         );
         query.setParameter("status", status.name());
+        query.setParameter("reason", reason.name());
+        query.setFirstResult(offset);
+        query.setMaxResults(limit);
+        return query.getResultList().stream().map(mapper::toDomain).toList();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<QuarantinedMail> findByStatusesAndReason(List<QuarantineStatus> statuses, QuarantineReason reason, int offset, int limit) {
+        TypedQuery<QuarantinedMailEntity> query = entityManager.createQuery(
+                "SELECT q FROM QuarantinedMailEntity q WHERE q.status IN :statuses AND q.reason = :reason ORDER BY q.createdAt DESC",
+                QuarantinedMailEntity.class
+        );
+        query.setParameter("statuses", statusNames(statuses));
         query.setParameter("reason", reason.name());
         query.setFirstResult(offset);
         query.setMaxResults(limit);
@@ -165,6 +192,14 @@ public class QuarantineRepositoryImpl implements QuarantineRepository {
 
     @Override
     @Transactional(readOnly = true)
+    public long countByStatuses(List<QuarantineStatus> statuses) {
+        return entityManager.createQuery(
+                "SELECT COUNT(q) FROM QuarantinedMailEntity q WHERE q.status IN :statuses", Long.class
+        ).setParameter("statuses", statusNames(statuses)).getSingleResult();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
     public long countByReason(QuarantineReason reason) {
         return entityManager.createQuery(
                 "SELECT COUNT(q) FROM QuarantinedMailEntity q WHERE q.reason = :reason", Long.class
@@ -181,6 +216,25 @@ public class QuarantineRepositoryImpl implements QuarantineRepository {
                 .setParameter("status", status.name())
                 .setParameter("reason", reason.name())
                 .getSingleResult();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public long countByStatusesAndReason(List<QuarantineStatus> statuses, QuarantineReason reason) {
+        return entityManager.createQuery(
+                "SELECT COUNT(q) FROM QuarantinedMailEntity q WHERE q.status IN :statuses AND q.reason = :reason",
+                Long.class
+        )
+                .setParameter("statuses", statusNames(statuses))
+                .setParameter("reason", reason.name())
+                .getSingleResult();
+    }
+
+    private List<String> statusNames(List<QuarantineStatus> statuses) {
+        if (statuses == null || statuses.isEmpty()) {
+            throw new IllegalArgumentException("Statuses cannot be empty");
+        }
+        return statuses.stream().map(QuarantineStatus::name).toList();
     }
 
 }

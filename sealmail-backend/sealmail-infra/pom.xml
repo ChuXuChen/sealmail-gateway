@@ -14,18 +14,11 @@
     <name>SealMail Infrastructure</name>
     <description>Infrastructure layer - JPA persistence, BouncyCastle crypto, Spring Integration pipeline</description>
 
-    <properties>
-        <sealmail.flyway.url>jdbc:postgresql://localhost:5432/sealmail</sealmail.flyway.url>
-        <sealmail.flyway.user>sealmail</sealmail.flyway.user>
-        <sealmail.flyway.password>${env.SEALMAIL_FLYWAY_PASSWORD}</sealmail.flyway.password>
-    </properties>
-
     <dependencies>
         <!-- Domain layer -->
         <dependency>
             <groupId>com.sealmail</groupId>
             <artifactId>sealmail-domain</artifactId>
-            <version>${project.version}</version>
         </dependency>
 
         <!-- Spring Boot -->
@@ -50,7 +43,6 @@
         <dependency>
             <groupId>org.springframework.retry</groupId>
             <artifactId>spring-retry</artifactId>
-            <version>2.0.6</version>
         </dependency>
 
         <!-- SubEtha SMTP -->
@@ -84,24 +76,20 @@
         <dependency>
             <groupId>org.bouncycastle</groupId>
             <artifactId>bcprov-jdk18on</artifactId>
-            <version>1.78.1</version>
         </dependency>
         <dependency>
             <groupId>org.bouncycastle</groupId>
             <artifactId>bcpkix-jdk18on</artifactId>
-            <version>1.78.1</version>
         </dependency>
         <dependency>
             <groupId>org.bouncycastle</groupId>
             <artifactId>bcjmail-jdk18on</artifactId>
-            <version>1.78.1</version>
         </dependency>
 
         <!-- Jakarta Mail (for S/MIME) - matches BouncyCastle bcjmail 1.78 expectations -->
         <dependency>
             <groupId>org.eclipse.angus</groupId>
             <artifactId>jakarta.mail</artifactId>
-            <version>2.0.2</version>
         </dependency>
 
         <!-- Jackson for JSONB -->
@@ -131,18 +119,15 @@
         <dependency>
             <groupId>io.jsonwebtoken</groupId>
             <artifactId>jjwt-api</artifactId>
-            <version>0.12.5</version>
         </dependency>
         <dependency>
             <groupId>io.jsonwebtoken</groupId>
             <artifactId>jjwt-impl</artifactId>
-            <version>0.12.5</version>
             <scope>runtime</scope>
         </dependency>
         <dependency>
             <groupId>io.jsonwebtoken</groupId>
             <artifactId>jjwt-jackson</artifactId>
-            <version>0.12.5</version>
             <scope>runtime</scope>
         </dependency>
 
@@ -154,62 +139,34 @@
         </dependency>
     </dependencies>
 
-    <build>
-        <plugins>
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-compiler-plugin</artifactId>
-                <configuration>
-                    <source>21</source>
-                    <target>21</target>
-                    <annotationProcessorPaths>
-                        <path>
-                            <groupId>org.mapstruct</groupId>
-                            <artifactId>mapstruct-processor</artifactId>
-                            <version>1.5.5.Final</version>
-                        </path>
-                        <path>
-                            <groupId>org.projectlombok</groupId>
-                            <artifactId>lombok</artifactId>
-                            <version>1.18.30</version>
-                        </path>
-                        <path>
-                            <groupId>org.projectlombok</groupId>
-                            <artifactId>lombok-mapstruct-binding</artifactId>
-                            <version>0.2.0</version>
-                        </path>
-                    </annotationProcessorPaths>
-                </configuration>
-            </plugin>
-            <plugin>
-                <groupId>org.flywaydb</groupId>
-                <artifactId>flyway-maven-plugin</artifactId>
-                <version>${flyway.version}</version>
-                <dependencies>
-                    <dependency>
+    <profiles>
+        <profile>
+            <id>flyway-migrate</id>
+            <properties>
+                <sealmail.flyway.url>${env.SEALMAIL_FLYWAY_URL}</sealmail.flyway.url>
+                <sealmail.flyway.user>${env.SEALMAIL_FLYWAY_USER}</sealmail.flyway.user>
+                <sealmail.flyway.password>${env.SEALMAIL_FLYWAY_PASSWORD}</sealmail.flyway.password>
+            </properties>
+            <build>
+                <plugins>
+                    <plugin>
                         <groupId>org.flywaydb</groupId>
-                        <artifactId>flyway-database-postgresql</artifactId>
-                        <version>${flyway.version}</version>
-                    </dependency>
-                    <dependency>
-                        <groupId>org.postgresql</groupId>
-                        <artifactId>postgresql</artifactId>
-                        <version>${postgresql.version}</version>
-                    </dependency>
-                </dependencies>
-                <configuration>
-                    <url>${sealmail.flyway.url}</url>
-                    <user>${sealmail.flyway.user}</user>
-                    <password>${sealmail.flyway.password}</password>
-                    <locations>
-                        <location>filesystem:${project.basedir}/src/main/resources/db/migration</location>
-                    </locations>
-                    <baselineOnMigrate>true</baselineOnMigrate>
-                    <baselineVersion>6</baselineVersion>
-                    <validateOnMigrate>true</validateOnMigrate>
-                </configuration>
-            </plugin>
-        </plugins>
-    </build>
+                        <artifactId>flyway-maven-plugin</artifactId>
+                        <configuration>
+                            <url>${sealmail.flyway.url}</url>
+                            <user>${sealmail.flyway.user}</user>
+                            <password>${sealmail.flyway.password}</password>
+                            <locations>
+                                <location>filesystem:${project.basedir}/src/main/resources/db/migration</location>
+                            </locations>
+                            <baselineOnMigrate>true</baselineOnMigrate>
+                            <baselineVersion>6</baselineVersion>
+                            <validateOnMigrate>true</validateOnMigrate>
+                        </configuration>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+    </profiles>
 
 </project>

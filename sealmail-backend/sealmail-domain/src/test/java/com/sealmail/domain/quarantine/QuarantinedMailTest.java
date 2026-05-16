@@ -69,4 +69,27 @@ class QuarantinedMailTest {
         assertEquals(QuarantineStatus.RELEASED, mail.getStatus());
         assertEquals("release", mail.getProcessComment());
     }
+
+    @Test
+    void releaseCanBeReservedBeforeFinalRelease() {
+        QuarantinedMail mail = QuarantinedMail.create(
+                "q-1",
+                "msg-1",
+                "subject",
+                new EmailAddress("sender@example.com"),
+                List.of(new EmailAddress("recipient@example.com")),
+                "127.0.0.1",
+                QuarantineReason.POLICY_VIOLATION,
+                "DLP QUARANTINE: detail",
+                "raw".getBytes()
+        );
+
+        mail.startRelease("admin", "release", false);
+
+        assertEquals(QuarantineStatus.RELEASING, mail.getStatus());
+
+        mail.release("admin", "release");
+
+        assertEquals(QuarantineStatus.RELEASED, mail.getStatus());
+    }
 }

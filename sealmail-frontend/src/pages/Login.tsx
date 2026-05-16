@@ -1,10 +1,12 @@
 import React, { useState } from 'react';
-import { Form, Input, Button, Card } from 'antd';
+import { Form, Input, Button, Card, Typography } from 'antd';
 import { LockOutlined, MailOutlined } from '@ant-design/icons';
 import { useAuth } from '../contexts/useAuth';
 import { useNavigate, Navigate } from 'react-router-dom';
 import SealMailLogo from '../components/Brand/SealMailLogo';
 import './Login.css';
+
+const { Text } = Typography;
 
 const Login: React.FC = () => {
   const [loading, setLoading] = useState(false);
@@ -29,20 +31,10 @@ const Login: React.FC = () => {
 
   return (
     <main className="login-page">
-      <div className="login-scene" aria-hidden="true">
-        <span className="login-scene__gateway" />
-        <span className="login-scene__gateway login-scene__gateway--inner" />
-        <span className="login-scene__stream login-scene__stream--one" />
-        <span className="login-scene__stream login-scene__stream--two" />
-        <span className="login-scene__stream login-scene__stream--three" />
-        <span className="login-scene__node login-scene__node--one" />
-        <span className="login-scene__node login-scene__node--two" />
-        <span className="login-scene__node login-scene__node--three" />
-      </div>
-
-      <Card className="login-card" bordered={false}>
+      <Card className="login-card">
         <div className="login-card__brand">
           <SealMailLogo variant="login" subtitle="邮件安全网关管理系统" />
+          <Text type="secondary">请使用管理员账号登录</Text>
         </div>
 
         <Form className="login-form" name="login" onFinish={onFinish} autoComplete="off" size="large">
@@ -66,6 +58,7 @@ const Login: React.FC = () => {
               htmlType="submit"
               className="login-form__submit"
               loading={loading}
+              block
             >
               登录
             </Button>

@@ -11,7 +11,6 @@
   height: var(--sealmail-logo-mark-size);
   flex: 0 0 var(--sealmail-logo-mark-size);
   display: block;
-  filter: drop-shadow(0 12px 22px rgba(0, 21, 41, 0.34));
 }
 
 .sealmail-logo--mark-hidden {
@@ -53,13 +52,9 @@
 }
 
 .sealmail-logo--login {
-  --sealmail-logo-mark-size: 112px;
+  --sealmail-logo-mark-size: 80px;
   flex-direction: column;
-  gap: 18px;
-}
-
-.sealmail-logo--login .sealmail-logo__mark {
-  filter: drop-shadow(0 24px 40px rgba(8, 33, 74, 0.22));
+  gap: 12px;
 }
 
 .sealmail-logo--login .sealmail-logo__copy {
@@ -68,8 +63,8 @@
 
 .sealmail-logo--login .sealmail-logo__wordmark {
   color: #0f172a;
-  font-size: 44px;
-  font-weight: 800;
+  font-size: 32px;
+  font-weight: 700;
   line-height: 1;
 }
 
@@ -88,9 +83,7 @@
   display: flex;
   align-items: center;
   padding: 0 16px 0 18px;
-  background:
-    linear-gradient(180deg, rgba(22, 119, 255, 0.12), rgba(22, 119, 255, 0)),
-    #001529;
+  background: #001529;
   border-bottom: 1px solid rgba(255, 255, 255, 0.06);
 }
 

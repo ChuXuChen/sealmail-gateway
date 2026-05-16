@@ -1,15 +1,10 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import {
-  Table,
   Button,
   Dropdown,
-  Modal,
-  Typography,
   Space,
-  Tag,
   message,
   Select,
-  Drawer,
   Descriptions,
 } from 'antd';
 import {
@@ -18,18 +13,43 @@ import {
   DownOutlined,
   EyeOutlined,
   LockOutlined,
+  ReloadOutlined,
 } from '@ant-design/icons';
 import type { MenuProps, TableColumnsType } from 'antd';
 import { QuarantineItem } from '../types';
 import { dlpQuarantineApi } from '../api/client';
 import { getApiErrorMessage } from '../api/errors';
+import {
+  BulkActionBar,
+  DataTable,
+  DetailDrawer,
+  EnabledTag,
+  FilterBar,
+  PageHeader,
+  PageShell,
+  QuarantineStatusTag,
+  ReasonTag,
+  confirmAction,
+  createListPagination,
+  formatDateTime,
+} from '../components/Page';
 
-const { Title } = Typography;
 const { Option } = Select;
-type DlpQuarantineActionKey = 'release' | 'release-encrypted' | 'reject';
+type DlpQuarantineActionKey = 'release' | 'release-encrypted' | 'reject' | 'complete-release' | 'restore-release';
+
+const reasonOptions = [
+  { value: 'POLICY_VIOLATION', label: '策略违规' },
+  { value: 'CERTIFICATE_MISSING', label: '缺少证书' },
+  { value: 'ENCRYPTION_FAILED', label: '加密失败' },
+  { value: 'SCAN_ERROR', label: '扫描错误' },
+];
 
 const isDlpQuarantineActionKey = (key: string): key is DlpQuarantineActionKey =>
-  key === 'release' || key === 'release-encrypted' || key === 'reject';
+  key === 'release'
+  || key === 'release-encrypted'
+  || key === 'reject'
+  || key === 'complete-release'
+  || key === 'restore-release';
 
 const DlpQuarantine: React.FC = () => {
   const [data, setData] = useState<QuarantineItem[]>([]);
@@ -72,7 +92,7 @@ const DlpQuarantine: React.FC = () => {
     try {
       await dlpQuarantineApi.release(id, { encryptBeforeRelease });
       message.success(encryptBeforeRelease ? '邮件已加密后放行' : '邮件已放行');
-      loadData();
+      void loadData();
     } catch (error) {
       message.error(getApiErrorMessage(error, '操作失败'));
     }
@@ -82,7 +102,27 @@ const DlpQuarantine: React.FC = () => {
     try {
       await dlpQuarantineApi.reject(id);
       message.success('邮件已拒绝');
-      loadData();
+      void loadData();
+    } catch (error) {
+      message.error(getApiErrorMessage(error, '操作失败'));
+    }
+  };
+
+  const handleCompleteRelease = async (id: string) => {
+    try {
+      await dlpQuarantineApi.completeRelease(id, { comment: 'Operator confirmed mail was already delivered' });
+      message.success('已确认邮件完成投递');
+      void loadData();
+    } catch (error) {
+      message.error(getApiErrorMessage(error, '操作失败'));
+    }
+  };
+
+  const handleRestoreRelease = async (id: string) => {
+    try {
+      await dlpQuarantineApi.restoreRelease(id, { comment: 'Operator confirmed mail was not delivered' });
+      message.success('已恢复为待处理');
+      void loadData();
     } catch (error) {
       message.error(getApiErrorMessage(error, '操作失败'));
     }
@@ -92,24 +132,30 @@ const DlpQuarantine: React.FC = () => {
     const releasableIds = data
       .filter((item) => selectedRowKeys.includes(item.id) && canRelease(item))
       .map((item) => item.id);
-    if (releasableIds.length === 0) return;
+    if (releasableIds.length === 0) {
+      message.warning('当前选择中没有可放行的邮件');
+      return;
+    }
     try {
       await dlpQuarantineApi.batchRelease(releasableIds);
       message.success(`已放行 ${releasableIds.length} 封邮件`);
       setSelectedRowKeys([]);
-      loadData();
+      void loadData();
     } catch (error) {
       message.error(getApiErrorMessage(error, '操作失败'));
     }
   };
 
   const handleBatchReject = async () => {
-    if (selectedRowKeys.length === 0) return;
+    if (selectedRowKeys.length === 0) {
+      message.warning('请先选择待处理邮件');
+      return;
+    }
     try {
       await dlpQuarantineApi.batchReject(selectedRowKeys as string[]);
       message.success(`已拒绝 ${selectedRowKeys.length} 封邮件`);
       setSelectedRowKeys([]);
-      loadData();
+      void loadData();
     } catch (error) {
       message.error(getApiErrorMessage(error, '操作失败'));
     }
@@ -128,6 +174,16 @@ const DlpQuarantine: React.FC = () => {
       return;
     }
 
+    if (key === 'complete-release') {
+      confirmCompleteRelease(record);
+      return;
+    }
+
+    if (key === 'restore-release') {
+      confirmRestoreRelease(record);
+      return;
+    }
+
     if (key === 'reject') {
       confirmReject(record);
       return;
@@ -137,84 +193,125 @@ const DlpQuarantine: React.FC = () => {
   };
 
   const confirmRelease = (record: QuarantineItem, encryptBeforeRelease = false) => {
-    Modal.confirm({
+    confirmAction({
       title: encryptBeforeRelease ? '确定要加密后放行此邮件吗？' : '确定要直接放行此邮件吗？',
-      okText: '确定',
-      cancelText: '取消',
+      content: record.subject,
+      okText: encryptBeforeRelease ? '加密放行' : '直接放行',
       onOk: () => handleRelease(record.id, encryptBeforeRelease),
     });
   };
 
   const confirmReject = (record: QuarantineItem) => {
-    Modal.confirm({
+    confirmAction({
       title: '确定要拒绝此邮件吗？',
-      okText: '确定',
-      cancelText: '取消',
-      okButtonProps: { danger: true },
+      content: record.subject,
+      danger: true,
+      okText: '拒绝',
       onOk: () => handleReject(record.id),
     });
   };
 
-  const getReasonTag = (reason: string) => {
-    const colorMap: Record<string, string> = {
-      POLICY_VIOLATION: 'red',
-      CERTIFICATE_MISSING: 'gold',
-      ENCRYPTION_FAILED: 'red',
-      SCAN_ERROR: 'purple',
-    };
-    const labelMap: Record<string, string> = {
-      POLICY_VIOLATION: '策略违规',
-      CERTIFICATE_MISSING: '缺少证书',
-      ENCRYPTION_FAILED: '加密失败',
-      SCAN_ERROR: '扫描错误',
-    };
-    return <Tag color={colorMap[reason] || 'default'}>{labelMap[reason] || reason}</Tag>;
+  const confirmCompleteRelease = (record: QuarantineItem) => {
+    confirmAction({
+      title: '确认此邮件已完成投递？',
+      content: record.subject,
+      okText: '确认已投递',
+      onOk: () => handleCompleteRelease(record.id),
+    });
   };
 
-  const getStatusTag = (status: string) => {
-    const colorMap: Record<string, string> = {
-      QUARANTINED: 'gold',
-      RELEASED: 'green',
-      REJECTED: 'red',
-    };
-    const labelMap: Record<string, string> = {
-      QUARANTINED: '待处理',
-      RELEASED: '已放行',
-      REJECTED: '已拒绝',
-    };
-    return <Tag color={colorMap[status] || 'default'}>{labelMap[status] || status}</Tag>;
+  const confirmRestoreRelease = (record: QuarantineItem) => {
+    confirmAction({
+      title: '确认此邮件未投递并恢复为待处理？',
+      content: record.subject,
+      okText: '恢复待处理',
+      danger: true,
+      onOk: () => handleRestoreRelease(record.id),
+    });
+  };
+
+  const confirmBatchRelease = () => {
+    if (selectedRowKeys.length === 0) {
+      message.warning('请先选择待处理邮件');
+      return;
+    }
+
+    if (selectedReleaseCount === 0) {
+      message.warning('当前选择中没有可放行的邮件');
+      return;
+    }
+
+    confirmAction({
+      title: '确定要批量放行所选邮件吗？',
+      content: `将直接放行 ${selectedReleaseCount} 封邮件。`,
+      okText: '批量放行',
+      onOk: handleBatchRelease,
+    });
+  };
+
+  const confirmBatchReject = () => {
+    if (selectedRowKeys.length === 0) {
+      message.warning('请先选择待处理邮件');
+      return;
+    }
+
+    confirmAction({
+      title: '确定要批量拒绝所选邮件吗？',
+      content: `将拒绝 ${selectedRowKeys.length} 封邮件。`,
+      danger: true,
+      okText: '批量拒绝',
+      onOk: handleBatchReject,
+    });
   };
 
   const getActionItems = (
     record: QuarantineItem,
     releaseDisabled: boolean
-  ): MenuProps['items'] => [
-    {
-      key: 'release',
-      icon: <CheckCircleOutlined />,
-      label: releaseDisabled
-        ? record.releaseUnavailableReason || '不可放行'
-        : '直接放行',
-      disabled: releaseDisabled,
-    },
-    {
-      key: 'release-encrypted',
-      icon: <LockOutlined />,
-      label: releaseDisabled
-        ? record.releaseUnavailableReason || '不可加密放行'
-        : '加密放行',
-      disabled: releaseDisabled,
-    },
-    {
-      type: 'divider',
-    },
-    {
-      key: 'reject',
-      danger: true,
-      icon: <CloseCircleOutlined />,
-      label: '拒绝',
-    },
-  ];
+  ): MenuProps['items'] => {
+    if (record.status === 'RELEASING') {
+      return [
+        {
+          key: 'complete-release',
+          icon: <CheckCircleOutlined />,
+          label: '确认已投递',
+        },
+        {
+          key: 'restore-release',
+          danger: true,
+          icon: <ReloadOutlined />,
+          label: '恢复待处理',
+        },
+      ];
+    }
+
+    return [
+      {
+        key: 'release',
+        icon: <CheckCircleOutlined />,
+        label: releaseDisabled
+          ? record.releaseUnavailableReason || '不可放行'
+          : '直接放行',
+        disabled: releaseDisabled,
+      },
+      {
+        key: 'release-encrypted',
+        icon: <LockOutlined />,
+        label: releaseDisabled
+          ? record.releaseUnavailableReason || '不可加密放行'
+          : '加密放行',
+        disabled: releaseDisabled,
+      },
+      {
+        type: 'divider',
+      },
+      {
+        key: 'reject',
+        danger: true,
+        icon: <CloseCircleOutlined />,
+        label: '拒绝',
+      },
+    ];
+  };
 
   const columns: TableColumnsType<QuarantineItem> = [
     {
@@ -243,20 +340,20 @@ const DlpQuarantine: React.FC = () => {
       title: '隔离原因',
       key: 'reason',
       width: 120,
-      render: (_: unknown, record: QuarantineItem) => getReasonTag(record.reason),
+      render: (_: unknown, record: QuarantineItem) => <ReasonTag reason={record.reason} />,
     },
     {
       title: '状态',
       key: 'status',
       width: 100,
-      render: (_: unknown, record: QuarantineItem) => getStatusTag(record.status),
+      render: (_: unknown, record: QuarantineItem) => <QuarantineStatusTag status={record.status} />,
     },
     {
       title: '隔离时间',
       dataIndex: 'quarantinedAt',
       key: 'quarantinedAt',
       width: 180,
-      render: (date: string) => new Date(date).toLocaleString(),
+      render: formatDateTime,
     },
     {
       title: '操作',
@@ -264,7 +361,7 @@ const DlpQuarantine: React.FC = () => {
       width: 160,
       fixed: 'right',
       render: (_: unknown, record: QuarantineItem) => {
-        const isQuarantined = record.status === 'QUARANTINED';
+        const isActionable = record.status === 'QUARANTINED' || record.status === 'RELEASING';
         const releaseDisabled = !canRelease(record);
 
         return (
@@ -280,7 +377,7 @@ const DlpQuarantine: React.FC = () => {
             >
               查看
             </Button>
-            {isQuarantined && (
+            {isActionable && (
               <Dropdown
                 trigger={['click']}
                 menu={{
@@ -310,33 +407,31 @@ const DlpQuarantine: React.FC = () => {
   const selectedReleaseCount = data.filter((item) =>
     selectedRowKeys.includes(item.id) && canRelease(item)
   ).length;
+  const reasonLabel = reasonOptions.find((option) => option.value === reasonFilter)?.label || reasonFilter;
+  const clearFilters = () => {
+    setReasonFilter(undefined);
+    setPagination((prev) => ({ ...prev, page: 1 }));
+  };
 
   return (
-    <div style={{ padding: 24 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
-        <Title level={3} style={{ margin: 0 }}>
-          DLP 隔离邮件
-        </Title>
-        <Space>
-          {selectedRowKeys.length > 0 && (
-            <>
-              <Button
-                type="primary"
-                icon={<CheckCircleOutlined />}
-                onClick={handleBatchRelease}
-                disabled={selectedReleaseCount === 0}
-              >
-                批量放行 ({selectedReleaseCount})
-              </Button>
-              <Button danger icon={<CloseCircleOutlined />} onClick={handleBatchReject}>
-                批量拒绝 ({selectedRowKeys.length})
-              </Button>
-            </>
-          )}
-        </Space>
-      </div>
+    <PageShell>
+      <PageHeader
+        title="DLP 隔离邮件"
+        description="查看 DLP 命中的隔离邮件，并执行放行、加密放行或拒绝处理。"
+      />
 
-      <div style={{ marginBottom: 16 }}>
+      <FilterBar
+        activeFilters={reasonFilter ? [{
+          key: 'reason',
+          label: '隔离原因',
+          value: reasonLabel,
+          onClose: clearFilters,
+        }] : undefined}
+        onRefresh={loadData}
+        onReset={clearFilters}
+        refreshLoading={loading}
+        resetDisabled={!reasonFilter}
+      >
         <Select
           placeholder="筛选原因"
           style={{ width: 200 }}
@@ -347,34 +442,48 @@ const DlpQuarantine: React.FC = () => {
             setPagination((prev) => ({ ...prev, page: 1 }));
           }}
         >
-          <Option value="POLICY_VIOLATION">策略违规</Option>
-          <Option value="CERTIFICATE_MISSING">缺少证书</Option>
-          <Option value="ENCRYPTION_FAILED">加密失败</Option>
-          <Option value="SCAN_ERROR">扫描错误</Option>
+          {reasonOptions.map((option) => (
+            <Option key={option.value} value={option.value}>{option.label}</Option>
+          ))}
         </Select>
-      </div>
+      </FilterBar>
 
-      <Table
+      <BulkActionBar
+        selectedCount={selectedRowKeys.length}
+        actionableCount={selectedReleaseCount}
+        onClear={() => setSelectedRowKeys([])}
+        unavailableText="部分邮件当前不可放行，仍可执行拒绝。"
+        actions={(
+          <>
+            <Button
+              type="primary"
+              icon={<CheckCircleOutlined />}
+              onClick={confirmBatchRelease}
+              disabled={selectedReleaseCount === 0}
+            >
+              批量放行 ({selectedReleaseCount})
+            </Button>
+            <Button danger icon={<CloseCircleOutlined />} onClick={confirmBatchReject}>
+              批量拒绝 ({selectedRowKeys.length})
+            </Button>
+          </>
+        )}
+      />
+
+      <DataTable<QuarantineItem>
         columns={columns}
         dataSource={data}
         loading={loading}
         rowKey="id"
         rowSelection={rowSelection}
         scroll={{ x: 1260 }}
-        pagination={{
-          current: pagination.page,
-          pageSize: pagination.size,
-          total: pagination.total,
-          showSizeChanger: true,
-          showQuickJumper: true,
-          showTotal: (total) => `共 ${total} 条`,
-          onChange: (page, size) => setPagination((prev) => ({ ...prev, page, size })),
-        }}
+        pagination={createListPagination(pagination, (page, size) =>
+          setPagination((prev) => ({ ...prev, page, size }))
+        )}
       />
 
-      <Drawer
+      <DetailDrawer
         title="DLP 隔离邮件详情"
-        width={600}
         open={detailVisible}
         onClose={() => {
           setDetailVisible(false);
@@ -382,42 +491,43 @@ const DlpQuarantine: React.FC = () => {
         }}
       >
         {selectedItem && (
-          <Descriptions column={1} bordered>
+          <Descriptions column={1} bordered size="small">
             <Descriptions.Item label="主题">{selectedItem.subject}</Descriptions.Item>
+            <Descriptions.Item label="Message-ID">{selectedItem.messageId}</Descriptions.Item>
             <Descriptions.Item label="发件人">{selectedItem.sender}</Descriptions.Item>
             <Descriptions.Item label="收件人">
               {selectedItem.recipients?.join(', ') || '-'}
             </Descriptions.Item>
             <Descriptions.Item label="方向">{selectedItem.direction || '-'}</Descriptions.Item>
             <Descriptions.Item label="来源地址">{selectedItem.remoteAddress || '-'}</Descriptions.Item>
-            <Descriptions.Item label="隔离原因">{getReasonTag(selectedItem.reason)}</Descriptions.Item>
+            <Descriptions.Item label="隔离原因"><ReasonTag reason={selectedItem.reason} /></Descriptions.Item>
             <Descriptions.Item label="详情说明">{selectedItem.detail || '-'}</Descriptions.Item>
-            <Descriptions.Item label="状态">{getStatusTag(selectedItem.status)}</Descriptions.Item>
+            <Descriptions.Item label="状态"><QuarantineStatusTag status={selectedItem.status} /></Descriptions.Item>
             <Descriptions.Item label="可放行">
               {canRelease(selectedItem) ? (
-                <Tag color="success">可以放行</Tag>
+                <EnabledTag enabled enabledText="可以放行" />
               ) : (
                 <Space direction="vertical" size={4}>
-                  <Tag color="default">不可放行</Tag>
+                  <EnabledTag enabled={false} disabledText="不可放行" />
                   <span>{selectedItem.releaseUnavailableReason || '当前状态不可放行'}</span>
                 </Space>
               )}
             </Descriptions.Item>
             <Descriptions.Item label="隔离时间">
-              {new Date(selectedItem.quarantinedAt).toLocaleString()}
+              {formatDateTime(selectedItem.quarantinedAt)}
             </Descriptions.Item>
             {selectedItem.resolvedBy && (
               <Descriptions.Item label={selectedItem.status === 'RELEASED' ? '放行操作' : '拒绝操作'}>
                 由 {selectedItem.resolvedBy}
-                {selectedItem.resolvedAt && ` 于 ${new Date(selectedItem.resolvedAt).toLocaleString()}`}
+                {selectedItem.resolvedAt && ` 于 ${formatDateTime(selectedItem.resolvedAt)}`}
                 {selectedItem.status === 'RELEASED' ? ' 放行' : ' 拒绝'}
                 {selectedItem.resolutionComment && ` (${selectedItem.resolutionComment})`}
               </Descriptions.Item>
             )}
           </Descriptions>
         )}
-      </Drawer>
-    </div>
+      </DetailDrawer>
+    </PageShell>
   );
 };
 

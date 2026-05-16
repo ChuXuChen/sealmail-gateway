@@ -17,17 +17,4 @@
     <modules>
         <module>sealmail-backend</module>
     </modules>
-
-    <!-- 可选：统一管理 Maven Wrapper 和通用插件版本 -->
-    <build>
-        <pluginManagement>
-            <plugins>
-                <plugin>
-                    <groupId>org.apache.maven.plugins</groupId>
-                    <artifactId>maven-compiler-plugin</artifactId>
-                    <version>3.13.0</version>
-                </plugin>
-            </plugins>
-        </pluginManagement>
-    </build>
 </project>

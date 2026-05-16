@@ -1,12 +1,20 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { Typography, Table, Tag, Space, Button, message, Modal, Form, Input, Upload } from 'antd';
-import type { UploadProps } from 'antd';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { Typography, Tag, Space, Button, message, Modal, Form, Input, Upload } from 'antd';
+import type { TableColumnsType, UploadProps } from 'antd';
 import { DownloadOutlined, ReloadOutlined, UploadOutlined } from '@ant-design/icons';
 import { Certificate } from '../types';
 import { caApi, certificateApi, crlUrls } from '../api/client';
 import { getApiErrorMessage } from '../api/errors';
+import {
+  AlgorithmTag,
+  CertificateRoleTag,
+  DataTable,
+  PageHeader,
+  PageShell,
+  formatDateTime,
+} from '../components/Page';
 
-const { Title, Text } = Typography;
+const { Text } = Typography;
 
 interface ImportCrlFormValues {
   crlPem?: string;
@@ -21,7 +29,7 @@ const Crl: React.FC = () => {
   const [importTarget, setImportTarget] = useState<Certificate | null>(null);
   const [form] = Form.useForm();
 
-  const load = async () => {
+  const load = useCallback(async () => {
     setLoading(true);
     try {
       const [caRes, certRes] = await Promise.all([
@@ -35,11 +43,11 @@ const Crl: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     void Promise.resolve().then(load);
-  }, []);
+  }, [load]);
 
   const revokedByIssuer = useMemo(() => {
     const map = new Map<string, Certificate[]>();
@@ -125,24 +133,24 @@ const Crl: React.FC = () => {
     },
   };
 
-  const innerColumns = [
+  const innerColumns: TableColumnsType<Certificate> = [
     { title: '指纹', dataIndex: 'id', render: (v: string) => <Text code style={{ fontSize: 11 }}>{v.substring(0, 24)}…</Text> },
     { title: 'Owner', dataIndex: 'ownerEmail' },
-    { title: '算法', dataIndex: 'algorithm', render: (v: string) => <Tag>{v}</Tag>, width: 80 },
+    { title: '算法', dataIndex: 'algorithm', render: (v: string) => <AlgorithmTag algorithm={v} />, width: 80 },
     { title: '吊销原因', dataIndex: 'revocationReason' },
     {
       title: '吊销时间',
       dataIndex: 'revocationDate',
-      render: (v: string) => (v ? new Date(v).toLocaleString() : '-'),
+      render: formatDateTime,
     },
   ];
 
-  const outerColumns = [
+  const outerColumns: TableColumnsType<{ ca: Certificate; revokedCount: number }> = [
     {
       title: '类型',
       key: 'role',
       render: (_: unknown, r: { ca: Certificate }) =>
-        r.ca.pathLenConstraint === 1 ? <Tag color="volcano">Root CA</Tag> : <Tag color="geekblue">Intermediate CA</Tag>,
+        <CertificateRoleTag cert={r.ca} />,
       width: 140,
     },
     {
@@ -208,15 +216,14 @@ const Crl: React.FC = () => {
   ];
 
   return (
-    <div style={{ padding: 24 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 16 }}>
-        <Title level={3} style={{ margin: 0 }}>吊销列表 (CRL)</Title>
-        <Button icon={<ReloadOutlined />} onClick={load}>
-          刷新
-        </Button>
-      </div>
+    <PageShell>
+      <PageHeader
+        title="吊销列表 (CRL)"
+        description="查看各 CA 的吊销条目，并导入或下载 CRL 文件。"
+        actions={<Button icon={<ReloadOutlined />} onClick={load}>刷新</Button>}
+      />
 
-      <Table
+      <DataTable<{ ca: Certificate; revokedCount: number }>
         columns={outerColumns}
         dataSource={caRows}
         loading={loading}
@@ -228,7 +235,7 @@ const Crl: React.FC = () => {
               return <Text type="secondary">本 CA 无吊销记录。</Text>;
             }
             return (
-              <Table
+              <DataTable<Certificate>
                 size="small"
                 columns={innerColumns}
                 dataSource={revoked}
@@ -278,7 +285,7 @@ const Crl: React.FC = () => {
           </Form.Item>
         </Form>
       </Modal>
-    </div>
+    </PageShell>
   );
 };
 

@@ -1,48 +1,41 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  Table,
-  Typography,
   Space,
   Tag,
   message,
   Select,
-  Drawer,
   Descriptions,
   Button,
 } from 'antd';
+import type { TableColumnsType } from 'antd';
 import { EyeOutlined } from '@ant-design/icons';
 import { ExceptionMailItem } from '../types';
 import { exceptionMailApi } from '../api/client';
 import { getApiErrorMessage } from '../api/errors';
+import {
+  DataTable,
+  DetailDrawer,
+  FilterBar,
+  PageHeader,
+  PageShell,
+  ReasonTag,
+  createListPagination,
+  formatDateTime,
+} from '../components/Page';
 
-const { Title } = Typography;
 const { Option } = Select;
 
-const getReasonTag = (reason: string) => {
-  const colorMap: Record<string, string> = {
-    POLICY_VIOLATION: 'red',
-    DECRYPTION_FAILED: 'orange',
-    CERTIFICATE_MISSING: 'gold',
-    SIGNATURE_INVALID: 'orange',
-    ENCRYPTION_FAILED: 'red',
-    EMAIL_AUTH_FAILED: 'volcano',
-    DOMAIN_NOT_CONFIGURED: 'orange',
-    SCAN_ERROR: 'purple',
-    CERTIFICATE_REVOKED: 'red',
-  };
-  const labelMap: Record<string, string> = {
-    POLICY_VIOLATION: '策略违规',
-    DECRYPTION_FAILED: '解密失败',
-    CERTIFICATE_MISSING: '缺少证书',
-    SIGNATURE_INVALID: '签名无效',
-    ENCRYPTION_FAILED: '加密失败',
-    EMAIL_AUTH_FAILED: '认证失败',
-    DOMAIN_NOT_CONFIGURED: '域名未配置',
-    SCAN_ERROR: '扫描错误',
-    CERTIFICATE_REVOKED: '证书已吊销',
-  };
-  return <Tag color={colorMap[reason] || 'default'}>{labelMap[reason] || reason}</Tag>;
-};
+const reasonOptions = [
+  { value: 'POLICY_VIOLATION', label: '策略违规' },
+  { value: 'EMAIL_AUTH_FAILED', label: '认证失败' },
+  { value: 'DOMAIN_NOT_CONFIGURED', label: '域名未配置' },
+  { value: 'DECRYPTION_FAILED', label: '解密失败' },
+  { value: 'CERTIFICATE_MISSING', label: '缺少证书' },
+  { value: 'SIGNATURE_INVALID', label: '签名无效' },
+  { value: 'ENCRYPTION_FAILED', label: '加密失败' },
+  { value: 'SCAN_ERROR', label: '扫描错误' },
+  { value: 'CERTIFICATE_REVOKED', label: '证书已吊销' },
+];
 
 const ExceptionMails: React.FC = () => {
   const [data, setData] = useState<ExceptionMailItem[]>([]);
@@ -52,7 +45,7 @@ const ExceptionMails: React.FC = () => {
   const [detailVisible, setDetailVisible] = useState(false);
   const [selectedItem, setSelectedItem] = useState<ExceptionMailItem | null>(null);
 
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     setLoading(true);
     try {
       const response = await exceptionMailApi.list({
@@ -70,45 +63,63 @@ const ExceptionMails: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [pagination.page, pagination.size, reasonFilter]);
 
   useEffect(() => {
     void Promise.resolve().then(loadData);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pagination.page, pagination.size, reasonFilter]);
+  }, [loadData]);
 
-  const columns = [
+  const reasonLabel = useMemo(
+    () => reasonOptions.find((option) => option.value === reasonFilter)?.label || reasonFilter,
+    [reasonFilter],
+  );
+
+  const clearFilters = () => {
+    setReasonFilter(undefined);
+    setPagination((prev) => ({ ...prev, page: 1 }));
+  };
+
+  const columns: TableColumnsType<ExceptionMailItem> = [
     {
       title: '主题',
       dataIndex: 'subject',
       key: 'subject',
+      width: 240,
       ellipsis: true,
     },
     {
       title: '发件人',
       dataIndex: 'sender',
       key: 'sender',
+      width: 220,
+      ellipsis: true,
     },
     {
       title: '收件人',
       dataIndex: 'recipients',
       key: 'recipients',
+      width: 260,
+      ellipsis: true,
       render: (addresses: string[]) => addresses?.join(', ') || '-',
     },
     {
       title: '异常原因',
       key: 'reason',
-      render: (_: unknown, record: ExceptionMailItem) => getReasonTag(record.reason),
+      width: 120,
+      render: (_: unknown, record: ExceptionMailItem) => <ReasonTag reason={record.reason} />,
     },
     {
       title: '记录时间',
       dataIndex: 'createdAt',
       key: 'createdAt',
-      render: (date: string) => new Date(date).toLocaleString(),
+      width: 180,
+      render: formatDateTime,
     },
     {
       title: '操作',
       key: 'actions',
+      width: 100,
+      fixed: 'right',
       render: (_: unknown, record: ExceptionMailItem) => (
         <Button
           type="link"
@@ -126,14 +137,24 @@ const ExceptionMails: React.FC = () => {
   ];
 
   return (
-    <div style={{ padding: 24 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
-        <Title level={3} style={{ margin: 0 }}>
-          异常邮件
-        </Title>
-      </div>
+    <PageShell>
+      <PageHeader
+        title="异常邮件"
+        description="查看因策略、证书或邮件认证失败而被自动阻断的邮件记录。"
+      />
 
-      <div style={{ marginBottom: 16 }}>
+      <FilterBar
+        activeFilters={reasonFilter ? [{
+          key: 'reason',
+          label: '异常原因',
+          value: reasonLabel,
+          onClose: clearFilters,
+        }] : undefined}
+        onRefresh={loadData}
+        onReset={clearFilters}
+        refreshLoading={loading}
+        resetDisabled={!reasonFilter}
+      >
         <Select
           placeholder="筛选原因"
           style={{ width: 200 }}
@@ -144,37 +165,25 @@ const ExceptionMails: React.FC = () => {
             setPagination((prev) => ({ ...prev, page: 1 }));
           }}
         >
-          <Option value="POLICY_VIOLATION">策略违规</Option>
-          <Option value="EMAIL_AUTH_FAILED">认证失败</Option>
-          <Option value="DOMAIN_NOT_CONFIGURED">域名未配置</Option>
-          <Option value="DECRYPTION_FAILED">解密失败</Option>
-          <Option value="CERTIFICATE_MISSING">缺少证书</Option>
-          <Option value="SIGNATURE_INVALID">签名无效</Option>
-          <Option value="ENCRYPTION_FAILED">加密失败</Option>
-          <Option value="SCAN_ERROR">扫描错误</Option>
-          <Option value="CERTIFICATE_REVOKED">证书已吊销</Option>
+          {reasonOptions.map((option) => (
+            <Option key={option.value} value={option.value}>{option.label}</Option>
+          ))}
         </Select>
-      </div>
+      </FilterBar>
 
-      <Table
+      <DataTable<ExceptionMailItem>
         columns={columns}
         dataSource={data}
         loading={loading}
         rowKey="id"
-        pagination={{
-          current: pagination.page,
-          pageSize: pagination.size,
-          total: pagination.total,
-          showSizeChanger: true,
-          showQuickJumper: true,
-          showTotal: (total) => `共 ${total} 条`,
-          onChange: (page, size) => setPagination((prev) => ({ ...prev, page, size })),
-        }}
+        scroll={{ x: 1120 }}
+        pagination={createListPagination(pagination, (page, size) =>
+          setPagination((prev) => ({ ...prev, page, size }))
+        )}
       />
 
-      <Drawer
+      <DetailDrawer
         title="异常邮件详情"
-        width={600}
         open={detailVisible}
         onClose={() => {
           setDetailVisible(false);
@@ -182,15 +191,16 @@ const ExceptionMails: React.FC = () => {
         }}
       >
         {selectedItem && (
-          <Descriptions column={1} bordered>
+          <Descriptions column={1} bordered size="small">
             <Descriptions.Item label="主题">{selectedItem.subject}</Descriptions.Item>
+            <Descriptions.Item label="Message-ID">{selectedItem.messageId}</Descriptions.Item>
             <Descriptions.Item label="发件人">{selectedItem.sender}</Descriptions.Item>
             <Descriptions.Item label="收件人">
               {selectedItem.recipients?.join(', ') || '-'}
             </Descriptions.Item>
             <Descriptions.Item label="方向">{selectedItem.direction || '-'}</Descriptions.Item>
             <Descriptions.Item label="来源地址">{selectedItem.remoteAddress || '-'}</Descriptions.Item>
-            <Descriptions.Item label="异常原因">{getReasonTag(selectedItem.reason)}</Descriptions.Item>
+            <Descriptions.Item label="异常原因"><ReasonTag reason={selectedItem.reason} /></Descriptions.Item>
             <Descriptions.Item label="详情说明">{selectedItem.detail || '-'}</Descriptions.Item>
             <Descriptions.Item label="阻断方式">
               <Space>
@@ -199,12 +209,12 @@ const ExceptionMails: React.FC = () => {
               </Space>
             </Descriptions.Item>
             <Descriptions.Item label="记录时间">
-              {new Date(selectedItem.createdAt).toLocaleString()}
+              {formatDateTime(selectedItem.createdAt)}
             </Descriptions.Item>
           </Descriptions>
         )}
-      </Drawer>
-    </div>
+      </DetailDrawer>
+    </PageShell>
   );
 };
 

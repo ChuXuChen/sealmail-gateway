@@ -97,7 +97,7 @@ export interface QuarantineItem {
   remoteAddress?: string;
   reason: string;
   detail?: string;
-  status: 'QUARANTINED' | 'RELEASED' | 'REJECTED';
+  status: 'QUARANTINED' | 'RELEASING' | 'RELEASED' | 'REJECTED';
   hasRawContent?: boolean;
   canRelease?: boolean;
   releaseUnavailableReason?: string;
@@ -152,6 +152,7 @@ export interface DlpSelection {
 export interface QuarantineStats {
   total: number;
   pending: number;
+  releasing: number;
   released: number;
   rejected: number;
   byReason: Record<string, number>;

@@ -2,7 +2,6 @@ import React, { useCallback, useMemo, useState } from 'react';
 import {
   Table,
   Button,
-  Typography,
   Space,
   Tag,
   Modal,
@@ -16,6 +15,7 @@ import {
   Descriptions,
   Drawer,
   Dropdown,
+  Typography,
 } from 'antd';
 import {
   PlusOutlined,
@@ -35,8 +35,8 @@ import {
 import { Certificate, CertificateBinding, CertificateBindingPurpose } from '../types';
 import { certificateApi, caApi, certificateBindingApi } from '../api/client';
 import { getApiErrorMessage } from '../api/errors';
+import { PageHeader, PageShell } from '../components/Page';
 
-const { Title } = Typography;
 const { TextArea } = Input;
 
 const AlgorithmTag: React.FC<{ algorithm?: string }> = ({ algorithm }) => {
@@ -421,65 +421,59 @@ const Certificates: React.FC = () => {
   ];
 
   return (
-    <div style={{ padding: 24 }}>
-      <div
-        style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          marginBottom: 24,
-        }}
-      >
-        <Title level={3} style={{ margin: 0 }}>
-          终端证书
-        </Title>
-        <Dropdown
-          trigger={['click']}
-          menu={{
-            items: [
-              {
-                key: 'import',
-                icon: <ImportOutlined />,
-                label: '导入已有证书',
-                onClick: () => setImportModalVisible(true),
-              },
-              {
-                key: 'self-signed',
-                icon: <FileAddOutlined />,
-                label: '生成自签名证书',
-                onClick: () => {
-                  selfSignedForm.resetFields();
-                  selfSignedForm.setFieldsValue({
-                    algorithm: 'RSA',
-                    validityDays: 365,
-                    trusted: true,
-                  });
-                  setSelfSignedModalVisible(true);
+    <PageShell>
+      <PageHeader
+        title="终端证书"
+        description="管理用户终端证书、信任状态、吊销状态和证书绑定关系。"
+        actions={(
+          <Dropdown
+            trigger={['click']}
+            menu={{
+              items: [
+                {
+                  key: 'import',
+                  icon: <ImportOutlined />,
+                  label: '导入已有证书',
+                  onClick: () => setImportModalVisible(true),
                 },
-              },
-              {
-                key: 'issue-by-ca',
-                icon: <AuditOutlined />,
-                label: '通过 Intermediate CA 签发',
-                disabled: caCandidates.length === 0,
-                onClick: () => {
-                  issueByCaForm.resetFields();
-                  issueByCaForm.setFieldsValue({
-                    algorithm: 'RSA',
-                    validityDays: 365,
-                    trusted: true,
-                  });
-                  setIssueByCaModalVisible(true);
+                {
+                  key: 'self-signed',
+                  icon: <FileAddOutlined />,
+                  label: '生成自签名证书',
+                  onClick: () => {
+                    selfSignedForm.resetFields();
+                    selfSignedForm.setFieldsValue({
+                      algorithm: 'RSA',
+                      validityDays: 365,
+                      trusted: true,
+                    });
+                    setSelfSignedModalVisible(true);
+                  },
                 },
-              },
-            ],
-          }}
-        >
-          <Button type="primary" icon={<PlusOutlined />}>
-            新增证书 <DownOutlined />
-          </Button>
-        </Dropdown>
-      </div>
+                {
+                  key: 'issue-by-ca',
+                  icon: <AuditOutlined />,
+                  label: '通过 Intermediate CA 签发',
+                  disabled: caCandidates.length === 0,
+                  onClick: () => {
+                    issueByCaForm.resetFields();
+                    issueByCaForm.setFieldsValue({
+                      algorithm: 'RSA',
+                      validityDays: 365,
+                      trusted: true,
+                    });
+                    setIssueByCaModalVisible(true);
+                  },
+                },
+              ],
+            }}
+          >
+            <Button type="primary" icon={<PlusOutlined />}>
+              新增证书 <DownOutlined />
+            </Button>
+          </Dropdown>
+        )}
+      />
 
       <Table
         columns={columns}
@@ -741,7 +735,7 @@ const Certificates: React.FC = () => {
           </Descriptions>
         )}
       </Drawer>
-    </div>
+    </PageShell>
   );
 };
 

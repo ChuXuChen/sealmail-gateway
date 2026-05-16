@@ -2,7 +2,6 @@ import React, { useEffect, useMemo, useState } from 'react';
 import {
   Table,
   Button,
-  Typography,
   Space,
   Popover,
   Modal,
@@ -16,6 +15,7 @@ import {
   Descriptions,
   Switch,
   Tag,
+  Typography,
 } from 'antd';
 import type { MenuProps } from 'antd';
 import {
@@ -33,8 +33,9 @@ import type { ColumnsType } from 'antd/es/table';
 import { Certificate } from '../types';
 import { caApi, certificateApi } from '../api/client';
 import { getApiErrorMessage } from '../api/errors';
+import { PageHeader, PageShell } from '../components/Page';
 
-const { Title, Text } = Typography;
+const { Text } = Typography;
 
 type CaTableRecord = Certificate & {
   children?: CaTableRecord[];
@@ -715,62 +716,49 @@ const CertificateAuthorities: React.FC = () => {
   ];
 
   return (
-    <div className="ca-page">
-      <div
-        style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'flex-start',
-          flexWrap: 'wrap',
-          gap: 16,
-          marginBottom: 18,
-        }}
-      >
-        <div>
-          <Title level={3} style={{ margin: 0, letterSpacing: 0 }}>
-            CA 证书
-          </Title>
-        </div>
-        <Space>
-          <Button icon={<ReloadOutlined />} loading={loading} onClick={loadData}>
-            刷新
-          </Button>
-          <Dropdown
-            trigger={['click']}
-            menu={{
-              items: [
-                {
-                  key: 'csr',
-                  icon: <FileProtectOutlined />,
-                  label: '签发 CSR',
-                  disabled: signingCaCandidates.length === 0,
-                  onClick: openSignCsrModal,
-                },
-                {
-                  key: 'root',
-                  icon: <SafetyOutlined />,
-                  label: '签发 Root CA',
-                  onClick: openRootModal,
-                },
-                {
-                  key: 'intermediate',
-                  icon: <ApartmentOutlined />,
-                  label: '签发 Intermediate CA',
-                  disabled: rootCandidates.length === 0,
-                  onClick: openIntermediateModal,
-                },
-              ],
-            }}
-          >
-            <Button
-              type="primary"
-              icon={<FileProtectOutlined />}
-            >
-              签发 <DownOutlined />
+    <PageShell>
+      <PageHeader
+        title="CA 证书"
+        description="管理 Root CA、Intermediate CA、CSR 签发与 CA 信任状态。"
+        actions={(
+          <Space>
+            <Button icon={<ReloadOutlined />} loading={loading} onClick={loadData}>
+              刷新
             </Button>
-          </Dropdown>
-        </Space>
-      </div>
+            <Dropdown
+              trigger={['click']}
+              menu={{
+                items: [
+                  {
+                    key: 'csr',
+                    icon: <FileProtectOutlined />,
+                    label: '签发 CSR',
+                    disabled: signingCaCandidates.length === 0,
+                    onClick: openSignCsrModal,
+                  },
+                  {
+                    key: 'root',
+                    icon: <SafetyOutlined />,
+                    label: '签发 Root CA',
+                    onClick: openRootModal,
+                  },
+                  {
+                    key: 'intermediate',
+                    icon: <ApartmentOutlined />,
+                    label: '签发 Intermediate CA',
+                    disabled: rootCandidates.length === 0,
+                    onClick: openIntermediateModal,
+                  },
+                ],
+              }}
+            >
+              <Button type="primary" icon={<FileProtectOutlined />}>
+                签发 <DownOutlined />
+              </Button>
+            </Dropdown>
+          </Space>
+        )}
+      />
 
       <Table
         columns={columns}
@@ -986,7 +974,7 @@ const CertificateAuthorities: React.FC = () => {
       >
         {confirmContent}
       </Modal>
-    </div>
+    </PageShell>
   );
 };
 

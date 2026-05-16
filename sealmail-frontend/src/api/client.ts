@@ -282,6 +282,12 @@ export const dlpQuarantineApi = {
   release: (id: string, data?: { releasedBy?: string; comment?: string; encryptBeforeRelease?: boolean }) =>
     apiClient.post<ApiResponse<QuarantineItem>>(`/api/v1/dlp/quarantine/${id}/release`, data),
 
+  completeRelease: (id: string, data?: { operator?: string; comment?: string }) =>
+    apiClient.post<ApiResponse<QuarantineItem>>(`/api/v1/dlp/quarantine/${id}/release/complete`, data),
+
+  restoreRelease: (id: string, data?: { operator?: string; comment?: string }) =>
+    apiClient.post<ApiResponse<QuarantineItem>>(`/api/v1/dlp/quarantine/${id}/release/restore`, data),
+
   reject: (id: string, data?: { rejectedBy?: string; comment?: string }) =>
     apiClient.post<ApiResponse<QuarantineItem>>(`/api/v1/dlp/quarantine/${id}/reject`, data),
 

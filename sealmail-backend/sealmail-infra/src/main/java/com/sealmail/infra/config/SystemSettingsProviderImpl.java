@@ -56,7 +56,7 @@ public class SystemSettingsProviderImpl implements SystemSettingsProvider {
                 environment.getProperty("spring.application.name", "sealmail-gateway"),
                 List.of(environment.getActiveProfiles()),
                 true,
-                "PostgreSQL runtime policies + application.yml deployment fallback",
+                "PostgreSQL runtime policies + deployment-level YAML references",
                 Instant.now()
         );
     }

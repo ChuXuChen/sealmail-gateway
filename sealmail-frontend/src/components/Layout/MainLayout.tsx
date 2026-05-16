@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Layout, Menu, Avatar, Dropdown, theme } from 'antd';
+import React, { useMemo, useState } from 'react';
+import { Layout, Menu, Avatar, Dropdown, Grid, Button, Drawer, theme } from 'antd';
 import {
   DashboardOutlined,
   SafetyOutlined,
@@ -14,7 +14,10 @@ import {
   StopOutlined,
   WarningOutlined,
   PartitionOutlined,
+  MenuFoldOutlined,
+  MenuUnfoldOutlined,
 } from '@ant-design/icons';
+import type { ItemType } from 'antd/es/menu/interface';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../contexts/useAuth';
 import {
@@ -29,17 +32,21 @@ import {
 import SealMailLogo from '../Brand/SealMailLogo';
 
 const { Header, Sider, Content } = Layout;
+const { useBreakpoint } = Grid;
 
 const MainLayout: React.FC = () => {
   const [collapsed, setCollapsed] = useState(false);
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const {
-    token: { colorBgContainer, borderRadiusLG },
+    token: { colorBgContainer },
   } = theme.useToken();
+  const screens = useBreakpoint();
+  const isMobile = !screens.md;
 
-  const smimeChildren = [
+  const smimeChildren = useMemo<ItemType[]>(() => [
     canManageCa(user) ? {
       key: '/smime/cas',
       icon: <AuditOutlined />,
@@ -55,9 +62,9 @@ const MainLayout: React.FC = () => {
       icon: <StopOutlined />,
       label: 'CRL 吊销列表',
     } : null,
-  ].filter(Boolean);
+  ].filter(Boolean) as ItemType[], [user]);
 
-  const menuItems = [
+  const menuItems = useMemo<ItemType[]>(() => [
     {
       key: '/dashboard',
       icon: <DashboardOutlined />,
@@ -111,10 +118,11 @@ const MainLayout: React.FC = () => {
       icon: <SettingOutlined />,
       label: '系统设置',
     } : null,
-  ].filter(Boolean);
+  ].filter(Boolean) as ItemType[], [smimeChildren, user]);
 
   const handleMenuClick = ({ key }: { key: string }) => {
     navigate(key);
+    setMobileNavOpen(false);
   };
 
   const userMenuItems = [
@@ -126,56 +134,72 @@ const MainLayout: React.FC = () => {
     },
   ];
 
+  const navigation = (
+    <>
+      <div className={`sealmail-sider-brand${collapsed && !isMobile ? ' sealmail-sider-brand--collapsed' : ''}`}>
+        <SealMailLogo collapsed={collapsed && !isMobile} />
+      </div>
+
+      <Menu
+        theme="dark"
+        selectedKeys={[location.pathname]}
+        defaultOpenKeys={['smime', 'dlp']}
+        mode="inline"
+        items={menuItems}
+        onClick={handleMenuClick}
+      />
+    </>
+  );
+
   return (
-    <Layout style={{ minHeight: '100vh' }}>
-      <Sider
-        collapsible
-        collapsed={collapsed}
-        onCollapse={setCollapsed}
-        style={{ background: '#001529' }}
-      >
-        <div className={`sealmail-sider-brand${collapsed ? ' sealmail-sider-brand--collapsed' : ''}`}>
-          <SealMailLogo collapsed={collapsed} />
-        </div>
-
-        <Menu
-          theme="dark"
-          selectedKeys={[location.pathname]}
-          defaultOpenKeys={['smime', 'dlp']}
-          mode="inline"
-          items={menuItems}
-          onClick={handleMenuClick}
-        />
-      </Sider>
-
-      <Layout>
-        <Header
-          style={{
-            padding: '0 24px',
-            background: colorBgContainer,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'flex-end',
-            borderBottom: '1px solid #f0f0f0',
-          }}
+    <Layout className={`main-layout${collapsed ? ' main-layout--collapsed' : ''}${isMobile ? ' main-layout--mobile' : ''}`}>
+      {!isMobile && (
+        <Sider
+          className="main-layout__sider"
+          collapsible
+          collapsed={collapsed}
+          onCollapse={setCollapsed}
         >
+          {navigation}
+        </Sider>
+      )}
+
+      <Drawer
+        className="main-layout__nav-drawer"
+        placement="left"
+        open={isMobile && mobileNavOpen}
+        onClose={() => setMobileNavOpen(false)}
+        width={240}
+        styles={{
+          body: { padding: 0, background: '#001529' },
+          content: { background: '#001529' },
+        }}
+      >
+        {navigation}
+      </Drawer>
+
+      <Layout className="main-layout__body">
+        <Header
+          className="main-layout__header"
+          style={{ background: colorBgContainer }}
+        >
+          {isMobile ? (
+            <Button
+              type="text"
+              icon={mobileNavOpen ? <MenuFoldOutlined /> : <MenuUnfoldOutlined />}
+              onClick={() => setMobileNavOpen(true)}
+              aria-label="打开导航"
+            />
+          ) : <span />}
           <Dropdown menu={{ items: userMenuItems }} placement="bottomRight">
-            <div style={{ cursor: 'pointer', display: 'flex', alignItems: 'center' }}>
-              <Avatar icon={<UserOutlined />} style={{ marginRight: 8 }} />
+            <div className="main-layout__user">
+              <Avatar icon={<UserOutlined />} />
               <span>{user?.username || 'User'}</span>
             </div>
           </Dropdown>
         </Header>
 
-        <Content
-          style={{
-            margin: '24px',
-            padding: 24,
-            minHeight: 280,
-            background: colorBgContainer,
-            borderRadius: borderRadiusLG,
-          }}
-        >
+        <Content className="main-layout__content">
           <Outlet />
         </Content>
       </Layout>
