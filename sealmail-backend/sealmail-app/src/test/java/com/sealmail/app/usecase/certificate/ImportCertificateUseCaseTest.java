@@ -181,11 +181,6 @@ class ImportCertificateUseCaseTest {
         }
 
         @Override
-        public CertificateMaterial generateTestMaterial() {
-            throw new UnsupportedOperationException();
-        }
-
-        @Override
         public CryptoCapabilities cryptoCapabilities() {
             throw new UnsupportedOperationException();
         }

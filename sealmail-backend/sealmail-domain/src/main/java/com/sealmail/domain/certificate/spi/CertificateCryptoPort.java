@@ -21,8 +21,6 @@ public interface CertificateCryptoPort {
 
     CertificateMaterial issueWithIssuer(IssueWithIssuerCommand command);
 
-    CertificateMaterial generateTestMaterial();
-
     CryptoCapabilities cryptoCapabilities();
 
     CertificateDescriptor signCsr(SignCsrCommand command);

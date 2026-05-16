@@ -137,18 +137,6 @@ public class BcCertificateCryptoPort implements CertificateCryptoPort {
     }
 
     @Override
-    public CertificateMaterial generateTestMaterial() {
-        return issueSelfSigned(new IssueSelfSignedCommand(
-                "CN=Test,O=SealMail,C=CN",
-                "SM2",
-                365,
-                false,
-                0,
-                Set.of(EKU_EMAIL_PROTECTION),
-                null));
-    }
-
-    @Override
     public CryptoCapabilities cryptoCapabilities() {
         return new CryptoCapabilities(
                 Map.of(

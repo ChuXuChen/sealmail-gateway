@@ -4,7 +4,6 @@ import com.sealmail.domain.config.RelayPolicyPort;
 import com.sealmail.domain.config.SecretReferenceResolver;
 import com.sealmail.domain.mailsecurity.RelayProfile;
 import com.sealmail.domain.policy.event.RelayPolicyChanged;
-import com.sealmail.infra.config.properties.RelayProperties;
 import com.sealmail.infra.events.DomainEventPublisher;
 import com.sealmail.infra.persistence.entity.RelayPolicyEntity;
 import jakarta.persistence.EntityManager;
@@ -28,16 +27,13 @@ public class RelayPolicyService implements RelayPolicyPort {
     @PersistenceContext
     private EntityManager entityManager;
 
-    private final RelayProperties fallbackProperties;
     private final DomainEventPublisher domainEventPublisher;
     private final SecretReferenceResolver secretReferenceResolver;
     private final TransactionTemplate initializationTransaction;
 
-    public RelayPolicyService(RelayProperties fallbackProperties,
-                              DomainEventPublisher domainEventPublisher,
+    public RelayPolicyService(DomainEventPublisher domainEventPublisher,
                               SecretReferenceResolver secretReferenceResolver,
                               PlatformTransactionManager transactionManager) {
-        this.fallbackProperties = fallbackProperties;
         this.domainEventPublisher = domainEventPublisher;
         this.secretReferenceResolver = secretReferenceResolver;
         this.initializationTransaction = new TransactionTemplate(transactionManager);
@@ -117,14 +113,14 @@ public class RelayPolicyService implements RelayPolicyPort {
         Instant now = Instant.now();
         RelayPolicyEntity entity = new RelayPolicyEntity();
         entity.setId(DEFAULT_ID);
-        entity.setEnabled(hasText(fallbackProperties.getHost()));
-        entity.setHost(blankToDefault(fallbackProperties.getHost(), "localhost"));
-        entity.setPort(validPortOrDefault(fallbackProperties.getPort(), 25));
-        entity.setUseTls(fallbackProperties.isUseTls());
-        entity.setUsername(blankToNull(fallbackProperties.getUsername()));
-        entity.setPasswordSecretRef(blankToNull(fallbackProperties.getPasswordSecretRef()));
-        entity.setTimeoutMs(positiveOrDefault(fallbackProperties.getTimeout(), 30000));
-        entity.setEnvelopeFrom(blankToNull(fallbackProperties.getEnvelopeFrom()));
+        entity.setEnabled(false);
+        entity.setHost("localhost");
+        entity.setPort(25);
+        entity.setUseTls(false);
+        entity.setUsername(null);
+        entity.setPasswordSecretRef(null);
+        entity.setTimeoutMs(30000);
+        entity.setEnvelopeFrom(null);
         entity.setCreatedAt(now);
         entity.setUpdatedAt(now);
         return entity;
@@ -208,18 +204,6 @@ public class RelayPolicyService implements RelayPolicyPort {
         if (!condition) {
             throw new IllegalArgumentException(message);
         }
-    }
-
-    private int validPortOrDefault(int value, int fallback) {
-        return value > 0 && value <= 65535 ? value : fallback;
-    }
-
-    private int positiveOrDefault(int value, int fallback) {
-        return value > 0 ? value : fallback;
-    }
-
-    private String blankToDefault(String value, String fallback) {
-        return hasText(value) ? value.trim() : fallback;
     }
 
     private String blankToNull(String value) {

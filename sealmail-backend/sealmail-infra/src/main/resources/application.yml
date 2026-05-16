@@ -85,16 +85,6 @@ sealmail:
     use-tls: false
     timeout: 10000
 
-  # Direct downstream relay fallback when Postfix integration is disabled
-  relay:
-    host: ${SEALMAIL_RELAY_HOST:}
-    port: ${SEALMAIL_RELAY_PORT:25}
-    use-tls: ${SEALMAIL_RELAY_USE_TLS:false}
-    username: ${SEALMAIL_RELAY_USERNAME:}
-    password-secret-ref: ${SEALMAIL_RELAY_PASSWORD_SECRET_REF:}
-    envelope-from: ${SEALMAIL_RELAY_ENVELOPE_FROM:}
-    timeout: 10000
-
   mail-auth:
     dkim:
       private-key-path:

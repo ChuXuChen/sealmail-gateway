@@ -27,6 +27,15 @@
         </processorPath>
         <module name="sealmail-web" />
       </profile>
+      <profile name="Annotation profile for sealmail-boot" enabled="true">
+        <sourceOutputDir name="target/generated-sources/annotations" />
+        <sourceTestOutputDir name="target/generated-test-sources/test-annotations" />
+        <outputRelativeToContentRoot value="true" />
+        <processorPath useClasspath="false">
+          <entry name="/home/cxc/.m2/repository/org/projectlombok/lombok/1.18.46/lombok-1.18.46.jar" />
+        </processorPath>
+        <module name="sealmail-boot" />
+      </profile>
       <profile name="Annotation profile for Sealmail Gateway" enabled="true">
         <sourceOutputDir name="target/generated-sources/annotations" />
         <sourceTestOutputDir name="target/generated-test-sources/test-annotations" />
@@ -41,8 +50,8 @@
     </annotationProcessing>
     <bytecodeTargetLevel>
       <module name="sealmail-base" target="21" />
-      <module name="sealmail-boot" target="21" />
       <module name="sealmail-core" target="21" />
+      <module name="sealmail-parent" target="1.5" />
     </bytecodeTargetLevel>
   </component>
   <component name="JavacSettings">

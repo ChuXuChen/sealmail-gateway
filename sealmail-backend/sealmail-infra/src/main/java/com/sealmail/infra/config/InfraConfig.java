@@ -10,7 +10,6 @@ import com.sealmail.domain.mailsecurity.MailRouter;
 import com.sealmail.infra.config.properties.AuthProperties;
 import com.sealmail.infra.config.properties.MailAuthProperties;
 import com.sealmail.infra.config.properties.PostfixProperties;
-import com.sealmail.infra.config.properties.RelayProperties;
 import com.sealmail.infra.config.properties.SecurityProperties;
 import com.sealmail.infra.config.properties.SmimeCryptoProperties;
 import com.sealmail.infra.config.properties.SmtpServerProperties;
@@ -24,7 +23,6 @@ import org.springframework.context.annotation.Configuration;
 @ComponentScan(basePackages = "com.sealmail.infra")
 @EnableConfigurationProperties({
         SmtpServerProperties.class,
-        RelayProperties.class,
         PostfixProperties.class,
         SecurityProperties.class,
         MailAuthProperties.class,

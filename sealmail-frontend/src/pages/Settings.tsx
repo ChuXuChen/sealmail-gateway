@@ -419,7 +419,7 @@ const Settings: React.FC = () => {
             </Col>
             <Col xs={24} md={8}>
               <Form.Item name="passwordSecretRef" label="密码 Secret 引用">
-                <Input placeholder="env:SEALMAIL_RELAY_PASSWORD" />
+                <Input placeholder="file:/run/secrets/sealmail_relay_password" />
               </Form.Item>
             </Col>
             <Col xs={24} md={8}>
