@@ -22,3 +22,7 @@
 .login-form__submit {
   width: 100%;
 }
+
+.login-form__alert {
+  margin-bottom: 16px;
+}

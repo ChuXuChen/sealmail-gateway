@@ -3,6 +3,7 @@ import {
   createBrowserRouter,
   Navigate,
   RouterProvider,
+  useLocation,
 } from 'react-router-dom';
 import { useAuth } from '../contexts/useAuth';
 import {
@@ -29,6 +30,7 @@ const DlpSelection = React.lazy(() => import('../pages/DlpSelection'));
 const Settings = React.lazy(() => import('../pages/Settings'));
 const AuditLogs = React.lazy(() => import('../pages/AuditLogs'));
 const DomainConfigs = React.lazy(() => import('../pages/DomainConfigs'));
+const Forbidden = React.lazy(() => import('../pages/Forbidden'));
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
@@ -36,13 +38,14 @@ interface ProtectedRouteProps {
 
 const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
   const { isAuthenticated, loading } = useAuth();
+  const location = useLocation();
 
   if (loading) {
     return <div>Loading...</div>;
   }
 
   if (!isAuthenticated) {
-    return <Navigate to="/login" replace />;
+    return <Navigate to="/login" replace state={{ from: location }} />;
   }
 
   return <>{children}</>;
@@ -60,7 +63,7 @@ const RoleRoute: React.FC<RoleRouteProps> = ({ check, children }) => {
     return <div>Loading...</div>;
   }
   if (!check(user)) {
-    return <Navigate to="/dashboard" replace />;
+    return withSuspense(<Forbidden />);
   }
   return <>{children}</>;
 };
@@ -190,6 +193,10 @@ const router = createBrowserRouter([
             <DomainConfigs />
           </RoleRoute>,
         ),
+      },
+      {
+        path: '403',
+        element: withSuspense(<Forbidden />),
       },
       {
         path: 'cas',

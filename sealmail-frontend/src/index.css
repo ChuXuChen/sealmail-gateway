@@ -65,6 +65,17 @@ body {
   cursor: pointer;
 }
 
+.main-layout__user-menu {
+  min-width: 220px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.main-layout__user-email {
+  font-size: 12px;
+}
+
 .page-shell {
   display: flex;
   min-width: 0;
@@ -146,6 +157,135 @@ body {
   min-height: 360px;
   display: grid;
   place-items: center;
+}
+
+.full-width {
+  width: 100%;
+}
+
+.min-width-zero {
+  min-width: 0;
+}
+
+.form-actions {
+  margin-bottom: 0;
+  text-align: right;
+}
+
+.form-list-row {
+  display: flex;
+  width: 100%;
+}
+
+.form-list-row__item {
+  flex: 1;
+  margin-bottom: 0;
+}
+
+.form-note,
+.compact-heading {
+  font-size: 12px;
+}
+
+.dns-domain-select {
+  min-width: 220px;
+}
+
+.mono-small {
+  font-size: 12px;
+}
+
+.ca-name {
+  max-width: 360px;
+}
+
+.ca-filter-trigger.is-active {
+  color: #1677ff;
+  background: #e6f4ff;
+}
+
+.ca-filter-panel {
+  width: 280px;
+}
+
+.ca-filter-panel-header,
+.ca-filter-section,
+.ca-filter-panel-footer {
+  margin-bottom: 12px;
+}
+
+.ca-filter-panel-footer {
+  margin-bottom: 0;
+  text-align: right;
+}
+
+.ca-filter-section-head {
+  margin-bottom: 6px;
+}
+
+.ca-filter-hint {
+  color: rgba(0, 0, 0, 0.45);
+  font-size: 12px;
+}
+
+.settings-tag {
+  font-size: 14px;
+  line-height: 24px;
+  padding-inline: 8px;
+}
+
+.settings-summary-card {
+  height: 100%;
+}
+
+.settings-summary-label {
+  display: block;
+  margin-bottom: 8px;
+  color: rgba(0, 0, 0, 0.45);
+  font-size: 14px;
+  line-height: 22px;
+}
+
+.settings-summary-value {
+  color: rgba(0, 0, 0, 0.88);
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 26px;
+  word-break: break-word;
+}
+
+.settings-nav-button {
+  width: 100%;
+  height: 42px;
+  justify-content: flex-start;
+  font-weight: 500;
+}
+
+.settings-nav-button.is-active {
+  border-color: #1677ff;
+  background: #e6f4ff;
+  color: #0958d9;
+  font-weight: 700;
+}
+
+.settings-descriptions .ant-descriptions-item-label {
+  width: 150px;
+}
+
+.settings-probe-result {
+  min-height: 160px;
+  margin: 0;
+  color: rgba(0, 0, 0, 0.88);
+  font-size: 14px;
+  line-height: 22px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.settings-empty-result {
+  min-height: 160px;
+  display: flex;
+  align-items: center;
 }
 
 @media (max-width: 767px) {

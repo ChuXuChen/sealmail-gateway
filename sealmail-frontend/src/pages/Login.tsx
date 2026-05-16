@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
-import { Form, Input, Button, Card, Typography } from 'antd';
+import { Alert, Form, Input, Button, Card, Typography } from 'antd';
 import { LockOutlined, MailOutlined } from '@ant-design/icons';
 import { useAuth } from '../contexts/useAuth';
-import { useNavigate, Navigate } from 'react-router-dom';
+import { useNavigate, Navigate, useLocation } from 'react-router-dom';
+import { getApiErrorMessage } from '../api/errors';
 import SealMailLogo from '../components/Brand/SealMailLogo';
 import './Login.css';
 
@@ -10,20 +11,24 @@ const { Text } = Typography;
 
 const Login: React.FC = () => {
   const [loading, setLoading] = useState(false);
+  const [loginError, setLoginError] = useState('');
   const { login, isAuthenticated } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
+  const from = (location.state as { from?: { pathname?: string } } | null)?.from?.pathname || '/dashboard';
 
   if (isAuthenticated) {
-    return <Navigate to="/dashboard" replace />;
+    return <Navigate to={from} replace />;
   }
 
   const onFinish = async (values: { username: string; password: string }) => {
     setLoading(true);
+    setLoginError('');
     try {
       await login(values.username, values.password);
-      navigate('/dashboard');
-    } catch {
-      // Error handled in context
+      navigate(from, { replace: true });
+    } catch (error) {
+      setLoginError(getApiErrorMessage(error, '登录失败，请检查账号和密码'));
     } finally {
       setLoading(false);
     }
@@ -38,6 +43,15 @@ const Login: React.FC = () => {
         </div>
 
         <Form className="login-form" name="login" onFinish={onFinish} autoComplete="off" size="large">
+          {loginError ? (
+            <Alert
+              className="login-form__alert"
+              type="error"
+              message={loginError}
+              showIcon
+            />
+          ) : null}
+
           <Form.Item
             name="username"
             rules={[{ required: true, message: '请输入用户名' }]}

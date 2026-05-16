@@ -38,10 +38,17 @@ import {
   SignCsrRequest,
 } from '../types';
 
+export const AUTH_SESSION_EXPIRED_EVENT = 'sealmail:auth-session-expired';
+
 const apiClient = axios.create({
   baseURL: '',
   timeout: 30000,
 });
+
+const clearStoredAuth = () => {
+  localStorage.removeItem('accessToken');
+  localStorage.removeItem('user');
+};
 
 // Request interceptor: Add auth token
 apiClient.interceptors.request.use(
@@ -64,11 +71,8 @@ apiClient.interceptors.response.use(
       if (isLoginRequest) {
         return Promise.reject(error);
       }
-      localStorage.removeItem('accessToken');
-      localStorage.removeItem('user');
-      if (window.location.pathname !== '/login') {
-        window.location.href = '/login';
-      }
+      clearStoredAuth();
+      window.dispatchEvent(new Event(AUTH_SESSION_EXPIRED_EVENT));
     }
     return Promise.reject(error);
   }

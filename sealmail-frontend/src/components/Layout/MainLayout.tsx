@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { Layout, Menu, Avatar, Dropdown, Grid, Button, Drawer, theme } from 'antd';
+import { Layout, Menu, Avatar, Dropdown, Grid, Button, Drawer, Space, Tag, Typography, theme } from 'antd';
 import {
   DashboardOutlined,
   SafetyOutlined,
@@ -28,11 +28,14 @@ import {
   canViewAuditLogs,
   canViewCrl,
   canViewQuarantine,
+  getPermissionSummary,
+  getPrimaryRole,
 } from '../../auth/permissions';
 import SealMailLogo from '../Brand/SealMailLogo';
 
 const { Header, Sider, Content } = Layout;
 const { useBreakpoint } = Grid;
+const { Text } = Typography;
 
 const MainLayout: React.FC = () => {
   const [collapsed, setCollapsed] = useState(false);
@@ -45,6 +48,8 @@ const MainLayout: React.FC = () => {
   } = theme.useToken();
   const screens = useBreakpoint();
   const isMobile = !screens.md;
+  const role = getPrimaryRole(user);
+  const permissionSummary = getPermissionSummary(user);
 
   const smimeChildren = useMemo<ItemType[]>(() => [
     canManageCa(user) ? {
@@ -127,6 +132,27 @@ const MainLayout: React.FC = () => {
 
   const userMenuItems = [
     {
+      key: 'profile',
+      disabled: true,
+      label: (
+        <div className="main-layout__user-menu">
+          <Text strong>{user?.username || 'User'}</Text>
+          <Text type="secondary" className="main-layout__user-email">
+            {user?.email || '-'}
+          </Text>
+          <Space size={[4, 4]} wrap>
+            <Tag>{role}</Tag>
+            {permissionSummary.slice(0, 3).map((item) => (
+              <Tag key={item} color="blue">{item}</Tag>
+            ))}
+          </Space>
+        </div>
+      ),
+    },
+    {
+      type: 'divider' as const,
+    },
+    {
       key: 'logout',
       icon: <LogoutOutlined />,
       label: '退出登录',
@@ -195,6 +221,7 @@ const MainLayout: React.FC = () => {
             <div className="main-layout__user">
               <Avatar icon={<UserOutlined />} />
               <span>{user?.username || 'User'}</span>
+              <Tag>{role}</Tag>
             </div>
           </Dropdown>
         </Header>

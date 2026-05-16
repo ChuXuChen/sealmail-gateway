@@ -1,6 +1,6 @@
-import React, { useState, ReactNode } from 'react';
+import React, { useEffect, useRef, useState, ReactNode } from 'react';
 import { UserContext } from '../types';
-import { authApi } from '../api/client';
+import { AUTH_SESSION_EXPIRED_EVENT, authApi } from '../api/client';
 import { getApiErrorMessage } from '../api/errors';
 import { message } from 'antd';
 import { AuthContext } from './auth-context';
@@ -9,7 +9,13 @@ interface AuthProviderProps {
   children: ReactNode;
 }
 
+const clearStoredAuth = () => {
+  localStorage.removeItem('accessToken');
+  localStorage.removeItem('user');
+};
+
 export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
+  const sessionExpiredNotified = useRef(false);
   const [user, setUser] = useState<UserContext | null>(() => {
     const token = localStorage.getItem('accessToken');
     const userStr = localStorage.getItem('user');
@@ -17,13 +23,28 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       try {
         return JSON.parse(userStr) as UserContext;
       } catch {
-        localStorage.removeItem('accessToken');
-        localStorage.removeItem('user');
+        clearStoredAuth();
       }
     }
     return null;
   });
   const [loading] = useState(false);
+
+  useEffect(() => {
+    const handleSessionExpired = () => {
+      clearStoredAuth();
+      setUser(null);
+      if (!sessionExpiredNotified.current) {
+        sessionExpiredNotified.current = true;
+        message.warning('会话已失效，请重新登录');
+      }
+    };
+
+    window.addEventListener(AUTH_SESSION_EXPIRED_EVENT, handleSessionExpired);
+    return () => {
+      window.removeEventListener(AUTH_SESSION_EXPIRED_EVENT, handleSessionExpired);
+    };
+  }, []);
 
   const login = async (username: string, password: string) => {
     try {
@@ -36,6 +57,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
       localStorage.setItem('accessToken', accessToken);
       localStorage.setItem('user', JSON.stringify(userData));
+      sessionExpiredNotified.current = false;
       setUser(userData);
       message.success('登录成功');
     } catch (error) {
@@ -50,8 +72,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     } catch {
       // ignore logout request failure and clear local state anyway
     }
-    localStorage.removeItem('accessToken');
-    localStorage.removeItem('user');
+    clearStoredAuth();
+    sessionExpiredNotified.current = false;
     setUser(null);
     message.info('已退出登录');
   };
