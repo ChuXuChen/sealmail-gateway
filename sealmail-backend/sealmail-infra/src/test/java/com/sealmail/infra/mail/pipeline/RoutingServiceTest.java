@@ -180,6 +180,46 @@ class RoutingServiceTest {
     }
 
     @Test
+    void routeOutboundSignOnlyDoesNotLetRecipientEncryptionCertificatesChooseProfile() {
+        MailRouter mailRouter = mock(MailRouter.class);
+        DomainConfigRepository domainConfigRepository = mock(DomainConfigRepository.class);
+        CertificateRepository certificateRepository = mock(CertificateRepository.class);
+        MailProcessingRepository mailProcessingRepository = mock(MailProcessingRepository.class);
+        RoutingService routingService = new RoutingService(
+                mailRouter,
+                domainConfigRepository,
+                cryptoSelectionService(certificateRepository),
+                mailProcessingRepository,
+                postfixProperties()
+        );
+
+        EmailAddress sender = new EmailAddress("alice@example.com");
+        EmailAddress recipient = new EmailAddress("bob@example.com");
+        MailEnvelope envelope = envelope(sender, recipient);
+        DomainConfig config = DomainConfig.create("domain-1", "example.com", true);
+        Certificate senderCert = certificate(sender, EnumSet.of(KeyUsage.SIGNING), true, true, "RSA");
+        Certificate recipientEncryptCert = certificate(recipient, EnumSet.of(KeyUsage.ENCRYPTION), true, false, "SM2");
+
+        when(domainConfigRepository.findByDomain("example.com")).thenReturn(Optional.of(config));
+        when(mailRouter.route(any(), any(), any(), any(), any(), any(), any()))
+                .thenReturn(new RoutingDecision.OutboundSign(List.of(recipient)));
+        when(certificateRepository.findTrustedForEncryption(recipient)).thenReturn(List.of(recipientEncryptCert));
+        when(certificateRepository.findTrustedForSigning(sender)).thenReturn(List.of(senderCert));
+        when(mailProcessingRepository.save(any(MailProcessing.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        Message<byte[]> routed = routingService.routeOutbound(MessageBuilder.withPayload("hello".getBytes())
+                .setHeader(MailProcessingHeaders.CONTEXT, MailProcessingContext.create(envelope))
+                .build());
+
+        MailProcessingContext context = (MailProcessingContext) routed.getHeaders().get(MailProcessingHeaders.CONTEXT);
+        assertEquals(CryptoProfile.STANDARD, context.cryptoProfile());
+        assertTrue(context.decision().signingRequired());
+        assertEquals(false, context.decision().encryptionRequired());
+        assertEquals(senderCert.getPemContent(), context.certificateSelection().senderCertificatePem());
+        assertEquals(true, context.certificateSelection().recipientCertificates().isEmpty());
+    }
+
+    @Test
     void routeOutboundDoesNotEnableEncryptionWhenOnlySomeRecipientsHaveCertificates() {
         MailRouter mailRouter = new MailRouter();
         DomainConfigRepository domainConfigRepository = mock(DomainConfigRepository.class);

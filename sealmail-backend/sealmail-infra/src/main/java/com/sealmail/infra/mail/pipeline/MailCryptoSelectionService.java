@@ -89,27 +89,30 @@ public class MailCryptoSelectionService {
 
         boolean encryptionRequired = routingDecision instanceof RoutingDecision.OutboundEncrypt;
         boolean mustEncrypt = decision.mustEncrypt();
+        boolean needsEncryptionPlan = encryptionRequired || mustEncrypt;
         boolean signingRequired = decision.signingRequired()
                 || routingDecision instanceof RoutingDecision.OutboundSign
                 || (encryptionRequired && domainConfig != null && domainConfig.isSigningEnabled());
 
-        if (encryptionRequired || mustEncrypt) {
+        if (needsEncryptionPlan) {
             decision = decision.withEncryptionRequired(true);
         }
         if (signingRequired) {
             decision = decision.withSigningRequired(true);
         }
 
-        CryptoProfileSelector.EncryptionProfilePlan encryptionPlan =
-                selectOutboundEncryptionPlan(envelope, encryptionRecipients(envelope, routingDecision), profile);
-        if (encryptionPlan.success()) {
-            if (certificates.recipientCertificates().isEmpty()) {
-                certificates = certificates.withRecipientCertificates(
-                        encryptionPlan.certificatePems(),
-                        encryptionPlan.certificateThumbprints());
-            }
-            if (!profile.isConcrete()) {
-                profile = encryptionPlan.profile();
+        if (needsEncryptionPlan) {
+            CryptoProfileSelector.EncryptionProfilePlan encryptionPlan =
+                    selectOutboundEncryptionPlan(envelope, encryptionRecipients(envelope, routingDecision), profile);
+            if (encryptionPlan.success()) {
+                if (certificates.recipientCertificates().isEmpty()) {
+                    certificates = certificates.withRecipientCertificates(
+                            encryptionPlan.certificatePems(),
+                            encryptionPlan.certificateThumbprints());
+                }
+                if (!profile.isConcrete()) {
+                    profile = encryptionPlan.profile();
+                }
             }
         }
 
