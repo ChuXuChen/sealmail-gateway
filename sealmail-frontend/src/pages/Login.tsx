@@ -1,12 +1,10 @@
 import React, { useState } from 'react';
-import { Form, Input, Button, Card, Typography } from 'antd';
+import { Form, Input, Button, Card } from 'antd';
 import { LockOutlined, MailOutlined } from '@ant-design/icons';
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigate, Navigate } from 'react-router-dom';
 import SealMailLogo from '../components/Brand/SealMailLogo';
 import './Login.css';
-
-const { Text } = Typography;
 
 const Login: React.FC = () => {
   const [loading, setLoading] = useState(false);
@@ -72,10 +70,6 @@ const Login: React.FC = () => {
               登录
             </Button>
           </Form.Item>
-
-          <div className="login-form__hint">
-            <Text type="secondary">测试账号: superadmin / super123</Text>
-          </div>
         </Form>
       </Card>
     </main>

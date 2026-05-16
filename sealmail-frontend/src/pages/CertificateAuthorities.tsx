@@ -149,11 +149,11 @@ const ChainTag: React.FC<{ cert: Certificate }> = ({ cert }) => (
 
 const IssuableTag: React.FC<{ cert: Certificate }> = ({ cert }) => {
   if (cert.pathLenConstraint === 1) {
-    return <Tag color="purple">签下级</Tag>;
+    return <Tag color="purple">可签</Tag>;
   }
 
   const reason = getUnavailableSigningReason(cert);
-  return reason ? <Tag color="default">禁签</Tag> : <Tag color="success">签 CSR</Tag>;
+  return reason ? <Tag color="default">禁签</Tag> : <Tag color="success">可签</Tag>;
 };
 
 const StatusTags: React.FC<{ cert: Certificate }> = ({ cert }) => (

@@ -176,11 +176,6 @@
   box-shadow: 0 12px 24px rgba(22, 119, 255, 0.24);
 }
 
-.login-form__hint {
-  margin-top: 16px;
-  text-align: center;
-}
-
 @media (max-width: 900px) {
   .login-page {
     justify-content: center;
