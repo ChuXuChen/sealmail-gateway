@@ -26,13 +26,19 @@ public class MailProcessing extends AggregateRoot<String> {
     }
 
     public static MailProcessing create(MailEnvelope envelope, MailDirection direction) {
+        return create(UUID.randomUUID().toString(), envelope, direction);
+    }
+
+    public static MailProcessing create(String id, MailEnvelope envelope, MailDirection direction) {
         if (envelope == null) {
             throw new IllegalArgumentException("Mail envelope cannot be null");
         }
         if (direction == null) {
             throw new IllegalArgumentException("Mail direction cannot be null");
         }
-        String id = UUID.randomUUID().toString();
+        if (id == null || id.isBlank()) {
+            throw new IllegalArgumentException("Mail processing id cannot be blank");
+        }
         MailProcessing processing = new MailProcessing(id, envelope, direction);
         processing.registerEvent(new MailReceived(
                 envelope.getMessageId(),
@@ -52,6 +58,13 @@ public class MailProcessing extends AggregateRoot<String> {
 
     public void addStep(String stepName) {
         ProcessingStep step = new ProcessingStep(UUID.randomUUID().toString(), stepName);
+        steps.add(step);
+    }
+
+    public void restoreStep(ProcessingStep step) {
+        if (step == null) {
+            return;
+        }
         steps.add(step);
     }
 

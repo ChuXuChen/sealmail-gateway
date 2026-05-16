@@ -38,6 +38,7 @@ import com.sealmail.domain.quarantine.event.QuarantineRejected;
 import com.sealmail.domain.quarantine.event.QuarantineReleased;
 import com.sealmail.domain.shared.event.AuditEvent;
 import com.sealmail.domain.shared.event.DomainEvent;
+import com.sealmail.infra.mail.pipeline.MailProcessingAuditEvents;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
@@ -164,7 +165,7 @@ public class DomainEventAuditListener {
                     "EMAIL",
                     exceptionMailCreated.getMessageId(),
                     "异常邮件: " + exceptionMailCreated.getReason()
-                            + detailSuffix(exceptionMailCreated.getDetail()));
+                            + safeDetailSuffix(exceptionMailCreated.getDetail()));
         }
         if (event instanceof QuarantineReleased quarantineReleased) {
             return audit(
@@ -202,7 +203,7 @@ public class DomainEventAuditListener {
                     "EMAIL",
                     mailQuarantined.getMessageId(),
                     "隔离邮件: " + mailQuarantined.getReason()
-                            + detailSuffix(mailQuarantined.getDetail()));
+                            + safeDetailSuffix(mailQuarantined.getDetail()));
         }
         if (event instanceof MailEncrypted mailEncrypted) {
             return audit(
@@ -456,11 +457,11 @@ public class DomainEventAuditListener {
         return value != null && !value.isBlank() ? value : null;
     }
 
-    private String detailSuffix(String detail) {
+    private String safeDetailSuffix(String detail) {
         if (detail == null || detail.isBlank()) {
             return "";
         }
-        return "，" + detail;
+        return MailProcessingAuditEvents.detailPresence(detail).replaceFirst("^, ", "，");
     }
 
     private String operationText(String operation) {

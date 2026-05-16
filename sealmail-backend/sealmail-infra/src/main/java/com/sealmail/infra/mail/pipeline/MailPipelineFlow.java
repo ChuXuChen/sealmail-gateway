@@ -1,10 +1,12 @@
 package com.sealmail.infra.mail.pipeline;
 
+import com.sealmail.domain.audit.AuditLogType;
 import com.sealmail.domain.mailsecurity.MailDirection;
 import com.sealmail.domain.mailsecurity.MailProcessingContext;
 import com.sealmail.domain.mailsecurity.MailProcessingErrorType;
 import com.sealmail.domain.mailsecurity.MailProcessingException;
 import com.sealmail.domain.mailsecurity.ProcessingResult;
+import com.sealmail.infra.events.DomainEventPublisher;
 import com.sealmail.infra.mail.pipeline.step.DecryptStep;
 import com.sealmail.infra.mail.pipeline.step.DkimSignStep;
 import com.sealmail.infra.mail.pipeline.step.DlpStep;
@@ -15,6 +17,7 @@ import com.sealmail.infra.mail.pipeline.step.RelayStep;
 import com.sealmail.infra.mail.pipeline.step.SignStep;
 import com.sealmail.infra.mail.pipeline.step.VerifyStep;
 import org.springframework.integration.dsl.IntegrationFlow;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.messaging.Message;
 import org.springframework.messaging.MessageChannel;
 import org.springframework.messaging.MessageHeaders;
@@ -39,6 +42,7 @@ public class MailPipelineFlow {
     private final DkimSignStep dkimSignStep;
     private final RoutingService routingService;
     private final MailProcessingTracker tracker;
+    private final DomainEventPublisher domainEventPublisher;
 
     public MailPipelineFlow(DecryptStep decryptStep,
                             VerifyStep verifyStep,
@@ -51,6 +55,23 @@ public class MailPipelineFlow {
                             DkimSignStep dkimSignStep,
                             RoutingService routingService,
                             MailProcessingTracker tracker) {
+        this(decryptStep, verifyStep, signStep, encryptStep, quarantineStep, relayStep, dlpStep,
+                mailAuthenticationStep, dkimSignStep, routingService, tracker, null);
+    }
+
+    @Autowired
+    public MailPipelineFlow(DecryptStep decryptStep,
+                            VerifyStep verifyStep,
+                            SignStep signStep,
+                            EncryptStep encryptStep,
+                            QuarantineStep quarantineStep,
+                            RelayStep relayStep,
+                            DlpStep dlpStep,
+                            MailAuthenticationStep mailAuthenticationStep,
+                            DkimSignStep dkimSignStep,
+                            RoutingService routingService,
+                            MailProcessingTracker tracker,
+                            DomainEventPublisher domainEventPublisher) {
         this.decryptStep = decryptStep;
         this.verifyStep = verifyStep;
         this.signStep = signStep;
@@ -62,6 +83,7 @@ public class MailPipelineFlow {
         this.dkimSignStep = dkimSignStep;
         this.routingService = routingService;
         this.tracker = tracker;
+        this.domainEventPublisher = domainEventPublisher;
     }
 
     public IntegrationFlow inboundFlow(MessageChannel mailInboundChannel,
@@ -366,6 +388,12 @@ public class MailPipelineFlow {
     private Object completeSuccess(Object message) {
         Message<byte[]> typedMessage = byteMessage(message);
         tracker.completeProcessing(processingId(typedMessage.getHeaders()), ProcessingResult.SUCCESS);
+        MailProcessingAuditEvents.publish(
+                domainEventPublisher,
+                AuditLogType.EMAIL_DELIVERED,
+                context(typedMessage.getHeaders()),
+                "MAIL_PROCESSING_COMPLETED",
+                "result=SUCCESS");
         return typedMessage;
     }
 

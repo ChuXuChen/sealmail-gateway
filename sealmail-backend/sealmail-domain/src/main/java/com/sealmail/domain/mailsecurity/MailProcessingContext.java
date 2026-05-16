@@ -3,6 +3,7 @@ package com.sealmail.domain.mailsecurity;
 import com.sealmail.domain.shared.model.EmailAddress;
 
 import java.util.List;
+import java.util.UUID;
 
 public record MailProcessingContext(
         MailEnvelope envelope,
@@ -37,7 +38,7 @@ public record MailProcessingContext(
     public static MailProcessingContext create(MailEnvelope envelope) {
         return new MailProcessingContext(
                 envelope,
-                null,
+                UUID.randomUUID().toString(),
                 null,
                 null,
                 CryptoProfile.AUTO,
@@ -62,18 +63,35 @@ public record MailProcessingContext(
                                                 String subject,
                                                 String remoteAddress) {
         String messageId = envelope.getMessageId();
+        String correlationId = messageId != null && !messageId.isBlank()
+                ? messageId
+                : UUID.randomUUID().toString();
         return create(envelope)
                 .withDirection(direction)
                 .withOriginalMailContent(originalMailContent)
                 .withSubject(subject)
-                .withAuditTrace(new AuditTrace(null, messageId, messageId, submissionType, remoteAddress));
+                .withAuditTrace(new AuditTrace(null, correlationId, messageId, submissionType, remoteAddress))
+                .syncAuditTraceProcessingId();
+    }
+
+    private MailProcessingContext syncAuditTraceProcessingId() {
+        if (auditTrace == null) {
+            return this;
+        }
+        return withAuditTrace(new AuditTrace(
+                processingId,
+                auditTrace.correlationId(),
+                auditTrace.messageId(),
+                auditTrace.submissionType(),
+                auditTrace.remoteAddress()));
     }
 
     public MailProcessingContext withProcessingId(String value) {
-        return new MailProcessingContext(envelope, value, direction, routingDecision,
+        MailProcessingContext context = new MailProcessingContext(envelope, value, direction, routingDecision,
                 cryptoProfile, decision, certificateSelection, relayProfile, auditTrace, originalMailContent,
                 subject, quarantineReleaseId, recordDisposition, smimeEncrypted, smimeEncryptionSuite,
                 smimeEncryptedRecipients);
+        return context.syncAuditTraceProcessingId();
     }
 
     public MailProcessingContext withDirection(MailDirection value) {

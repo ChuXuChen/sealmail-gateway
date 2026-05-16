@@ -142,10 +142,10 @@ management:
 logging:
   level:
     root: INFO
-    com.sealmail: DEBUG
-    com.sealmail.app.usecase: DEBUG
-    com.sealmail.infra.crypto: DEBUG
-    com.sealmail.infra.mail.pipeline: DEBUG
+    com.sealmail: INFO
+    com.sealmail.app.usecase: INFO
+    com.sealmail.infra.crypto: INFO
+    com.sealmail.infra.mail.pipeline: INFO
     org.springframework.integration: INFO
     org.springframework.transaction: INFO
     org.hibernate.SQL: WARN

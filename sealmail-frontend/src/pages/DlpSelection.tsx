@@ -3,6 +3,7 @@ import { Button, Form, Input, Modal, Popconfirm, Select, Space, Switch, Table, T
 import { DeleteOutlined, EditOutlined, PlusOutlined } from '@ant-design/icons';
 import type { TableColumnsType } from 'antd';
 import { dlpApi } from '../api/client';
+import { getApiErrorMessage } from '../api/errors';
 import { DlpPattern, DlpSelection } from '../types';
 
 const { Title } = Typography;
@@ -11,18 +12,6 @@ const scopeLabels: Record<string, string> = {
   GLOBAL: '全局',
   SENDER_DOMAIN: '发件域',
   RECIPIENT_DOMAIN: '收件域',
-};
-
-const getErrorMessage = (error: unknown, fallback: string) => {
-  if (
-    typeof error === 'object' &&
-    error !== null &&
-    'response' in error &&
-    typeof (error as { response?: { data?: { message?: unknown } } }).response?.data?.message === 'string'
-  ) {
-    return (error as { response: { data: { message: string } } }).response.data.message;
-  }
-  return fallback;
 };
 
 const DlpSelection: React.FC = () => {
@@ -45,8 +34,8 @@ const DlpSelection: React.FC = () => {
     try {
       const response = await dlpApi.listSelections();
       setData(response.data.data);
-    } catch {
-      message.error('加载 DLP 生效范围失败');
+    } catch (error) {
+      message.error(getApiErrorMessage(error, '加载 DLP 生效范围失败'));
     } finally {
       setLoading(false);
     }
@@ -56,8 +45,8 @@ const DlpSelection: React.FC = () => {
     try {
       const response = await dlpApi.listPatterns();
       setPatterns(response.data.data);
-    } catch {
-      message.error('加载 DLP 规则失败');
+    } catch (error) {
+      message.error(getApiErrorMessage(error, '加载 DLP 规则失败'));
     }
   };
 
@@ -103,7 +92,7 @@ const DlpSelection: React.FC = () => {
       setModalOpen(false);
       loadData();
     } catch (error) {
-      message.error(getErrorMessage(error, '保存 DLP 生效范围失败'));
+      message.error(getApiErrorMessage(error, '保存 DLP 生效范围失败'));
     }
   };
 
@@ -113,7 +102,7 @@ const DlpSelection: React.FC = () => {
       message.success('DLP 生效范围已删除');
       loadData();
     } catch (error) {
-      message.error(getErrorMessage(error, '删除 DLP 生效范围失败'));
+      message.error(getApiErrorMessage(error, '删除 DLP 生效范围失败'));
     }
   };
 

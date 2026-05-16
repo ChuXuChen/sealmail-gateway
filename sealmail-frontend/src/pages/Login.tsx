@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Form, Input, Button, Card } from 'antd';
 import { LockOutlined, MailOutlined } from '@ant-design/icons';
-import { useAuth } from '../contexts/AuthContext';
+import { useAuth } from '../contexts/useAuth';
 import { useNavigate, Navigate } from 'react-router-dom';
 import SealMailLogo from '../components/Brand/SealMailLogo';
 import './Login.css';

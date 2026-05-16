@@ -6,6 +6,7 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.annotation.Profile;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -16,6 +17,7 @@ import java.util.Map;
 
 @Slf4j
 @RestController
+@Profile("dev")
 @RequestMapping("/api/v1/crypto-test")
 @RequiredArgsConstructor
 @Tag(name = "密码能力测试", description = "测试当前密码能力的密钥材料、签名、加密和支持状态")

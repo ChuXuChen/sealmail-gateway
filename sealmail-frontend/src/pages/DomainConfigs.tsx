@@ -31,6 +31,7 @@ import {
 } from '@ant-design/icons';
 import { DnsRecord, DomainConfig, MailAuthConfig } from '../types';
 import { domainConfigApi, mailAuthApi } from '../api/client';
+import { getApiErrorMessage } from '../api/errors';
 
 const { Title } = Typography;
 const { Option } = Select;
@@ -67,18 +68,6 @@ const emptyMailAuthConfig: MailAuthConfig = {
   dmarcQuarantineRejectPolicy: true,
 };
 
-const getErrorMessage = (error: unknown, fallback: string) => {
-  if (
-    typeof error === 'object' &&
-    error !== null &&
-    'response' in error &&
-    typeof (error as { response?: { data?: { message?: unknown } } }).response?.data?.message === 'string'
-  ) {
-    return (error as { response: { data: { message: string } } }).response.data.message;
-  }
-  return fallback;
-};
-
 const DomainConfigs: React.FC = () => {
   const [data, setData] = useState<DomainConfig[]>([]);
   const [loading, setLoading] = useState(false);
@@ -95,17 +84,13 @@ const DomainConfigs: React.FC = () => {
   const [editForm] = Form.useForm();
   const [mailAuthForm] = Form.useForm();
 
-  useEffect(() => {
-    loadData();
-  }, []);
-
   const loadData = async () => {
     setLoading(true);
     try {
       const domainResponse = await domainConfigApi.findAll();
       setData(domainResponse.data.data);
     } catch (error) {
-      message.error(getErrorMessage(error, '加载域名配置失败'));
+      message.error(getApiErrorMessage(error, '加载域名配置失败'));
     } finally {
       setLoading(false);
     }
@@ -123,7 +108,7 @@ const DomainConfigs: React.FC = () => {
     } catch (error) {
       setMailAuthConfig(null);
       if (showError) {
-        message.error(getErrorMessage(error, '加载邮件认证配置失败'));
+        message.error(getApiErrorMessage(error, '加载邮件认证配置失败'));
       }
       return null;
     } finally {
@@ -137,7 +122,20 @@ const DomainConfigs: React.FC = () => {
     clearDkimPrivateKeySecretRef: false,
   });
 
-  const handleCreate = async (values: any) => {
+  useEffect(() => {
+    void Promise.resolve().then(loadData);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const handleCreate = async (values: {
+    domain: string;
+    localDomain?: boolean;
+    encryptionPolicy?: string;
+    preferredAlgorithm?: string;
+    signingEnabled?: boolean;
+    dkimEnabled?: boolean;
+    active?: boolean;
+  }) => {
     try {
       await domainConfigApi.create({
         domain: normalizeDomain(values.domain),
@@ -153,11 +151,17 @@ const DomainConfigs: React.FC = () => {
       createForm.resetFields();
       loadData();
     } catch (error) {
-      message.error(getErrorMessage(error, '域名配置创建失败'));
+      message.error(getApiErrorMessage(error, '域名配置创建失败'));
     }
   };
 
-  const handleEdit = async (values: any) => {
+  const handleEdit = async (values: {
+    encryptionPolicy?: string;
+    preferredAlgorithm?: string;
+    signingEnabled?: boolean;
+    dkimEnabled?: boolean;
+    active?: boolean;
+  }) => {
     if (!selectedDomain) return;
     try {
       await domainConfigApi.update(selectedDomain.id, {
@@ -171,7 +175,7 @@ const DomainConfigs: React.FC = () => {
       setEditModalVisible(false);
       loadData();
     } catch (error) {
-      message.error(getErrorMessage(error, '域名配置更新失败'));
+      message.error(getApiErrorMessage(error, '域名配置更新失败'));
     }
   };
 
@@ -181,7 +185,7 @@ const DomainConfigs: React.FC = () => {
       message.success('域名配置已删除');
       loadData();
     } catch (error) {
-      message.error(getErrorMessage(error, '域名配置删除失败'));
+      message.error(getApiErrorMessage(error, '域名配置删除失败'));
     }
   };
 
@@ -227,7 +231,9 @@ const DomainConfigs: React.FC = () => {
     }
   };
 
-  const handleMailAuthUpdate = async (values: any) => {
+  const handleMailAuthUpdate = async (values: MailAuthConfig & {
+    clearDkimPrivateKeySecretRef?: boolean;
+  }) => {
     try {
       const payload = {
         ...values,
@@ -243,7 +249,7 @@ const DomainConfigs: React.FC = () => {
         await loadDnsRecords(dnsDomain);
       }
     } catch (error) {
-      message.error(getErrorMessage(error, '邮件认证配置更新失败'));
+      message.error(getApiErrorMessage(error, '邮件认证配置更新失败'));
     }
   };
 
@@ -258,7 +264,7 @@ const DomainConfigs: React.FC = () => {
       setDnsDomain(normalized);
       setDnsRecords(response.data.data);
     } catch (error) {
-      message.error(getErrorMessage(error, 'DNS记录生成失败'));
+      message.error(getApiErrorMessage(error, 'DNS记录生成失败'));
     }
   };
 
@@ -429,7 +435,7 @@ const DomainConfigs: React.FC = () => {
     {
       title: '操作',
       key: 'actions',
-      render: (_: any, record: DomainConfig) => (
+      render: (_: unknown, record: DomainConfig) => (
         <Space size="small">
           <Button
             type="text"

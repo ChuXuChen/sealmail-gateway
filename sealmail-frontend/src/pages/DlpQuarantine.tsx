@@ -22,6 +22,7 @@ import {
 import type { MenuProps, TableColumnsType } from 'antd';
 import { QuarantineItem } from '../types';
 import { dlpQuarantineApi } from '../api/client';
+import { getApiErrorMessage } from '../api/errors';
 
 const { Title } = Typography;
 const { Option } = Select;
@@ -29,18 +30,6 @@ type DlpQuarantineActionKey = 'release' | 'release-encrypted' | 'reject';
 
 const isDlpQuarantineActionKey = (key: string): key is DlpQuarantineActionKey =>
   key === 'release' || key === 'release-encrypted' || key === 'reject';
-
-const getErrorMessage = (error: unknown, fallback: string) => {
-  if (
-    typeof error === 'object' &&
-    error !== null &&
-    'response' in error &&
-    typeof (error as { response?: { data?: { message?: unknown } } }).response?.data?.message === 'string'
-  ) {
-    return (error as { response: { data: { message: string } } }).response.data.message;
-  }
-  return fallback;
-};
 
 const DlpQuarantine: React.FC = () => {
   const [data, setData] = useState<QuarantineItem[]>([]);
@@ -68,8 +57,8 @@ const DlpQuarantine: React.FC = () => {
         const visibleIds = new Set(response.data.data.items.map((item) => item.id));
         return prev.filter((id) => visibleIds.has(String(id)));
       });
-    } catch {
-      message.error('加载 DLP 隔离邮件失败');
+    } catch (error) {
+      message.error(getApiErrorMessage(error, '加载 DLP 隔离邮件失败'));
     } finally {
       setLoading(false);
     }
@@ -85,7 +74,7 @@ const DlpQuarantine: React.FC = () => {
       message.success(encryptBeforeRelease ? '邮件已加密后放行' : '邮件已放行');
       loadData();
     } catch (error) {
-      message.error(getErrorMessage(error, '操作失败'));
+      message.error(getApiErrorMessage(error, '操作失败'));
     }
   };
 
@@ -95,7 +84,7 @@ const DlpQuarantine: React.FC = () => {
       message.success('邮件已拒绝');
       loadData();
     } catch (error) {
-      message.error(getErrorMessage(error, '操作失败'));
+      message.error(getApiErrorMessage(error, '操作失败'));
     }
   };
 
@@ -110,7 +99,7 @@ const DlpQuarantine: React.FC = () => {
       setSelectedRowKeys([]);
       loadData();
     } catch (error) {
-      message.error(getErrorMessage(error, '操作失败'));
+      message.error(getApiErrorMessage(error, '操作失败'));
     }
   };
 
@@ -122,7 +111,7 @@ const DlpQuarantine: React.FC = () => {
       setSelectedRowKeys([]);
       loadData();
     } catch (error) {
-      message.error(getErrorMessage(error, '操作失败'));
+      message.error(getApiErrorMessage(error, '操作失败'));
     }
   };
 

@@ -1,48 +1,29 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import React, { useState, ReactNode } from 'react';
 import { UserContext } from '../types';
 import { authApi } from '../api/client';
+import { getApiErrorMessage } from '../api/errors';
 import { message } from 'antd';
-
-interface AuthContextType {
-  user: UserContext | null;
-  isAuthenticated: boolean;
-  loading: boolean;
-  login: (username: string, password: string) => Promise<void>;
-  logout: () => void;
-}
-
-const AuthContext = createContext<AuthContextType | undefined>(undefined);
-
-export const useAuth = () => {
-  const context = useContext(AuthContext);
-  if (!context) {
-    throw new Error('useAuth must be used within an AuthProvider');
-  }
-  return context;
-};
+import { AuthContext } from './auth-context';
 
 interface AuthProviderProps {
   children: ReactNode;
 }
 
 export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
-  const [user, setUser] = useState<UserContext | null>(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
+  const [user, setUser] = useState<UserContext | null>(() => {
     const token = localStorage.getItem('accessToken');
     const userStr = localStorage.getItem('user');
     if (token && userStr) {
       try {
-        const userData = JSON.parse(userStr);
-        setUser(userData);
+        return JSON.parse(userStr) as UserContext;
       } catch {
         localStorage.removeItem('accessToken');
         localStorage.removeItem('user');
       }
     }
-    setLoading(false);
-  }, []);
+    return null;
+  });
+  const [loading] = useState(false);
 
   const login = async (username: string, password: string) => {
     try {
@@ -57,8 +38,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       localStorage.setItem('user', JSON.stringify(userData));
       setUser(userData);
       message.success('登录成功');
-    } catch (error: any) {
-      message.error(error.response?.data?.message || '登录失败');
+    } catch (error) {
+      message.error(getApiErrorMessage(error, '登录失败'));
       throw error;
     }
   };

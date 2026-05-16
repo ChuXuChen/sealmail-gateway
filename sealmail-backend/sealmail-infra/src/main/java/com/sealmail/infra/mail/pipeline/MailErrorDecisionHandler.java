@@ -8,7 +8,6 @@ import com.sealmail.domain.mailsecurity.MailProcessingException;
 import com.sealmail.domain.mailsecurity.MailProcessingRepository;
 import com.sealmail.domain.mailsecurity.MailRecordDisposition;
 import com.sealmail.domain.mailsecurity.ProcessingResult;
-import com.sealmail.domain.shared.event.AuditEvent;
 import com.sealmail.infra.events.DomainEventPublisher;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -126,20 +125,16 @@ public class MailErrorDecisionHandler {
     }
 
     private void recordAudit(MailProcessingContext context, ClassifiedError error) {
-        try {
-            domainEventPublisher.publishEvent(AuditEvent.builder()
-                    .eventType(AuditLogType.EMAIL_QUARANTINED.name())
-                    .resourceType("EMAIL")
-                    .resourceId(context != null ? context.envelope().getMessageId() : null)
-                    .action(error.retryable() ? "MAIL_RETRY" : "MAIL_DEAD_LETTER")
-                    .description("processingId=" + processingId(context)
-                            + ", errorType=" + error.errorType().name()
-                            + ", detail=" + error.detail())
-                    .success(false)
-                    .build());
-        } catch (Exception e) {
-            log.warn("Failed to record mail error audit event: {}", e.getMessage());
-        }
+        MailProcessingAuditEvents.publish(
+                domainEventPublisher,
+                AuditLogType.EMAIL_QUARANTINED,
+                context,
+                error.retryable() ? "MAIL_RETRY" : "MAIL_DEAD_LETTER",
+                "errorType=" + error.errorType().name()
+                        + ", retryable=" + error.retryable()
+                        + ", recordDisposition=" + error.recordDisposition()
+                        + MailProcessingAuditEvents.detailPresence(error.detail()),
+                false);
     }
 
     private Message<byte[]> quarantineMessage(MailProcessingContext context, ClassifiedError error) {

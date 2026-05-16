@@ -8,12 +8,10 @@ import com.sealmail.domain.certificate.Certificate;
 import com.sealmail.domain.certificate.CertificateRepository;
 import com.sealmail.domain.mail.spi.MailMessageComposer;
 import com.sealmail.domain.mail.spi.OutboundMailSubmitter;
-import com.sealmail.domain.mail.spi.MailSampleStore;
 import com.sealmail.domain.mail.spi.SmtpRelayProbe;
 import com.sealmail.domain.mailsecurity.CryptoProfile;
 import com.sealmail.domain.mailsecurity.CryptoProfileSelector;
 import com.sealmail.domain.mailsecurity.MailEnvelope;
-import com.sealmail.domain.policy.PreferredAlgorithm;
 import com.sealmail.domain.shared.model.EmailAddress;
 import com.sealmail.domain.system.SystemSettingsProvider;
 import org.springframework.stereotype.Service;
@@ -31,7 +29,6 @@ public class MailTestUseCase {
     private final SystemSettingsProvider systemSettingsProvider;
     private final RelayPolicyPort relayPolicyPort;
     private final SmtpRelayProbe smtpRelayProbe;
-    private final MailSampleStore mailSampleStore;
     private final MailMessageComposer mailMessageComposer;
     private final CryptoProfileSelector cryptoProfileSelector;
 
@@ -40,7 +37,6 @@ public class MailTestUseCase {
                            SystemSettingsProvider systemSettingsProvider,
                            RelayPolicyPort relayPolicyPort,
                            SmtpRelayProbe smtpRelayProbe,
-                           MailSampleStore mailSampleStore,
                            MailMessageComposer mailMessageComposer,
                            CryptoProfileSelector cryptoProfileSelector) {
         this.outboundMailSubmitter = outboundMailSubmitter;
@@ -48,7 +44,6 @@ public class MailTestUseCase {
         this.systemSettingsProvider = systemSettingsProvider;
         this.relayPolicyPort = relayPolicyPort;
         this.smtpRelayProbe = smtpRelayProbe;
-        this.mailSampleStore = mailSampleStore;
         this.mailMessageComposer = mailMessageComposer;
         this.cryptoProfileSelector = cryptoProfileSelector;
     }
@@ -94,7 +89,7 @@ public class MailTestUseCase {
                     java.time.Instant.now()
             );
 
-            CryptoProfile profile = parseProfile(request.preferredAlgorithm());
+            CryptoProfile profile = CryptoProfile.AUTO;
             List<Certificate> senderCerts = certificateRepository.findTrustedForSigning(senderAddr);
             Certificate selectedSenderCert = cryptoProfileSelector.select(senderCerts, profile).orElse(null);
 
@@ -126,7 +121,7 @@ public class MailTestUseCase {
                     certMap
             ));
 
-            return "加密邮件已提交发送 (密码Profile: " + profile.name() + ")，签名证书数: "
+            return "受保护测试邮件已提交发送，签名证书数: "
                     + senderCerts.size() + ", 加密证书数: " + certMap.size();
         } catch (BusinessException e) {
             throw e;
@@ -175,32 +170,12 @@ public class MailTestUseCase {
         return "SMTP配置测试结果:\n" + result;
     }
 
-    public String saveMimeMessage(SendMailRequest request, UserContext user) {
-        requireAdmin(user);
-        try {
-            byte[] mailContent = mailMessageComposer.composeText(draft(request));
-            String hint = "encrypted_email_" + System.currentTimeMillis();
-            return "原始邮件已保存到: " + mailSampleStore.store(mailContent, hint).location()
-                    + "\n注意: 此接口仅保存原始邮件，不进行签名和加密处理。"
-                    + "\n请使用 send-encrypted 接口并检查日志验证 S/MIME 功能。";
-        } catch (Exception e) {
-            throw BusinessException.badRequest("操作失败: " + e.getMessage());
-        }
-    }
-
     private MailMessageComposer.MailDraft draft(SendMailRequest request) {
         return new MailMessageComposer.MailDraft(
                 new EmailAddress(request.from()),
                 request.to().stream().map(EmailAddress::new).toList(),
                 request.subject(),
                 request.content());
-    }
-
-    private CryptoProfile parseProfile(String preferredAlgorithm) {
-        if (preferredAlgorithm == null || preferredAlgorithm.isBlank()) {
-            return CryptoProfile.AUTO;
-        }
-        return CryptoProfile.fromPreferredAlgorithm(PreferredAlgorithm.valueOf(preferredAlgorithm));
     }
 
     private void requireAdmin(UserContext user) {

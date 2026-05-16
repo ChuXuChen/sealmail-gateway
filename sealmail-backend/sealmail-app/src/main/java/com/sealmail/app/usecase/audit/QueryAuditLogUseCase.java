@@ -96,6 +96,26 @@ public class QueryAuditLogUseCase {
     }
 
     @Transactional(readOnly = true)
+    public PageResponse<AuditLogResponse> findByResource(String resourceType, String resourceId,
+                                                         PageRequest pageRequest, UserContext currentUser) {
+        if (!currentUser.isAdmin() && !currentUser.isAuditor()) {
+            throw BusinessException.forbidden("只有管理员或审计员可以查看审计日志");
+        }
+        if (resourceType == null || resourceType.isBlank() || resourceId == null || resourceId.isBlank()) {
+            throw BusinessException.badRequest("审计资源类型和资源ID不能为空");
+        }
+
+        List<AuditLog> logs = repository.findByResource(resourceType, resourceId, pageRequest.getPage(), pageRequest.getSize());
+        long total = repository.countByResource(resourceType, resourceId);
+
+        List<AuditLogResponse> items = logs.stream()
+                .map(mapper::toResponse)
+                .toList();
+
+        return PageResponse.of(items, total, pageRequest);
+    }
+
+    @Transactional(readOnly = true)
     public PageResponse<AuditLogResponse> findByTimeRange(Instant startTime, Instant endTime,
                                                           PageRequest pageRequest, UserContext currentUser) {
         if (!currentUser.isAdmin() && !currentUser.isAuditor()) {
@@ -143,7 +163,10 @@ public class QueryAuditLogUseCase {
             );
             case "EMAIL" -> List.of(
                     AuditLogType.EMAIL_RECEIVED,
+                    AuditLogType.EMAIL_ROUTED,
+                    AuditLogType.EMAIL_CERTIFICATE_SELECTED,
                     AuditLogType.EMAIL_DELIVERED,
+                    AuditLogType.EMAIL_RELAYED,
                     AuditLogType.EMAIL_RELEASED,
                     AuditLogType.EMAIL_REJECTED,
                     AuditLogType.EMAIL_QUARANTINED,

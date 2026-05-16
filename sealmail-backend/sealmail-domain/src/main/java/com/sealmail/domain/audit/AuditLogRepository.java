@@ -17,6 +17,8 @@ public interface AuditLogRepository {
 
     List<AuditLog> findByUserId(String userId, int page, int size);
 
+    List<AuditLog> findByResource(String resourceType, String resourceId, int page, int size);
+
     List<AuditLog> findByTimeRange(Instant startTime, Instant endTime, int page, int size);
 
     List<AuditLog> findAll(int page, int size);
@@ -28,6 +30,8 @@ public interface AuditLogRepository {
     long countByType(AuditLogType type);
 
     long countByUserId(String userId);
+
+    long countByResource(String resourceType, String resourceId);
 
     long countByTimeRange(Instant startTime, Instant endTime);
 

@@ -38,10 +38,8 @@ public class MailTestController {
         @NotBlank(message = "邮件内容不能为空")
         private String content;
 
-        private String preferredAlgorithm;
-
         public com.sealmail.app.dto.request.SendMailRequest toAppRequest() {
-            return new com.sealmail.app.dto.request.SendMailRequest(from, to, subject, content, preferredAlgorithm);
+            return new com.sealmail.app.dto.request.SendMailRequest(from, to, subject, content);
         }
     }
 
@@ -50,35 +48,15 @@ public class MailTestController {
     public ApiResponse<String> sendTestMail(@Valid @RequestBody SendMailWebRequest request,
                                             @AuthenticationPrincipal UserContext user) {
         requireAdmin(user);
-        try {
-            return ApiResponse.ok(mailTestUseCase.sendPlain(request.toAppRequest(), user));
-        } catch (Exception e) {
-            return ApiResponse.error(500, "邮件发送失败: " + e.getMessage());
-        }
+        return ApiResponse.ok(mailTestUseCase.sendPlain(request.toAppRequest(), user));
     }
 
     @PostMapping("/send-encrypted")
-    @Operation(summary = "发送加密签名邮件", description = "强制启用S/MIME签名和加密发送测试邮件，支持算法偏好测试")
+    @Operation(summary = "发送加密签名邮件", description = "通过当前域名策略和证书绑定发送受保护测试邮件")
     public ApiResponse<String> sendEncryptedMail(@Valid @RequestBody SendMailWebRequest request,
                                                  @AuthenticationPrincipal UserContext user) {
         requireAdmin(user);
-        try {
-            return ApiResponse.ok(mailTestUseCase.sendProtected(request.toAppRequest(), user));
-        } catch (Exception e) {
-            return ApiResponse.error(500, "邮件发送失败: " + e.getMessage());
-        }
-    }
-
-    @PostMapping("/test-encrypted-to-file")
-    @Operation(summary = "生成加密邮件并保存到文件", description = "生成S/MIME加密签名邮件并保存到本地文件用于验证")
-    public ApiResponse<String> testEncryptedToFile(@Valid @RequestBody SendMailWebRequest request,
-                                                   @AuthenticationPrincipal UserContext user) {
-        requireAdmin(user);
-        try {
-            return ApiResponse.ok(mailTestUseCase.saveMimeMessage(request.toAppRequest(), user));
-        } catch (Exception e) {
-            return ApiResponse.error(500, "操作失败: " + e.getMessage());
-        }
+        return ApiResponse.ok(mailTestUseCase.sendProtected(request.toAppRequest(), user));
     }
 
     @GetMapping("/test-smtp-config")

@@ -9,7 +9,6 @@ import {
   InputNumber,
   Modal,
   Row,
-  Select,
   Space,
   Spin,
   Switch,
@@ -31,6 +30,7 @@ import {
   ToolOutlined,
 } from '@ant-design/icons';
 import { mailTestApi, runtimePolicyApi, systemSettingsApi } from '../api/client';
+import { getApiErrorMessage } from '../api/errors';
 import type {
   QuarantinePolicy,
   RelayPolicy,
@@ -39,7 +39,6 @@ import type {
 
 const { Title, Text } = Typography;
 const { TextArea } = Input;
-const { Option } = Select;
 
 type SectionKey = 'runtime' | 'mail' | 'security' | 'tools';
 
@@ -48,30 +47,14 @@ interface TestMailValues {
   to: string;
   subject: string;
   content: string;
-  preferredAlgorithm: 'AUTO' | 'GM_ONLY' | 'STANDARD_ONLY';
 }
 
 const sections: { key: SectionKey; label: string; icon: React.ReactNode }[] = [
   { key: 'runtime', label: '运行状态', icon: <CloudServerOutlined /> },
   { key: 'mail', label: '邮件链路', icon: <MailOutlined /> },
   { key: 'security', label: '安全能力', icon: <SafetyCertificateOutlined /> },
-  { key: 'tools', label: '调试工具', icon: <ToolOutlined /> },
+  { key: 'tools', label: '运维工具', icon: <ToolOutlined /> },
 ];
-
-const getErrorMessage = (error: unknown, fallback: string) => {
-  if (error instanceof Error && error.message) {
-    return error.message;
-  }
-  if (
-    typeof error === 'object' &&
-    error !== null &&
-    'response' in error &&
-    typeof (error as { response?: { data?: { message?: unknown } } }).response?.data?.message === 'string'
-  ) {
-    return (error as { response: { data: { message: string } } }).response.data.message;
-  }
-  return fallback;
-};
 
 const formatBytes = (bytes: number) => {
   if (!Number.isFinite(bytes)) return '-';
@@ -182,7 +165,7 @@ const Settings: React.FC = () => {
         }
       } catch (error) {
         if (mounted) {
-          message.error(getErrorMessage(error, '加载系统设置失败'));
+          message.error(getApiErrorMessage(error, '加载系统设置失败'));
         }
       } finally {
         if (mounted) {
@@ -215,7 +198,7 @@ const Settings: React.FC = () => {
       relayForm.setFieldsValue({ ...relayResponse.data.data, clearPasswordSecretRef: false });
       quarantineForm.setFieldsValue(quarantineResponse.data.data);
     } catch (error) {
-      message.error(getErrorMessage(error, '加载系统设置失败'));
+      message.error(getApiErrorMessage(error, '加载系统设置失败'));
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -237,7 +220,7 @@ const Settings: React.FC = () => {
         message.success('SMTP 探测通过');
       }
     } catch (error) {
-      message.error(getErrorMessage(error, 'SMTP 探测失败'));
+      message.error(getApiErrorMessage(error, 'SMTP 探测失败'));
     } finally {
       setProbeLoading(false);
     }
@@ -257,7 +240,6 @@ const Settings: React.FC = () => {
         to: recipients,
         subject: values.subject,
         content: values.content,
-        preferredAlgorithm: values.preferredAlgorithm,
       });
       if (!response.data.success) {
         throw new Error(response.data.message || response.data.data);
@@ -266,7 +248,7 @@ const Settings: React.FC = () => {
       testForm.resetFields();
       setTestOpen(false);
     } catch (error) {
-      message.error(getErrorMessage(error, '测试邮件发送失败'));
+      message.error(getApiErrorMessage(error, '测试邮件发送失败'));
     } finally {
       setTestLoading(false);
     }
@@ -284,7 +266,7 @@ const Settings: React.FC = () => {
       }
       message.success('Relay 策略已保存');
     } catch (error) {
-      message.error(getErrorMessage(error, 'Relay 策略保存失败'));
+      message.error(getApiErrorMessage(error, 'Relay 策略保存失败'));
     }
   };
 
@@ -300,7 +282,7 @@ const Settings: React.FC = () => {
       }
       message.success('隔离策略已保存');
     } catch (error) {
-      message.error(getErrorMessage(error, '隔离策略保存失败'));
+      message.error(getApiErrorMessage(error, '隔离策略保存失败'));
     }
   };
 
@@ -532,7 +514,7 @@ const Settings: React.FC = () => {
   );
 
   const renderTools = () => (
-    <Card title="调试工具">
+    <Card title="运维工具">
       <Row gutter={[16, 16]}>
         <Col xs={24} md={12}>
           <Card type="inner" title="SMTP 探测">
@@ -545,9 +527,9 @@ const Settings: React.FC = () => {
           </Card>
         </Col>
         <Col xs={24} md={12}>
-          <Card type="inner" title="加密测试邮件">
+          <Card type="inner" title="受保护测试邮件">
             <Space direction="vertical" size={12} style={{ width: '100%' }}>
-              <Text style={pageTextStyle}>提交一封测试邮件，验证 S/MIME 签名、加密和投递。</Text>
+              <Text style={pageTextStyle}>提交一封测试邮件，验证当前域名策略、证书绑定和投递链路。</Text>
               <Button type="primary" icon={<SendOutlined />} onClick={() => setTestOpen(true)}>
                 发送测试
               </Button>
@@ -673,7 +655,7 @@ const Settings: React.FC = () => {
       </Modal>
 
       <Modal
-        title="发送加密测试邮件"
+        title="发送受保护测试邮件"
         open={testOpen}
         onCancel={() => setTestOpen(false)}
         onOk={() => testForm.submit()}
@@ -688,8 +670,7 @@ const Settings: React.FC = () => {
           initialValues={{
             from: 'test@sealmail.local',
             subject: 'SealMail 加密测试',
-            content: '这是一封用于测试 S/MIME 加密和签名功能的邮件。',
-            preferredAlgorithm: 'AUTO',
+            content: '这是一封用于验证当前域名策略、证书绑定和投递链路的测试邮件。',
           }}
         >
           <Row gutter={12}>
@@ -726,22 +707,13 @@ const Settings: React.FC = () => {
           </Row>
 
           <Row gutter={12}>
-            <Col xs={24} md={12}>
+            <Col xs={24} md={24}>
               <Form.Item
                 name="subject"
                 label="主题"
                 rules={[{ required: true, message: '请输入邮件主题' }]}
               >
                 <Input />
-              </Form.Item>
-            </Col>
-            <Col xs={24} md={12}>
-              <Form.Item name="preferredAlgorithm" label="算法偏好">
-                <Select>
-                  <Option value="AUTO">自动选择</Option>
-                  <Option value="GM_ONLY">国密优先</Option>
-                  <Option value="STANDARD_ONLY">国际优先</Option>
-                </Select>
               </Form.Item>
             </Col>
           </Row>

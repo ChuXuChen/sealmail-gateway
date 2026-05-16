@@ -50,6 +50,7 @@ public class MailProcessingRepositoryImpl implements MailProcessingRepository {
         entity.setHelo(mailProcessing.getEnvelope().getHelo());
         entity.setReceivedAt(mailProcessing.getEnvelope().getReceivedAt());
         entity.setDirection(mailProcessing.getDirection().name());
+        entity.setRoutingDecision(mapper.serializeRoutingDecision(mailProcessing.getRoutingDecision()));
         entity.setResult(mailProcessing.getResult() != null ? mailProcessing.getResult().name() : null);
         entity.setUpdatedAt(Instant.now());
 
@@ -65,8 +66,35 @@ public class MailProcessingRepositoryImpl implements MailProcessingRepository {
             entityManager.merge(entity);
         }
 
+        saveSteps(mailProcessing);
         domainEventPublisher.publishEvents(mailProcessing);
         return mailProcessing;
+    }
+
+    private void saveSteps(MailProcessing mailProcessing) {
+        entityManager.createNativeQuery("DELETE FROM mail_processing_step WHERE mail_processing_id = :processingId")
+                .setParameter("processingId", mailProcessing.getId())
+                .executeUpdate();
+        for (ProcessingStep step : mailProcessing.getSteps()) {
+            entityManager.createNativeQuery("""
+                    INSERT INTO mail_processing_step (
+                        id, mail_processing_id, step_name, completed, success,
+                        error_message, started_at, completed_at
+                    ) VALUES (
+                        :id, :processingId, :stepName, :completed, :success,
+                        :errorMessage, :startedAt, :completedAt
+                    )
+                    """)
+                    .setParameter("id", step.getId())
+                    .setParameter("processingId", mailProcessing.getId())
+                    .setParameter("stepName", step.getStepName())
+                    .setParameter("completed", step.isCompleted())
+                    .setParameter("success", step.isSuccess())
+                    .setParameter("errorMessage", step.getErrorMessage())
+                    .setParameter("startedAt", step.getStartedAt())
+                    .setParameter("completedAt", step.getCompletedAt())
+                    .executeUpdate();
+        }
     }
 
     private String serializeRecipients(List<EmailAddress> recipients) {
@@ -82,7 +110,7 @@ public class MailProcessingRepositoryImpl implements MailProcessingRepository {
     @Transactional(readOnly = true, propagation = Propagation.SUPPORTS)
     public Optional<MailProcessing> findById(String id) {
         MailProcessingEntity entity = entityManager.find(MailProcessingEntity.class, id);
-        return Optional.ofNullable(entity).map(mapper::toDomain);
+        return Optional.ofNullable(entity).map(value -> withSteps(mapper.toDomain(value)));
     }
 
     @Override
@@ -93,7 +121,10 @@ public class MailProcessingRepositoryImpl implements MailProcessingRepository {
                 MailProcessingEntity.class
         );
         query.setParameter("messageId", messageId);
-        return query.getResultList().stream().map(mapper::toDomain).toList();
+        return query.getResultList().stream()
+                .map(mapper::toDomain)
+                .map(this::withSteps)
+                .toList();
     }
 
     @Override
@@ -104,6 +135,47 @@ public class MailProcessingRepositoryImpl implements MailProcessingRepository {
                 MailProcessingEntity.class
         );
         query.setParameter("result", result.name());
-        return query.getResultList().stream().map(mapper::toDomain).toList();
+        return query.getResultList().stream()
+                .map(mapper::toDomain)
+                .map(this::withSteps)
+                .toList();
+    }
+
+    private MailProcessing withSteps(MailProcessing processing) {
+        @SuppressWarnings("unchecked")
+        List<Object[]> rows = entityManager.createNativeQuery("""
+                SELECT id, step_name, completed, success, error_message, started_at, completed_at
+                FROM mail_processing_step
+                WHERE mail_processing_id = :processingId
+                ORDER BY started_at ASC, id ASC
+                """)
+                .setParameter("processingId", processing.getId())
+                .getResultList();
+        for (Object[] row : rows) {
+            processing.restoreStep(ProcessingStep.rehydrate(
+                    (String) row[0],
+                    (String) row[1],
+                    asBoolean(row[2]),
+                    asBoolean(row[3]),
+                    (String) row[4],
+                    asInstant(row[5]),
+                    asInstant(row[6])));
+        }
+        processing.clearDomainEvents();
+        return processing;
+    }
+
+    private boolean asBoolean(Object value) {
+        return value instanceof Boolean bool && bool;
+    }
+
+    private Instant asInstant(Object value) {
+        if (value instanceof Instant instant) {
+            return instant;
+        }
+        if (value instanceof java.sql.Timestamp timestamp) {
+            return timestamp.toInstant();
+        }
+        return null;
     }
 }

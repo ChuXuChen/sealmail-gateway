@@ -46,7 +46,10 @@ public class AuditDtoMapper {
             case "CERTIFICATE_REVOKED" -> "吊销证书";
             case "CERTIFICATE_DELETED" -> "删除证书";
             case "EMAIL_RECEIVED" -> "接收邮件";
+            case "EMAIL_ROUTED" -> "路由决策";
+            case "EMAIL_CERTIFICATE_SELECTED" -> "证书选择";
             case "EMAIL_DELIVERED" -> "投递邮件";
+            case "EMAIL_RELAYED" -> "Relay 投递";
             case "EMAIL_RELEASED" -> "放行邮件";
             case "EMAIL_REJECTED" -> "拒收邮件";
             case "EMAIL_QUARANTINED" -> "DLP 隔离";

@@ -4,6 +4,7 @@ import type { UploadProps } from 'antd';
 import { DownloadOutlined, ReloadOutlined, UploadOutlined } from '@ant-design/icons';
 import { Certificate } from '../types';
 import { caApi, certificateApi, crlUrls } from '../api/client';
+import { getApiErrorMessage } from '../api/errors';
 
 const { Title, Text } = Typography;
 
@@ -29,15 +30,15 @@ const Crl: React.FC = () => {
       ]);
       setCas(caRes.data.data);
       setAllCerts(certRes.data.data.items);
-    } catch {
-      message.error('加载 CA / 证书数据失败');
+    } catch (error) {
+      message.error(getApiErrorMessage(error, '加载 CA / 证书数据失败'));
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    load();
+    void Promise.resolve().then(load);
   }, []);
 
   const revokedByIssuer = useMemo(() => {
@@ -77,8 +78,8 @@ const Crl: React.FC = () => {
       setImportTarget(null);
       form.resetFields();
       load();
-    } catch (err: any) {
-      message.error(err.response?.data?.message || 'CRL 导入失败');
+    } catch (error) {
+      message.error(getApiErrorMessage(error, 'CRL 导入失败'));
     } finally {
       setImporting(false);
     }

@@ -21,6 +21,16 @@ import {
   SystemSettings,
   RelayPolicy,
   QuarantinePolicy,
+  CreateDomainConfigRequest,
+  UpdateDomainConfigRequest,
+  MailAuthConfigRequest,
+  RelayPolicyRequest,
+  QuarantinePolicyRequest,
+  CreateDlpPatternRequest,
+  UpdateDlpPatternRequest,
+  CreateDlpSelectionRequest,
+  UpdateDlpSelectionRequest,
+  SendProtectedMailRequest,
   GenerateSelfSignedRequest,
   CreateRootCaRequest,
   CreateIntermediateCaRequest,
@@ -84,6 +94,15 @@ export const auditLogApi = {
   getByUserId: (userId: string, params: { page?: number; size?: number }) =>
     apiClient.get<ApiResponse<PageResponse<AuditLog>>>(`/api/v1/audit-logs/user/${userId}`, { params }),
 
+  getByResource: (resourceType: string, resourceId: string, params: { page?: number; size?: number }) =>
+    apiClient.get<ApiResponse<PageResponse<AuditLog>>>(
+      `/api/v1/audit-logs/resource/${encodeURIComponent(resourceType)}/${encodeURIComponent(resourceId)}`,
+      { params },
+    ),
+
+  getByProcessingId: (processingId: string, params: { page?: number; size?: number }) =>
+    auditLogApi.getByResource('MAIL_PROCESSING', processingId, params),
+
   getByTimeRange: (startTime: string, endTime: string, params: { page?: number; size?: number }) =>
     apiClient.get<ApiResponse<PageResponse<AuditLog>>>(`/api/v1/audit-logs/time-range`, {
       params: { startTime, endTime, ...params },
@@ -110,10 +129,10 @@ export const domainConfigApi = {
   findByDomain: (domain: string) =>
     apiClient.get<ApiResponse<DomainConfig>>(`/api/v1/domains/domain/${encodeURIComponent(domain)}`),
 
-  create: (data: { domain: string; localDomain: boolean; encryptionPolicy?: string; preferredAlgorithm?: string; signingEnabled?: boolean; dkimEnabled?: boolean; active?: boolean }) =>
+  create: (data: CreateDomainConfigRequest) =>
     apiClient.post<ApiResponse<DomainConfig>>('/api/v1/domains', data),
 
-  update: (id: string, data: { encryptionPolicy?: string; preferredAlgorithm?: string; signingEnabled?: boolean; dkimEnabled?: boolean; active?: boolean }) =>
+  update: (id: string, data: UpdateDomainConfigRequest) =>
     apiClient.put<ApiResponse<DomainConfig>>(`/api/v1/domains/${encodeURIComponent(id)}`, data),
 
   delete: (id: string) =>
@@ -124,9 +143,7 @@ export const mailAuthApi = {
   config: () =>
     apiClient.get<ApiResponse<MailAuthConfig>>('/api/v1/mail-auth/config'),
 
-  updateConfig: (data: Partial<MailAuthConfig> & {
-    clearDkimPrivateKeySecretRef?: boolean;
-  }) =>
+  updateConfig: (data: MailAuthConfigRequest) =>
     apiClient.put<ApiResponse<MailAuthConfig>>('/api/v1/mail-auth/config', data),
 
   dnsRecords: (domain: string) =>
@@ -152,13 +169,13 @@ export const runtimePolicyApi = {
   getRelay: () =>
     apiClient.get<ApiResponse<RelayPolicy>>('/api/v1/runtime-policies/relay'),
 
-  updateRelay: (data: Partial<RelayPolicy> & { clearPasswordSecretRef?: boolean }) =>
+  updateRelay: (data: RelayPolicyRequest) =>
     apiClient.put<ApiResponse<RelayPolicy>>('/api/v1/runtime-policies/relay', data),
 
   getQuarantine: () =>
     apiClient.get<ApiResponse<QuarantinePolicy>>('/api/v1/runtime-policies/quarantine'),
 
-  updateQuarantine: (data: Partial<QuarantinePolicy>) =>
+  updateQuarantine: (data: QuarantinePolicyRequest) =>
     apiClient.put<ApiResponse<QuarantinePolicy>>('/api/v1/runtime-policies/quarantine', data),
 };
 
@@ -279,10 +296,10 @@ export const dlpApi = {
   listPatterns: () =>
     apiClient.get<ApiResponse<DlpPattern[]>>('/api/v1/dlp/patterns'),
 
-  createPattern: (data: Omit<DlpPattern, 'id' | 'createdAt' | 'updatedAt'>) =>
+  createPattern: (data: CreateDlpPatternRequest) =>
     apiClient.post<ApiResponse<DlpPattern>>('/api/v1/dlp/patterns', data),
 
-  updatePattern: (id: string, data: Partial<Omit<DlpPattern, 'id' | 'createdAt' | 'updatedAt'>>) =>
+  updatePattern: (id: string, data: UpdateDlpPatternRequest) =>
     apiClient.put<ApiResponse<DlpPattern>>(`/api/v1/dlp/patterns/${id}`, data),
 
   deletePattern: (id: string) =>
@@ -291,10 +308,10 @@ export const dlpApi = {
   listSelections: () =>
     apiClient.get<ApiResponse<DlpSelection[]>>('/api/v1/dlp/selections'),
 
-  createSelection: (data: Omit<DlpSelection, 'id' | 'createdAt' | 'updatedAt'>) =>
+  createSelection: (data: CreateDlpSelectionRequest) =>
     apiClient.post<ApiResponse<DlpSelection>>('/api/v1/dlp/selections', data),
 
-  updateSelection: (id: string, data: Partial<Omit<DlpSelection, 'id' | 'createdAt' | 'updatedAt'>>) =>
+  updateSelection: (id: string, data: UpdateDlpSelectionRequest) =>
     apiClient.put<ApiResponse<DlpSelection>>(`/api/v1/dlp/selections/${id}`, data),
 
   deleteSelection: (id: string) =>
@@ -303,13 +320,8 @@ export const dlpApi = {
 
 // Mail Test API
 export const mailTestApi = {
-  sendEncrypted: (data: {
-    from: string;
-    to: string[];
-    subject: string;
-    content: string;
-    preferredAlgorithm?: string;
-  }) => apiClient.post<ApiResponse<string>>('/api/v1/mail-test/send-encrypted', data),
+  sendEncrypted: (data: SendProtectedMailRequest) =>
+    apiClient.post<ApiResponse<string>>('/api/v1/mail-test/send-encrypted', data),
 
   testSmtpConfig: () =>
     apiClient.get<ApiResponse<string>>('/api/v1/mail-test/test-smtp-config'),

@@ -1,5 +1,6 @@
 package com.sealmail.infra.mail.pipeline.step;
 
+import com.sealmail.domain.audit.AuditLogType;
 import com.sealmail.domain.exceptionmail.ExceptionMail;
 import com.sealmail.domain.exceptionmail.ExceptionMailRepository;
 import com.sealmail.domain.mailsecurity.MailDirection;
@@ -13,7 +14,10 @@ import com.sealmail.domain.quarantine.QuarantineReason;
 import com.sealmail.domain.quarantine.QuarantineRepository;
 import com.sealmail.domain.quarantine.QuarantinedMail;
 import com.sealmail.domain.quarantine.spi.QuarantineNotificationPort;
+import com.sealmail.infra.events.DomainEventPublisher;
 import com.sealmail.infra.mail.pipeline.MailProcessingHeaders;
+import com.sealmail.infra.mail.pipeline.MailProcessingAuditEvents;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.messaging.Message;
@@ -31,15 +35,27 @@ public class QuarantineStep {
     private final ExceptionMailRepository exceptionMailRepository;
     private final QuarantinePolicyPort quarantinePolicyPort;
     private final QuarantineNotificationPort quarantineNotificationPort;
+    private final DomainEventPublisher domainEventPublisher;
 
     public QuarantineStep(QuarantineRepository quarantineRepository,
                           ExceptionMailRepository exceptionMailRepository,
                           QuarantinePolicyPort quarantinePolicyPort,
                           QuarantineNotificationPort quarantineNotificationPort) {
+        this(quarantineRepository, exceptionMailRepository, quarantinePolicyPort,
+                quarantineNotificationPort, null);
+    }
+
+    @Autowired
+    public QuarantineStep(QuarantineRepository quarantineRepository,
+                          ExceptionMailRepository exceptionMailRepository,
+                          QuarantinePolicyPort quarantinePolicyPort,
+                          QuarantineNotificationPort quarantineNotificationPort,
+                          DomainEventPublisher domainEventPublisher) {
         this.quarantineRepository = quarantineRepository;
         this.exceptionMailRepository = exceptionMailRepository;
         this.quarantinePolicyPort = quarantinePolicyPort;
         this.quarantineNotificationPort = quarantineNotificationPort;
+        this.domainEventPublisher = domainEventPublisher;
     }
 
     public Message<byte[]> execute(Message<byte[]> message) {
@@ -70,6 +86,7 @@ public class QuarantineStep {
                 );
                 quarantineRepository.save(quarantined);
                 notifyIfEnabled(quarantined);
+                recordQuarantineAudit(context, quarantined.getId(), disposition, quarantineReason, detail(message, reason));
             } else {
                 ExceptionMail exceptionMail = ExceptionMail.create(
                         java.util.UUID.randomUUID().toString(),
@@ -85,6 +102,7 @@ public class QuarantineStep {
                         message.getPayload()
                 );
                 exceptionMailRepository.save(exceptionMail);
+                recordQuarantineAudit(context, exceptionMail.getId(), disposition, quarantineReason, detail(message, reason));
             }
 
             return message;
@@ -108,6 +126,39 @@ public class QuarantineStep {
             log.warn("Failed to send quarantine notification for {}: {}",
                     quarantined.getId(), e.getMessage());
         }
+    }
+
+    private void recordQuarantineAudit(MailProcessingContext context,
+                                       String quarantineId,
+                                       MailRecordDisposition disposition,
+                                       QuarantineReason reason,
+                                       String detail) {
+        MailProcessingAuditEvents.publish(
+                domainEventPublisher,
+                AuditLogType.EMAIL_QUARANTINED,
+                context,
+                disposition == MailRecordDisposition.DLP_QUARANTINE
+                        ? "DLP_QUARANTINE_PERSISTED"
+                        : "EXCEPTION_MAIL_PERSISTED",
+                "quarantineId=" + quarantineId
+                        + ", disposition=" + disposition
+                        + ", reason=" + reason
+                        + ", detailCategory=" + detailCategory(detail)
+                        + MailProcessingAuditEvents.detailPresence(detail),
+                false);
+    }
+
+    private String detailCategory(String detail) {
+        if (detail == null || detail.isBlank()) {
+            return "NONE";
+        }
+        if (detail.startsWith("DLP BLOCK")) {
+            return "DLP_BLOCK";
+        }
+        if (detail.startsWith("DLP QUARANTINE")) {
+            return "DLP_QUARANTINE";
+        }
+        return "PROCESSING_ERROR";
     }
 
     public String getStepName() {

@@ -76,6 +76,26 @@ public class AuditLogController {
         return ApiResponse.ok(result);
     }
 
+    @GetMapping("/resource/{resourceType}/{resourceId}")
+    @Operation(summary = "按资源查询审计日志", description = "可按 MAIL_PROCESSING + processingId 查看邮件完整处理轨迹")
+    public ApiResponse<PageResponse<AuditLogResponse>> findByResource(
+            @Parameter(description = "资源类型") @PathVariable String resourceType,
+            @Parameter(description = "资源ID") @PathVariable String resourceId,
+            @Parameter(description = "页码（从1开始）")
+            @RequestParam(defaultValue = "1") @Min(1) int page,
+            @Parameter(description = "每页大小")
+            @RequestParam(defaultValue = "20") @Min(1) @Max(100) int size,
+            @AuthenticationPrincipal UserContext user) {
+
+        PageRequest pageRequest = PageRequest.builder().page(page).size(size).build();
+        PageResponse<AuditLogResponse> result = queryAuditLogUseCase.findByResource(
+                resourceType,
+                resourceId,
+                pageRequest,
+                user);
+        return ApiResponse.ok(result);
+    }
+
     @GetMapping("/time-range")
     @Operation(summary = "按时间范围查询审计日志", description = "按起止时间筛选审计日志")
     public ApiResponse<PageResponse<AuditLogResponse>> findByTimeRange(

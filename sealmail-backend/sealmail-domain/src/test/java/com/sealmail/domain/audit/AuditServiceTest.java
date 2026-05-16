@@ -70,6 +70,11 @@ class AuditServiceTest {
         }
 
         @Override
+        public List<AuditLog> findByResource(String resourceType, String resourceId, int page, int size) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
         public List<AuditLog> findByTimeRange(java.time.Instant startTime, java.time.Instant endTime, int page, int size) {
             throw new UnsupportedOperationException();
         }
@@ -96,6 +101,11 @@ class AuditServiceTest {
 
         @Override
         public long countByUserId(String userId) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public long countByResource(String resourceType, String resourceId) {
             throw new UnsupportedOperationException();
         }
 

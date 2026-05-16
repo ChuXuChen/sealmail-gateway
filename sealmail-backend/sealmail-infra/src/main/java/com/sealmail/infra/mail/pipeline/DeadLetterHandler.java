@@ -7,6 +7,7 @@ import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.integration.annotation.ServiceActivator;
 import org.springframework.messaging.Message;
 import org.springframework.messaging.MessageChannel;
+import org.springframework.messaging.support.ErrorMessage;
 import org.springframework.stereotype.Component;
 
 import java.io.ByteArrayOutputStream;
@@ -14,6 +15,7 @@ import java.io.PrintStream;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentLinkedDeque;
@@ -44,7 +46,10 @@ public class DeadLetterHandler {
         String errorMessage = error != null ? error.getMessage() : "Unknown error";
         String stackTrace = getStackTrace(error);
 
-        log.error("Dead letter received: {}\n{}", errorMessage, stackTrace);
+        log.error("Dead letter received: {}", errorMessage);
+        if (error != null) {
+            log.debug("Dead letter stack trace", error);
+        }
 
         DeadLetterEntry entry = new DeadLetterEntry(
                 Instant.now(),
@@ -86,10 +91,21 @@ public class DeadLetterHandler {
 
     private Map<String, Object> extractHeaders(Message<?> message) {
         MailProcessingContext context = context(message);
-        return Map.of(
-                "messageId", context != null ? context.envelope().getMessageId() : message.getHeaders().getId(),
-                "timestamp", message.getHeaders().getTimestamp()
-        );
+        if (context == null
+                && message instanceof ErrorMessage errorMessage
+                && errorMessage.getOriginalMessage() != null) {
+            context = context(errorMessage.getOriginalMessage());
+        }
+        Map<String, Object> headers = new LinkedHashMap<>();
+        headers.put("messageId", context != null ? context.envelope().getMessageId() : message.getHeaders().getId());
+        headers.put("timestamp", message.getHeaders().getTimestamp());
+        if (context != null) {
+            headers.put("processingId", context.processingId());
+            if (context.auditTrace() != null) {
+                headers.put("correlationId", context.auditTrace().correlationId());
+            }
+        }
+        return headers;
     }
 
     private MailProcessingContext context(Message<?> message) {

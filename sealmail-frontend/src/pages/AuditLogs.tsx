@@ -3,6 +3,7 @@ import {
   Button,
   Descriptions,
   Drawer,
+  Input,
   Segmented,
   Select,
   Space,
@@ -18,6 +19,7 @@ import {
 } from '@ant-design/icons';
 import { AuditLog } from '../types';
 import { auditLogApi } from '../api/client';
+import { getApiErrorMessage } from '../api/errors';
 
 const { Text, Title } = Typography;
 
@@ -143,6 +145,8 @@ const AuditLogs: React.FC = () => {
   const [category, setCategory] = useState<CategoryKey>('ALL');
   const [eventType, setEventType] = useState<string | undefined>();
   const [status, setStatus] = useState<StatusFilter>('ALL');
+  const [processingIdInput, setProcessingIdInput] = useState('');
+  const [processingId, setProcessingId] = useState('');
   const [detailVisible, setDetailVisible] = useState(false);
   const [selectedLog, setSelectedLog] = useState<AuditLog | null>(null);
 
@@ -153,16 +157,40 @@ const AuditLogs: React.FC = () => {
     return groups.map(({ label, options }) => ({ label, options }));
   }, [category]);
 
-  const hasFilters = category !== 'ALL' || eventType || status !== 'ALL';
+  const hasProcessingId = processingId.trim().length > 0;
+  const hasFilters = category !== 'ALL' || eventType || status !== 'ALL' || hasProcessingId;
 
-  useEffect(() => {
-    loadData();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pagination.page, pagination.size, category, eventType, status]);
+  const loadAllLogs = async () => {
+    const pageSize = 100;
+    const first = await auditLogApi.list({ page: 1, size: pageSize });
+    const page = first.data.data;
+    const items = [...page.items];
+    const totalPages = Math.ceil(page.total / pageSize);
+
+    for (let current = 2; current <= totalPages; current += 1) {
+      const response = await auditLogApi.list({ page: current, size: pageSize });
+      items.push(...response.data.data.items);
+    }
+
+    return items;
+  };
 
   const loadData = async () => {
     setLoading(true);
     try {
+      if (hasProcessingId) {
+        const response = await auditLogApi.getByProcessingId(processingId.trim(), {
+          page: pagination.page,
+          size: pagination.size,
+        });
+        setData(response.data.data.items);
+        setPagination((prev) => ({
+          ...prev,
+          total: response.data.data.total,
+        }));
+        return;
+      }
+
       if (hasFilters) {
         const logs = await loadAllLogs();
         const filtered = logs.filter((item) => matchesFilters(item, category, eventType, status));
@@ -184,32 +212,24 @@ const AuditLogs: React.FC = () => {
         ...prev,
         total: response.data.data.total,
       }));
-    } catch {
-      message.error('加载审计日志失败');
+    } catch (error) {
+      message.error(getApiErrorMessage(error, '加载审计日志失败'));
     } finally {
       setLoading(false);
     }
   };
 
-  const loadAllLogs = async () => {
-    const pageSize = 100;
-    const first = await auditLogApi.list({ page: 1, size: pageSize });
-    const page = first.data.data;
-    const items = [...page.items];
-    const totalPages = Math.ceil(page.total / pageSize);
-
-    for (let current = 2; current <= totalPages; current += 1) {
-      const response = await auditLogApi.list({ page: current, size: pageSize });
-      items.push(...response.data.data.items);
-    }
-
-    return items;
-  };
+  useEffect(() => {
+    void Promise.resolve().then(loadData);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pagination.page, pagination.size, category, eventType, status, processingId]);
 
   const clearFilters = () => {
     setCategory('ALL');
     setEventType(undefined);
     setStatus('ALL');
+    setProcessingId('');
+    setProcessingIdInput('');
     setPagination((prev) => ({ ...prev, page: 1 }));
   };
 
@@ -318,6 +338,25 @@ const AuditLogs: React.FC = () => {
             options={statusOptions}
             onChange={(value) => {
               setStatus(value as StatusFilter);
+              setPagination((prev) => ({ ...prev, page: 1 }));
+            }}
+          />
+          <Input.Search
+            allowClear
+            enterButton
+            style={{ width: 300 }}
+            placeholder="processingId"
+            value={processingIdInput}
+            onChange={(event) => {
+              const value = event.target.value;
+              setProcessingIdInput(value);
+              if (!value.trim()) {
+                setProcessingId('');
+                setPagination((prev) => ({ ...prev, page: 1 }));
+              }
+            }}
+            onSearch={(value) => {
+              setProcessingId(value.trim());
               setPagination((prev) => ({ ...prev, page: 1 }));
             }}
           />

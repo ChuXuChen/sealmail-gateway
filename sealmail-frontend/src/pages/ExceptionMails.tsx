@@ -13,6 +13,7 @@ import {
 import { EyeOutlined } from '@ant-design/icons';
 import { ExceptionMailItem } from '../types';
 import { exceptionMailApi } from '../api/client';
+import { getApiErrorMessage } from '../api/errors';
 
 const { Title } = Typography;
 const { Option } = Select;
@@ -51,10 +52,6 @@ const ExceptionMails: React.FC = () => {
   const [detailVisible, setDetailVisible] = useState(false);
   const [selectedItem, setSelectedItem] = useState<ExceptionMailItem | null>(null);
 
-  useEffect(() => {
-    loadData();
-  }, [pagination.page, pagination.size, reasonFilter]);
-
   const loadData = async () => {
     setLoading(true);
     try {
@@ -68,12 +65,17 @@ const ExceptionMails: React.FC = () => {
         ...prev,
         total: response.data.data.total,
       }));
-    } catch {
-      message.error('加载异常邮件失败');
+    } catch (error) {
+      message.error(getApiErrorMessage(error, '加载异常邮件失败'));
     } finally {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    void Promise.resolve().then(loadData);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pagination.page, pagination.size, reasonFilter]);
 
   const columns = [
     {

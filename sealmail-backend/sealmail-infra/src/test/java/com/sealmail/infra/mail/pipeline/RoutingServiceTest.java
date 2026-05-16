@@ -79,11 +79,14 @@ class RoutingServiceTest {
         Message<byte[]> message = MessageBuilder.withPayload("hello".getBytes())
                 .setHeader(MailProcessingHeaders.CONTEXT, MailProcessingContext.create(envelope))
                 .build();
+        String entryProcessingId = ((MailProcessingContext) message.getHeaders()
+                .get(MailProcessingHeaders.CONTEXT)).processingId();
 
         Message<byte[]> routed = routingService.routeOutbound(message);
 
         MailProcessingContext context = (MailProcessingContext) routed.getHeaders().get(MailProcessingHeaders.CONTEXT);
         assertNotNull(context);
+        assertEquals(entryProcessingId, context.processingId());
         assertEquals(envelope, context.envelope());
         assertEquals(MailDirection.OUTBOUND, context.direction());
         assertEquals(CryptoProfile.STANDARD, context.cryptoProfile());

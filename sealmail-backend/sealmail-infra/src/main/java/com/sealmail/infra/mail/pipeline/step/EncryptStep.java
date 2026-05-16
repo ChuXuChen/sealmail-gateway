@@ -1,5 +1,6 @@
 package com.sealmail.infra.mail.pipeline.step;
 
+import com.sealmail.domain.audit.AuditLogType;
 import com.sealmail.domain.certificate.CertificateId;
 import com.sealmail.domain.certificate.spi.SMIMEOperations;
 import com.sealmail.domain.mailsecurity.CryptoProfile;
@@ -12,6 +13,7 @@ import com.sealmail.domain.mailsecurity.event.MailEncrypted;
 import com.sealmail.domain.shared.model.EmailAddress;
 import com.sealmail.infra.events.DomainEventPublisher;
 import com.sealmail.infra.mail.pipeline.MailProcessingHeaders;
+import com.sealmail.infra.mail.pipeline.MailProcessingAuditEvents;
 import com.sealmail.infra.mail.pipeline.MailProcessingMessages;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -80,25 +82,48 @@ public class EncryptStep {
             log.info("=== S/MIME ENCRYPTION COMPLETED ===");
             log.info("  Original size: {} bytes", originalSize);
             log.info("  Encrypted size: {} bytes", payload.length);
-            log.info("  First 100 chars: {}", new String(payload).replaceAll("[\r\n]", " ").substring(0, Math.min(100, payload.length)));
 
             context = context
                     .withCryptoProfile(plan.profile())
                     .withSmimeEncryption(plan.profile().name(), List.copyOf(plan.certificates().keySet()));
+            recordAudit(context, "SMIME_ENCRYPT", "profile=" + plan.profile()
+                    + ", recipientCertificateCount=" + plan.certificates().size()
+                    + ", recipientThumbprints=" + plan.thumbprints().values().stream()
+                    .filter(value -> value != null && !value.isBlank())
+                    .collect(java.util.stream.Collectors.joining(",")), true);
             events.forEach(domainEventPublisher::publishEvent);
             return MailProcessingMessages.withPayloadAndContext(message, payload, context);
 
         } catch (Exception e) {
             if (e instanceof MailProcessingException mailProcessingException) {
+                recordAudit(
+                        mailProcessingException.context() != null ? mailProcessingException.context() : context,
+                        "SMIME_ENCRYPT_FAILED",
+                        "errorType=" + mailProcessingException.errorType().name()
+                                + MailProcessingAuditEvents.detailPresence(mailProcessingException.getMessage()),
+                        false);
                 throw mailProcessingException;
             }
             log.error("S/MIME encryption failed: {}", e.getMessage(), e);
+            recordAudit(context, "SMIME_ENCRYPT_FAILED",
+                    "errorType=" + MailProcessingErrorType.ENCRYPTION
+                            + MailProcessingAuditEvents.detailPresence(e.getMessage()), false);
             throw new MailProcessingException(
                     MailProcessingErrorType.ENCRYPTION,
                     "S/MIME encryption failed: " + e.getMessage(),
                     context,
                     e);
         }
+    }
+
+    private void recordAudit(MailProcessingContext context, String action, String detail, boolean success) {
+        MailProcessingAuditEvents.publish(
+                domainEventPublisher,
+                AuditLogType.EMAIL_ENCRYPTED,
+                context,
+                action,
+                detail,
+                success);
     }
 
     public String getStepName() {

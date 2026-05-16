@@ -125,8 +125,8 @@ class DlpStepTest {
 
         verify(domainEventPublisher).publishEvent(argThat((AuditEvent event) ->
                 AuditLogType.DLP_VIOLATION.name().equals(event.getEventType())
-                        && "EMAIL".equals(event.getResourceType())
-                        && context(payload).envelope().getMessageId().equals(event.getResourceId())
+                        && "MAIL_PROCESSING".equals(event.getResourceType())
+                        && "processing-1".equals(event.getResourceId())
                         && "DLP_WARN".equals(event.getAction())
         ));
     }
@@ -154,7 +154,7 @@ class DlpStepTest {
                 "helo",
                 Instant.now(),
                 payload
-        ));
+        )).withProcessingId("processing-1");
     }
 
     private static MailProcessingContext context(org.springframework.messaging.Message<?> message) {

@@ -193,6 +193,24 @@ export interface DomainConfig {
   active: boolean;
 }
 
+export interface CreateDomainConfigRequest {
+  domain: string;
+  localDomain: boolean;
+  encryptionPolicy?: string;
+  preferredAlgorithm?: string;
+  signingEnabled?: boolean;
+  dkimEnabled?: boolean;
+  active?: boolean;
+}
+
+export interface UpdateDomainConfigRequest {
+  encryptionPolicy?: string;
+  preferredAlgorithm?: string;
+  signingEnabled?: boolean;
+  dkimEnabled?: boolean;
+  active?: boolean;
+}
+
 export interface MailAuthStatus {
   enabled: boolean;
   authservId: string;
@@ -233,6 +251,10 @@ export interface MailAuthConfig {
   dmarcQuarantineRejectPolicy: boolean;
   updatedAt?: string;
 }
+
+export type MailAuthConfigRequest = Partial<MailAuthConfig> & {
+  clearDkimPrivateKeySecretRef?: boolean;
+};
 
 export interface DnsRecord {
   type: 'DKIM' | 'SPF' | 'DMARC' | string;
@@ -322,6 +344,25 @@ export interface QuarantinePolicy {
   notificationEnabled: boolean;
   releaseRequiresEncryption: boolean;
   updatedAt?: string;
+}
+
+export type RelayPolicyRequest = Partial<RelayPolicy> & {
+  clearPasswordSecretRef?: boolean;
+};
+
+export type QuarantinePolicyRequest = Partial<QuarantinePolicy>;
+
+export type CreateDlpPatternRequest = Omit<DlpPattern, 'id' | 'createdAt' | 'updatedAt'>;
+export type UpdateDlpPatternRequest = Partial<CreateDlpPatternRequest>;
+
+export type CreateDlpSelectionRequest = Omit<DlpSelection, 'id' | 'createdAt' | 'updatedAt'>;
+export type UpdateDlpSelectionRequest = Partial<CreateDlpSelectionRequest>;
+
+export interface SendProtectedMailRequest {
+  from: string;
+  to: string[];
+  subject: string;
+  content: string;
 }
 
 // Certificate Issuance Types

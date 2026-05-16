@@ -3,6 +3,7 @@ import { Button, Form, Input, InputNumber, Modal, Popconfirm, Select, Space, Swi
 import { DeleteOutlined, EditOutlined, PlusOutlined } from '@ant-design/icons';
 import type { TableColumnsType } from 'antd';
 import { dlpApi } from '../api/client';
+import { getApiErrorMessage } from '../api/errors';
 import { DlpPattern } from '../types';
 
 const { Title } = Typography;
@@ -27,18 +28,6 @@ const actionOptions = Object.entries(actionLabels).map(([value, label]) => ({
   label,
 }));
 
-const getErrorMessage = (error: unknown, fallback: string) => {
-  if (
-    typeof error === 'object' &&
-    error !== null &&
-    'response' in error &&
-    typeof (error as { response?: { data?: { message?: unknown } } }).response?.data?.message === 'string'
-  ) {
-    return (error as { response: { data: { message: string } } }).response.data.message;
-  }
-  return fallback;
-};
-
 const DlpPatterns: React.FC = () => {
   const [data, setData] = useState<DlpPattern[]>([]);
   const [loading, setLoading] = useState(false);
@@ -46,21 +35,21 @@ const DlpPatterns: React.FC = () => {
   const [editing, setEditing] = useState<DlpPattern | null>(null);
   const [form] = Form.useForm();
 
-  useEffect(() => {
-    loadData();
-  }, []);
-
   const loadData = async () => {
     setLoading(true);
     try {
       const response = await dlpApi.listPatterns();
       setData(response.data.data);
-    } catch {
-      message.error('加载 DLP 规则失败');
+    } catch (error) {
+      message.error(getApiErrorMessage(error, '加载 DLP 规则失败'));
     } finally {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    void Promise.resolve().then(loadData);
+  }, []);
 
   const showCreate = () => {
     setEditing(null);
@@ -91,7 +80,7 @@ const DlpPatterns: React.FC = () => {
       setModalOpen(false);
       loadData();
     } catch (error) {
-      message.error(getErrorMessage(error, '保存 DLP 规则失败'));
+      message.error(getApiErrorMessage(error, '保存 DLP 规则失败'));
     }
   };
 
@@ -101,7 +90,7 @@ const DlpPatterns: React.FC = () => {
       message.success('DLP 规则已删除');
       loadData();
     } catch (error) {
-      message.error(getErrorMessage(error, '删除 DLP 规则失败'));
+      message.error(getApiErrorMessage(error, '删除 DLP 规则失败'));
     }
   };
 

@@ -14,10 +14,33 @@ public class ProcessingStep extends Entity<String> {
     private Instant completedAt;
 
     public ProcessingStep(String id, String stepName) {
+        this(id, stepName, false, false, null, Instant.now(), null);
+    }
+
+    private ProcessingStep(String id,
+                           String stepName,
+                           boolean completed,
+                           boolean success,
+                           String errorMessage,
+                           Instant startedAt,
+                           Instant completedAt) {
         super(id);
         this.stepName = stepName;
-        this.startedAt = Instant.now();
-        this.completed = false;
+        this.completed = completed;
+        this.success = success;
+        this.errorMessage = errorMessage;
+        this.startedAt = startedAt != null ? startedAt : Instant.now();
+        this.completedAt = completedAt;
+    }
+
+    public static ProcessingStep rehydrate(String id,
+                                           String stepName,
+                                           boolean completed,
+                                           boolean success,
+                                           String errorMessage,
+                                           Instant startedAt,
+                                           Instant completedAt) {
+        return new ProcessingStep(id, stepName, completed, success, errorMessage, startedAt, completedAt);
     }
 
     public void complete(boolean success, String errorMessage) {

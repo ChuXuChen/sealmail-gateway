@@ -32,6 +32,7 @@ import {
 import type { ColumnsType } from 'antd/es/table';
 import { Certificate } from '../types';
 import { caApi, certificateApi } from '../api/client';
+import { getApiErrorMessage } from '../api/errors';
 
 const { Title, Text } = Typography;
 
@@ -173,7 +174,6 @@ const CertificateAuthorities: React.FC = () => {
   const [rootModal, setRootModal] = useState(false);
   const [intModal, setIntModal] = useState(false);
   const [signCsrModal, setSignCsrModal] = useState(false);
-  const [expandedRowKeys, setExpandedRowKeys] = useState<string[]>([]);
   const [issuing, setIssuing] = useState(false);
   const [detail, setDetail] = useState<Certificate | null>(null);
   const [confirmAction, setConfirmAction] = useState<ConfirmAction | null>(null);
@@ -187,15 +187,15 @@ const CertificateAuthorities: React.FC = () => {
     try {
       const res = await caApi.list();
       setData(res.data.data);
-    } catch {
-      message.error('加载 CA 列表失败');
+    } catch (error) {
+      message.error(getApiErrorMessage(error, '加载 CA 列表失败'));
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    loadData();
+    void Promise.resolve().then(loadData);
   }, []);
 
   const roots = useMemo(
@@ -271,9 +271,10 @@ const CertificateAuthorities: React.FC = () => {
     return rootRecords;
   }, [data, filteredFlatData, filters.type, roots]);
 
-  useEffect(() => {
-    setExpandedRowKeys(tableData.filter((record) => record.children?.length).map((record) => record.id));
-  }, [tableData]);
+  const expandedRowKeys = useMemo(
+    () => tableData.filter((record) => record.children?.length).map((record) => record.id),
+    [tableData],
+  );
 
   const handleCreateRoot = async (values: {
     commonName: string;
@@ -289,8 +290,8 @@ const CertificateAuthorities: React.FC = () => {
       setRootModal(false);
       rootForm.resetFields();
       loadData();
-    } catch (err: any) {
-      message.error(err.response?.data?.message || 'Root CA 创建失败');
+    } catch (error) {
+      message.error(getApiErrorMessage(error, 'Root CA 创建失败'));
     } finally {
       setIssuing(false);
     }
@@ -311,8 +312,8 @@ const CertificateAuthorities: React.FC = () => {
       setIntModal(false);
       intForm.resetFields();
       loadData();
-    } catch (err: any) {
-      message.error(err.response?.data?.message || 'Intermediate CA 创建失败');
+    } catch (error) {
+      message.error(getApiErrorMessage(error, 'Intermediate CA 创建失败'));
     } finally {
       setIssuing(false);
     }
@@ -331,8 +332,8 @@ const CertificateAuthorities: React.FC = () => {
       message.success('CSR 已签发为终端证书');
       setSignCsrModal(false);
       signCsrForm.resetFields();
-    } catch (err: any) {
-      message.error(err.response?.data?.message || 'CSR 签发失败');
+    } catch (error) {
+      message.error(getApiErrorMessage(error, 'CSR 签发失败'));
     } finally {
       setIssuing(false);
     }
@@ -343,8 +344,8 @@ const CertificateAuthorities: React.FC = () => {
       await caApi.revoke(id, '管理员手动吊销');
       message.success('CA 已吊销（已签发的子证书已级联吊销）');
       loadData();
-    } catch {
-      message.error('吊销失败');
+    } catch (error) {
+      message.error(getApiErrorMessage(error, '吊销失败'));
     }
   };
 
@@ -353,8 +354,8 @@ const CertificateAuthorities: React.FC = () => {
       await caApi.trust(id);
       message.success('已标记为信任');
       loadData();
-    } catch {
-      message.error('操作失败');
+    } catch (error) {
+      message.error(getApiErrorMessage(error, '操作失败'));
     }
   };
 
@@ -363,8 +364,8 @@ const CertificateAuthorities: React.FC = () => {
       await caApi.untrust(id);
       message.success('已撤销信任');
       loadData();
-    } catch {
-      message.error('操作失败');
+    } catch (error) {
+      message.error(getApiErrorMessage(error, '操作失败'));
     }
   };
 
@@ -373,8 +374,8 @@ const CertificateAuthorities: React.FC = () => {
       await caApi.delete(id);
       message.success('CA 已删除');
       loadData();
-    } catch {
-      message.error('删除失败');
+    } catch (error) {
+      message.error(getApiErrorMessage(error, '删除失败'));
     }
   };
 
@@ -779,7 +780,6 @@ const CertificateAuthorities: React.FC = () => {
         size="small"
         expandable={{
           expandedRowKeys,
-          onExpandedRowsChange: (keys) => setExpandedRowKeys(keys.map(String)),
         }}
         scroll={{ x: 1160 }}
         pagination={{ pageSize: 10, showSizeChanger: true, showTotal: (t) => `共 ${t} 条` }}

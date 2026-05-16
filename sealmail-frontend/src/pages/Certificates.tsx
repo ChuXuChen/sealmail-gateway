@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import {
   Table,
   Button,
@@ -34,6 +34,7 @@ import {
 } from '@ant-design/icons';
 import { Certificate, CertificateBinding, CertificateBindingPurpose } from '../types';
 import { certificateApi, caApi, certificateBindingApi } from '../api/client';
+import { getApiErrorMessage } from '../api/errors';
 
 const { Title } = Typography;
 const { TextArea } = Input;
@@ -85,7 +86,7 @@ const Certificates: React.FC = () => {
     [cas],
   );
 
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     setLoading(true);
     try {
       const [certRes, caRes, bindingRes] = await Promise.all([
@@ -100,17 +101,16 @@ const Certificates: React.FC = () => {
         ...prev,
         total: certRes.data.data.total,
       }));
-    } catch {
-      message.error('加载证书列表失败');
+    } catch (error) {
+      message.error(getApiErrorMessage(error, '加载证书列表失败'));
     } finally {
       setLoading(false);
     }
-  };
+  }, [pagination.page, pagination.size]);
 
   React.useEffect(() => {
-    loadData();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pagination.page, pagination.size]);
+    void Promise.resolve().then(loadData);
+  }, [loadData]);
 
   const handleImport = async (values: {
     pemData: string;
@@ -125,8 +125,8 @@ const Certificates: React.FC = () => {
       setImportModalVisible(false);
       form.resetFields();
       loadData();
-    } catch {
-      message.error('证书导入失败');
+    } catch (error) {
+      message.error(getApiErrorMessage(error, '证书导入失败'));
     }
   };
 
@@ -152,8 +152,8 @@ const Certificates: React.FC = () => {
       setSelfSignedModalVisible(false);
       selfSignedForm.resetFields();
       loadData();
-    } catch (err: any) {
-      message.error(err.response?.data?.message || '自签名证书生成失败');
+    } catch (error) {
+      message.error(getApiErrorMessage(error, '自签名证书生成失败'));
     } finally {
       setIssuing(false);
     }
@@ -175,8 +175,8 @@ const Certificates: React.FC = () => {
       setIssueByCaModalVisible(false);
       issueByCaForm.resetFields();
       loadData();
-    } catch (err: any) {
-      message.error(err.response?.data?.message || 'CA 签发失败');
+    } catch (error) {
+      message.error(getApiErrorMessage(error, 'CA 签发失败'));
     } finally {
       setIssuing(false);
     }
@@ -187,8 +187,8 @@ const Certificates: React.FC = () => {
       await certificateApi.trust(id);
       message.success('证书已标记为信任');
       loadData();
-    } catch {
-      message.error('操作失败');
+    } catch (error) {
+      message.error(getApiErrorMessage(error, '操作失败'));
     }
   };
 
@@ -197,8 +197,8 @@ const Certificates: React.FC = () => {
       await certificateApi.untrust(id);
       message.success('已撤销该证书的信任');
       loadData();
-    } catch {
-      message.error('操作失败');
+    } catch (error) {
+      message.error(getApiErrorMessage(error, '操作失败'));
     }
   };
 
@@ -207,8 +207,8 @@ const Certificates: React.FC = () => {
       await certificateApi.revoke(id, '管理员手动吊销');
       message.success('证书已吊销');
       loadData();
-    } catch {
-      message.error('操作失败');
+    } catch (error) {
+      message.error(getApiErrorMessage(error, '操作失败'));
     }
   };
 
@@ -217,8 +217,8 @@ const Certificates: React.FC = () => {
       await certificateApi.delete(id);
       message.success('证书已删除');
       loadData();
-    } catch {
-      message.error('证书删除失败');
+    } catch (error) {
+      message.error(getApiErrorMessage(error, '证书删除失败'));
     }
   };
 
@@ -235,8 +235,8 @@ const Certificates: React.FC = () => {
       });
       message.success(purpose === 'ENCRYPTION' ? '加密证书绑定已更新' : '签名证书绑定已更新');
       loadData();
-    } catch (err: any) {
-      message.error(err.response?.data?.message || '证书绑定失败');
+    } catch (error) {
+      message.error(getApiErrorMessage(error, '证书绑定失败'));
     }
   };
 
@@ -245,165 +245,148 @@ const Certificates: React.FC = () => {
       await certificateBindingApi.delete(id);
       message.success('证书绑定已删除');
       loadData();
-    } catch {
-      message.error('删除证书绑定失败');
+    } catch (error) {
+      message.error(getApiErrorMessage(error, '删除证书绑定失败'));
     }
   };
 
-  const columns = useMemo(
-    () => [
-      {
-        title: '别名',
-        dataIndex: 'alias',
-        key: 'alias',
-        render: (text: string, record: Certificate) =>
-          text || (record.subjectDn ? record.subjectDn.substring(0, 30) + '...' : '-'),
-      },
-      {
-        title: '所有者邮箱',
-        dataIndex: 'ownerEmail',
-        key: 'ownerEmail',
-      },
-      {
-        title: '算法类型',
-        dataIndex: 'algorithm',
-        key: 'algorithm',
-        render: (alg: string) => <AlgorithmTag algorithm={alg} />,
-      },
-      {
-        title: '私钥',
-        key: 'hasPrivateKey',
-        render: (_: unknown, record: Certificate) =>
-          record.hasPrivateKey ? (
-            <Tag color="success" icon={<KeyOutlined />}>私钥</Tag>
-          ) : (
-            <Tag>无钥</Tag>
-          ),
-      },
-      {
-        title: '状态',
-        key: 'status',
-        render: (_: unknown, record: Certificate) => <StatusTags record={record} />,
-      },
-      {
-        title: '绑定',
-        key: 'binding',
-        render: (_: unknown, record: Certificate) => {
-          const encryptionBinding = bindingFor(record, 'ENCRYPTION');
-          const signingBinding = bindingFor(record, 'SIGNING');
-          return (
-            <Space wrap>
-              {encryptionBinding?.certificateId === record.id && encryptionBinding.enabled ? (
-                <Popconfirm
-                  title="删除此加密绑定？"
-                  onConfirm={() => handleDeleteBinding(encryptionBinding.id)}
-                  okText="删除"
-                  cancelText="取消"
-                >
-                  <Tag color="success" icon={<LinkOutlined />}>加密</Tag>
-                </Popconfirm>
-              ) : (
-                <Button
-                  size="small"
-                  icon={<LinkOutlined />}
-                  disabled={!record.suitableForEncryption}
-                  onClick={() => handleBind(record, 'ENCRYPTION')}
-                >
-                  绑加密
-                </Button>
-              )}
-              {signingBinding?.certificateId === record.id && signingBinding.enabled ? (
-                <Popconfirm
-                  title="删除此签名绑定？"
-                  onConfirm={() => handleDeleteBinding(signingBinding.id)}
-                  okText="删除"
-                  cancelText="取消"
-                >
-                  <Tag color="processing" icon={<LinkOutlined />}>签名</Tag>
-                </Popconfirm>
-              ) : (
-                <Button
-                  size="small"
-                  icon={<LinkOutlined />}
-                  disabled={!record.suitableForSigning || !record.hasPrivateKey}
-                  onClick={() => handleBind(record, 'SIGNING')}
-                >
-                  绑签名
-                </Button>
-              )}
-            </Space>
-          );
-        },
-      },
-      {
-        title: '有效期至',
-        dataIndex: 'notAfter',
-        key: 'notAfter',
-        render: (date: string) => new Date(date).toLocaleDateString(),
-      },
-      {
-        title: '导入时间',
-        dataIndex: 'createdAt',
-        key: 'createdAt',
-        render: (date: string) => new Date(date).toLocaleDateString(),
-      },
-      {
-        title: '操作',
-        key: 'actions',
-        render: (_: unknown, record: Certificate) => (
-          <Space>
-            <Button
-              type="link"
-              size="small"
-              icon={<EyeOutlined />}
-              onClick={() => {
-                setSelectedCert(record);
-                setDetailVisible(true);
-              }}
-            >
-              查看
-            </Button>
-            {record.trusted ? (
+  const columns = [
+    {
+      title: '别名',
+      dataIndex: 'alias',
+      key: 'alias',
+      render: (text: string, record: Certificate) =>
+        text || (record.subjectDn ? record.subjectDn.substring(0, 30) + '...' : '-'),
+    },
+    {
+      title: '所有者邮箱',
+      dataIndex: 'ownerEmail',
+      key: 'ownerEmail',
+    },
+    {
+      title: '算法类型',
+      dataIndex: 'algorithm',
+      key: 'algorithm',
+      render: (alg: string) => <AlgorithmTag algorithm={alg} />,
+    },
+    {
+      title: '私钥',
+      key: 'hasPrivateKey',
+      render: (_: unknown, record: Certificate) =>
+        record.hasPrivateKey ? (
+          <Tag color="success" icon={<KeyOutlined />}>私钥</Tag>
+        ) : (
+          <Tag>无钥</Tag>
+        ),
+    },
+    {
+      title: '状态',
+      key: 'status',
+      render: (_: unknown, record: Certificate) => <StatusTags record={record} />,
+    },
+    {
+      title: '绑定',
+      key: 'binding',
+      render: (_: unknown, record: Certificate) => {
+        const encryptionBinding = bindingFor(record, 'ENCRYPTION');
+        const signingBinding = bindingFor(record, 'SIGNING');
+        return (
+          <Space wrap>
+            {encryptionBinding?.certificateId === record.id && encryptionBinding.enabled ? (
               <Popconfirm
-                title="撤销此证书的信任？"
-                onConfirm={() => handleUntrust(record.id)}
-                okText="确认"
+                title="删除此加密绑定？"
+                onConfirm={() => handleDeleteBinding(encryptionBinding.id)}
+                okText="删除"
                 cancelText="取消"
               >
-                <Button type="link" size="small" icon={<LockOutlined />}>
-                  撤销信任
-                </Button>
+                <Tag color="success" icon={<LinkOutlined />}>加密</Tag>
               </Popconfirm>
             ) : (
               <Button
-                type="link"
                 size="small"
-                icon={<UnlockOutlined />}
-                onClick={() => handleTrust(record.id)}
+                icon={<LinkOutlined />}
+                disabled={!record.suitableForEncryption}
+                onClick={() => handleBind(record, 'ENCRYPTION')}
               >
-                信任
+                绑加密
               </Button>
             )}
-            {!record.revoked && (
+            {signingBinding?.certificateId === record.id && signingBinding.enabled ? (
               <Popconfirm
-                title="确定要吊销此证书吗？"
-                onConfirm={() => handleRevoke(record.id)}
-                okText="确定"
+                title="删除此签名绑定？"
+                onConfirm={() => handleDeleteBinding(signingBinding.id)}
+                okText="删除"
                 cancelText="取消"
               >
-                <Button
-                  type="link"
-                  size="small"
-                  danger
-                  icon={<LockOutlined />}
-                >
-                  吊销
-                </Button>
+                <Tag color="processing" icon={<LinkOutlined />}>签名</Tag>
               </Popconfirm>
+            ) : (
+              <Button
+                size="small"
+                icon={<LinkOutlined />}
+                disabled={!record.suitableForSigning || !record.hasPrivateKey}
+                onClick={() => handleBind(record, 'SIGNING')}
+              >
+                绑签名
+              </Button>
             )}
+          </Space>
+        );
+      },
+    },
+    {
+      title: '有效期至',
+      dataIndex: 'notAfter',
+      key: 'notAfter',
+      render: (date: string) => new Date(date).toLocaleDateString(),
+    },
+    {
+      title: '导入时间',
+      dataIndex: 'createdAt',
+      key: 'createdAt',
+      render: (date: string) => new Date(date).toLocaleDateString(),
+    },
+    {
+      title: '操作',
+      key: 'actions',
+      render: (_: unknown, record: Certificate) => (
+        <Space>
+          <Button
+            type="link"
+            size="small"
+            icon={<EyeOutlined />}
+            onClick={() => {
+              setSelectedCert(record);
+              setDetailVisible(true);
+            }}
+          >
+            查看
+          </Button>
+          {record.trusted ? (
             <Popconfirm
-              title="确定要删除此证书吗？关联的密钥将自动解除关联。"
-              onConfirm={() => handleDelete(record.id)}
+              title="撤销此证书的信任？"
+              onConfirm={() => handleUntrust(record.id)}
+              okText="确认"
+              cancelText="取消"
+            >
+              <Button type="link" size="small" icon={<LockOutlined />}>
+                撤销信任
+              </Button>
+            </Popconfirm>
+          ) : (
+            <Button
+              type="link"
+              size="small"
+              icon={<UnlockOutlined />}
+              onClick={() => handleTrust(record.id)}
+            >
+              信任
+            </Button>
+          )}
+          {!record.revoked && (
+            <Popconfirm
+              title="确定要吊销此证书吗？"
+              onConfirm={() => handleRevoke(record.id)}
               okText="确定"
               cancelText="取消"
             >
@@ -411,17 +394,31 @@ const Certificates: React.FC = () => {
                 type="link"
                 size="small"
                 danger
-                icon={<DeleteOutlined />}
+                icon={<LockOutlined />}
               >
-                删除
+                吊销
               </Button>
             </Popconfirm>
-          </Space>
-        ),
-      },
-    ],
-    [bindings],
-  );
+          )}
+          <Popconfirm
+            title="确定要删除此证书吗？关联的密钥将自动解除关联。"
+            onConfirm={() => handleDelete(record.id)}
+            okText="确定"
+            cancelText="取消"
+          >
+            <Button
+              type="link"
+              size="small"
+              danger
+              icon={<DeleteOutlined />}
+            >
+              删除
+            </Button>
+          </Popconfirm>
+        </Space>
+      ),
+    },
+  ];
 
   return (
     <div style={{ padding: 24 }}>

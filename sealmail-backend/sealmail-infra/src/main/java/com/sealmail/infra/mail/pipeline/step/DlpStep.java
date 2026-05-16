@@ -10,11 +10,11 @@ import com.sealmail.domain.mailsecurity.MailProcessingDecision;
 import com.sealmail.domain.mailsecurity.MailProcessingErrorType;
 import com.sealmail.domain.mailsecurity.MailProcessingException;
 import com.sealmail.domain.mailsecurity.MailRecordDisposition;
-import com.sealmail.domain.shared.event.AuditEvent;
 import com.sealmail.infra.dlp.DlpService;
 import com.sealmail.infra.dlp.MimeContentExtractor;
 import com.sealmail.infra.events.DomainEventPublisher;
 import com.sealmail.infra.mail.pipeline.MailProcessingHeaders;
+import com.sealmail.infra.mail.pipeline.MailProcessingAuditEvents;
 import com.sealmail.infra.mail.pipeline.MailProcessingMessages;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.messaging.Message;
@@ -66,7 +66,7 @@ public class DlpStep {
                         violation.getDescription(),
                         violation.getSeverity());
             }
-            recordViolation(message, envelope, result);
+            recordViolation(context, result);
 
             return switch (result.getFinalAction()) {
                 case BLOCK -> MailProcessingMessages.quarantine(
@@ -119,19 +119,17 @@ public class DlpStep {
                 .orElse("") + " and " + (violations.size() - 3) + " more";
     }
 
-    private void recordViolation(Message<byte[]> message, MailEnvelope envelope, DlpScanResult result) {
+    private void recordViolation(MailProcessingContext context,
+                                 DlpScanResult result) {
         try {
-            String messageId = envelope != null ? envelope.getMessageId() : message.getHeaders().getId().toString();
-            domainEventPublisher.publishEvent(AuditEvent.builder()
-                    .eventType(AuditLogType.DLP_VIOLATION.name())
-                    .resourceType("EMAIL")
-                    .resourceId(messageId)
-                    .action("DLP_" + result.getFinalAction().name())
-                    .description("action=" + result.getFinalAction()
+            MailProcessingAuditEvents.publish(
+                    domainEventPublisher,
+                    AuditLogType.DLP_VIOLATION,
+                    context,
+                    "DLP_" + result.getFinalAction().name(),
+                    "action=" + result.getFinalAction()
                             + ", severity=" + result.getMaxSeverity()
-                            + ", rules=" + ruleSummary(result.getViolations()))
-                    .success(true)
-                    .build());
+                            + ", rules=" + ruleSummary(result.getViolations()));
         } catch (Exception e) {
             log.warn("Failed to record DLP audit log: {}", e.getMessage());
         }

@@ -76,6 +76,23 @@ public class AuditLogRepositoryImpl implements AuditLogRepository {
 
     @Override
     @Transactional(readOnly = true)
+    public List<AuditLog> findByResource(String resourceType, String resourceId, int page, int size) {
+        TypedQuery<AuditLogEntity> query = entityManager.createQuery(
+                "SELECT a FROM AuditLogEntity a WHERE a.resourceType = :resourceType"
+                        + " AND a.resourceId = :resourceId ORDER BY a.occurredAt DESC",
+                AuditLogEntity.class
+        );
+        query.setParameter("resourceType", resourceType);
+        query.setParameter("resourceId", resourceId);
+        query.setFirstResult((page - 1) * size);
+        query.setMaxResults(size);
+        return query.getResultList().stream()
+                .map(mapper::toDomain)
+                .toList();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
     public List<AuditLog> findByTimeRange(Instant startTime, Instant endTime, int page, int size) {
         TypedQuery<AuditLogEntity> query = entityManager.createQuery(
                 "SELECT a FROM AuditLogEntity a WHERE a.occurredAt BETWEEN :startTime AND :endTime ORDER BY a.occurredAt DESC",
@@ -150,6 +167,18 @@ public class AuditLogRepositoryImpl implements AuditLogRepository {
                 "SELECT COUNT(a) FROM AuditLogEntity a WHERE a.userId = :userId",
                 Long.class
         ).setParameter("userId", userId).getSingleResult();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public long countByResource(String resourceType, String resourceId) {
+        return entityManager.createQuery(
+                "SELECT COUNT(a) FROM AuditLogEntity a WHERE a.resourceType = :resourceType"
+                        + " AND a.resourceId = :resourceId",
+                Long.class
+        ).setParameter("resourceType", resourceType)
+                .setParameter("resourceId", resourceId)
+                .getSingleResult();
     }
 
     @Override

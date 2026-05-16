@@ -1,5 +1,6 @@
 package com.sealmail.infra.mail.pipeline.step;
 
+import com.sealmail.domain.audit.AuditLogType;
 import com.sealmail.domain.certificate.CertificateRepository;
 import com.sealmail.domain.certificate.spi.SMIMEOperations;
 import com.sealmail.domain.mailsecurity.CryptoProfile;
@@ -11,6 +12,7 @@ import com.sealmail.domain.mailsecurity.event.MailSigned;
 import com.sealmail.infra.crypto.KeyStoreService;
 import com.sealmail.infra.events.DomainEventPublisher;
 import com.sealmail.infra.mail.pipeline.MailProcessingHeaders;
+import com.sealmail.infra.mail.pipeline.MailProcessingAuditEvents;
 import com.sealmail.infra.mail.pipeline.MailProcessingMessages;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -100,7 +102,8 @@ public class SignStep {
             log.info("=== S/MIME SIGNING COMPLETED ===");
             log.info("  Original size: {} bytes", original.length);
             log.info("  Signed size: {} bytes", signed.length);
-            log.info("  First 100 chars: {}", new String(signed).replaceAll("[\r\n]", " ").substring(0, Math.min(100, signed.length)));
+            recordAudit(context, "SMIME_SIGN", "profile=" + profile
+                    + ", senderCertificateThumbprint=" + thumbprint, true);
 
             if (thumbprint != null && !thumbprint.isBlank()) {
                 domainEventPublisher.publishEvent(new MailSigned(
@@ -113,15 +116,34 @@ public class SignStep {
 
         } catch (Exception e) {
             if (e instanceof MailProcessingException mailProcessingException) {
+                recordAudit(
+                        mailProcessingException.context() != null ? mailProcessingException.context() : context,
+                        "SMIME_SIGN_FAILED",
+                        "errorType=" + mailProcessingException.errorType().name()
+                                + MailProcessingAuditEvents.detailPresence(mailProcessingException.getMessage()),
+                        false);
                 throw mailProcessingException;
             }
             log.error("S/MIME signing failed: {}", e.getMessage(), e);
+            recordAudit(context, "SMIME_SIGN_FAILED",
+                    "errorType=" + MailProcessingErrorType.SIGNING
+                            + MailProcessingAuditEvents.detailPresence(e.getMessage()), false);
             throw new MailProcessingException(
                     MailProcessingErrorType.SIGNING,
                     "S/MIME signing failed: " + e.getMessage(),
                     context,
                     e);
         }
+    }
+
+    private void recordAudit(MailProcessingContext context, String action, String detail, boolean success) {
+        MailProcessingAuditEvents.publish(
+                domainEventPublisher,
+                AuditLogType.EMAIL_SIGNED,
+                context,
+                action,
+                detail,
+                success);
     }
 
     public String getStepName() {

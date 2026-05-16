@@ -8,13 +8,16 @@ import com.sealmail.domain.certificate.CertificateId;
 import com.sealmail.domain.certificate.event.CertificateIssued;
 import com.sealmail.domain.certificate.event.CertificateRevoked;
 import com.sealmail.domain.dlp.DlpScopeType;
+import com.sealmail.domain.exceptionmail.event.ExceptionMailCreated;
 import com.sealmail.domain.mailsecurity.event.MailEncrypted;
+import com.sealmail.domain.mailsecurity.event.MailQuarantined;
 import com.sealmail.domain.mailsecurity.event.MailSigned;
 import com.sealmail.domain.policy.event.DlpPatternConfigChanged;
 import com.sealmail.domain.policy.event.DlpSelectionConfigChanged;
 import com.sealmail.domain.policy.event.MailAuthConfigChanged;
 import com.sealmail.domain.policy.event.QuarantinePolicyChanged;
 import com.sealmail.domain.policy.event.RelayPolicyChanged;
+import com.sealmail.domain.quarantine.QuarantineReason;
 import com.sealmail.domain.quarantine.event.QuarantineReleased;
 import com.sealmail.domain.shared.model.EmailAddress;
 import org.junit.jupiter.api.Test;
@@ -25,6 +28,8 @@ import java.util.List;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class DomainEventAuditListenerTest {
 
@@ -157,6 +162,35 @@ class DomainEventAuditListenerTest {
         assertEquals("default", saved.getResourceId());
     }
 
+    @Test
+    void exceptionMailAuditDoesNotIncludeRawDetail() {
+        listener.onDomainEvent(new ExceptionMailCreated(
+                "exception-1",
+                "msg-1@example.com",
+                QuarantineReason.POLICY_VIOLATION,
+                "customer body password=secret-value"));
+
+        AuditLog saved = repository.single();
+        assertEquals(AuditLogType.EMAIL_QUARANTINED, saved.getType());
+        assertTrue(saved.getDetail().contains("detailPresent=true"));
+        assertFalse(saved.getDetail().contains("customer body"));
+        assertFalse(saved.getDetail().contains("secret-value"));
+    }
+
+    @Test
+    void mailQuarantinedAuditDoesNotIncludeRawDetail() {
+        listener.onDomainEvent(new MailQuarantined(
+                "msg-2@example.com",
+                QuarantineReason.POLICY_VIOLATION,
+                "mail body fragment token=abc123"));
+
+        AuditLog saved = repository.single();
+        assertEquals(AuditLogType.EMAIL_QUARANTINED, saved.getType());
+        assertTrue(saved.getDetail().contains("detailPresent=true"));
+        assertFalse(saved.getDetail().contains("mail body fragment"));
+        assertFalse(saved.getDetail().contains("abc123"));
+    }
+
     private static class CapturingAuditLogRepository implements AuditLogRepository {
         private final List<AuditLog> saved = new ArrayList<>();
 
@@ -187,6 +221,11 @@ class DomainEventAuditListenerTest {
         }
 
         @Override
+        public List<AuditLog> findByResource(String resourceType, String resourceId, int page, int size) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
         public List<AuditLog> findByTimeRange(Instant startTime, Instant endTime, int page, int size) {
             throw new UnsupportedOperationException();
         }
@@ -213,6 +252,11 @@ class DomainEventAuditListenerTest {
 
         @Override
         public long countByUserId(String userId) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public long countByResource(String resourceType, String resourceId) {
             throw new UnsupportedOperationException();
         }
 

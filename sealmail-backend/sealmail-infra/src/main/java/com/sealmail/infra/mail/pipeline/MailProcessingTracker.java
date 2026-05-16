@@ -39,10 +39,10 @@ public class MailProcessingTracker {
             }
 
             boolean quarantined = !"quarantine".equals(stepName) && requiresQuarantine(result);
-            completeStep(processingId, stepName, !quarantined, quarantined ? failureReason(result) : null);
+            completeStep(processingId, stepName, !quarantined, quarantined ? failureSummary(result) : null);
             return result;
         } catch (Exception e) {
-            completeStep(processingId, stepName, false, e.getMessage());
+            completeStep(processingId, stepName, false, exceptionSummary(e));
             if (e instanceof MailProcessingException mailProcessingException) {
                 throw mailProcessingException;
             }
@@ -86,16 +86,24 @@ public class MailProcessingTracker {
         return context != null && context.decision().requiresQuarantine();
     }
 
-    private String failureReason(Message<byte[]> message) {
+    private String failureSummary(Message<byte[]> message) {
         MailProcessingContext context = context(message);
         if (context == null || context.decision().quarantine() == null) {
             return "Mail processing step requested quarantine";
         }
-        String detail = context.decision().quarantine().detail();
-        if (detail != null && !detail.isBlank()) {
-            return detail;
+        return "quarantineReason=" + context.decision().quarantine().reason()
+                + MailProcessingAuditEvents.detailPresence(context.decision().quarantine().detail());
+    }
+
+    private String exceptionSummary(Exception error) {
+        if (error instanceof MailProcessingException mailProcessingException) {
+            return "errorType=" + mailProcessingException.errorType().name()
+                    + ", retryable=" + mailProcessingException.retryable()
+                    + MailProcessingAuditEvents.detailPresence(mailProcessingException.getMessage());
         }
-        return context.decision().quarantine().reason();
+        String errorType = error != null ? error.getClass().getSimpleName() : "Unknown";
+        String message = error != null ? error.getMessage() : null;
+        return "errorType=" + errorType + MailProcessingAuditEvents.detailPresence(message);
     }
 
     private String processingId(Message<byte[]> message) {

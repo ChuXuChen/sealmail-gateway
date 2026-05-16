@@ -55,7 +55,10 @@ class QueryAuditLogUseCaseTest {
         PageRequest pageRequest = PageRequest.builder().page(1).size(20).build();
         List<AuditLogType> expectedTypes = List.of(
                 AuditLogType.EMAIL_RECEIVED,
+                AuditLogType.EMAIL_ROUTED,
+                AuditLogType.EMAIL_CERTIFICATE_SELECTED,
                 AuditLogType.EMAIL_DELIVERED,
+                AuditLogType.EMAIL_RELAYED,
                 AuditLogType.EMAIL_RELEASED,
                 AuditLogType.EMAIL_REJECTED,
                 AuditLogType.EMAIL_QUARANTINED,
@@ -70,6 +73,19 @@ class QueryAuditLogUseCaseTest {
         useCase.search("EMAIL", null, null, pageRequest, auditor());
 
         verify(repository).search(expectedTypes, null, 1, 20);
+    }
+
+    @Test
+    void resourceLookupSupportsProcessingTrace() {
+        PageRequest pageRequest = PageRequest.builder().page(1).size(20).build();
+        when(repository.findByResource("MAIL_PROCESSING", "processing-1", 1, 20)).thenReturn(List.of());
+        when(repository.countByResource("MAIL_PROCESSING", "processing-1")).thenReturn(2L);
+
+        var response = useCase.findByResource("MAIL_PROCESSING", "processing-1", pageRequest, auditor());
+
+        assertEquals(2, response.getTotal());
+        verify(repository).findByResource("MAIL_PROCESSING", "processing-1", 1, 20);
+        verify(repository).countByResource("MAIL_PROCESSING", "processing-1");
     }
 
     private static UserContext auditor() {

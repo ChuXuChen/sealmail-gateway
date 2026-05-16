@@ -7,6 +7,8 @@ import com.sealmail.domain.policy.DomainConfigRepository;
 import com.sealmail.domain.quarantine.QuarantineReason;
 import com.sealmail.domain.shared.model.EmailAddress;
 import com.sealmail.infra.config.properties.PostfixProperties;
+import com.sealmail.infra.events.DomainEventPublisher;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.slf4j.Logger;
 import org.springframework.messaging.Message;
 import org.springframework.messaging.support.MessageBuilder;
@@ -26,17 +28,30 @@ public class RoutingService {
     private final MailCryptoSelectionService cryptoSelectionService;
     private final MailProcessingRepository mailProcessingRepository;
     private final PostfixProperties postfixProperties;
+    private final DomainEventPublisher domainEventPublisher;
 
     public RoutingService(MailRouter mailRouter,
                            DomainConfigRepository domainConfigRepository,
                            MailCryptoSelectionService cryptoSelectionService,
                            MailProcessingRepository mailProcessingRepository,
                            PostfixProperties postfixProperties) {
+        this(mailRouter, domainConfigRepository, cryptoSelectionService, mailProcessingRepository,
+                postfixProperties, null);
+    }
+
+    @Autowired
+    public RoutingService(MailRouter mailRouter,
+                           DomainConfigRepository domainConfigRepository,
+                           MailCryptoSelectionService cryptoSelectionService,
+                           MailProcessingRepository mailProcessingRepository,
+                           PostfixProperties postfixProperties,
+                           DomainEventPublisher domainEventPublisher) {
         this.mailRouter = mailRouter;
         this.domainConfigRepository = domainConfigRepository;
         this.cryptoSelectionService = cryptoSelectionService;
         this.mailProcessingRepository = mailProcessingRepository;
         this.postfixProperties = postfixProperties;
+        this.domainEventPublisher = domainEventPublisher;
     }
 
     @Transactional
@@ -58,7 +73,7 @@ public class RoutingService {
 
         List<Certificate> certificates = cryptoSelectionService.inboundRoutingCertificates(envelope);
 
-        MailProcessing processing = MailProcessing.create(envelope, MailDirection.INBOUND);
+        MailProcessing processing = MailProcessing.create(processingId(messageContext), envelope, MailDirection.INBOUND);
         processing.addStep("routing");
 
         RoutingDecision decision = mailRouter.route(
@@ -108,7 +123,7 @@ public class RoutingService {
         CryptoProfile requestedProfile = CryptoProfile.fromDomainConfig(domainConfig.get());
         List<Certificate> recipientCerts = cryptoSelectionService.outboundRoutingCertificates(envelope);
 
-        MailProcessing processing = MailProcessing.create(envelope, MailDirection.OUTBOUND);
+        MailProcessing processing = MailProcessing.create(processingId(messageContext), envelope, MailDirection.OUTBOUND);
         processing.addStep("routing");
 
         String content = new String(message.getPayload());
@@ -179,7 +194,7 @@ public class RoutingService {
                                                        MailDirection direction,
                                                        QuarantineReason reason,
                                                        String detail) {
-        MailProcessing processing = MailProcessing.create(envelope, direction);
+        MailProcessing processing = MailProcessing.create(processingId(context(message)), envelope, direction);
         processing.addStep("routing");
         RoutingDecision.Quarantine decision = new RoutingDecision.Quarantine(reason, detail);
         processing.setRoutingDecision(decision);
@@ -214,14 +229,21 @@ public class RoutingService {
         RelayProfile relayProfile = relayProfile(direction);
 
         if (isOutboundCryptoProfileFailure(direction, decision)) {
+            MailProcessingContext failedContext = routedContext(
+                    baseContext,
+                    decision,
+                    processingId,
+                    direction,
+                    cryptoProfile,
+                    processingDecision,
+                    certificates,
+                    relayProfile);
+            recordRoutingAudit(failedContext, decision);
+            recordCertificateSelectionAudit(failedContext);
             throw new MailProcessingException(
                     MailProcessingErrorType.ENCRYPTION,
                     ((RoutingDecision.Quarantine) decision).getDetail(),
-                    baseContext
-                            .withRoutingDecision(decision)
-                            .withProcessingId(processingId)
-                            .withDirection(direction)
-                            .withCryptoProfile(cryptoProfile),
+                    failedContext,
                     MailRecordDisposition.EXCEPTION,
                     false,
                     null);
@@ -259,6 +281,30 @@ public class RoutingService {
             processingDecision = processingDecision.withDkimSigningRequired(true);
         }
 
+        MailProcessingContext context = routedContext(
+                baseContext,
+                decision,
+                processingId,
+                direction,
+                cryptoProfile,
+                processingDecision,
+                certificates,
+                relayProfile);
+        recordRoutingAudit(context, decision);
+        recordCertificateSelectionAudit(context);
+        return MessageBuilder.withPayload(message.getPayload())
+                .setHeader(MailProcessingHeaders.CONTEXT, context)
+                .build();
+    }
+
+    private MailProcessingContext routedContext(MailProcessingContext baseContext,
+                                                RoutingDecision decision,
+                                                String processingId,
+                                                MailDirection direction,
+                                                CryptoProfile cryptoProfile,
+                                                MailProcessingDecision processingDecision,
+                                                CertificateSelection certificates,
+                                                RelayProfile relayProfile) {
         MailProcessingContext context = baseContext
                 .withRoutingDecision(decision)
                 .withProcessingId(processingId)
@@ -276,9 +322,28 @@ public class RoutingService {
                     auditTrace.submissionType(),
                     auditTrace.remoteAddress()));
         }
-        return MessageBuilder.withPayload(message.getPayload())
-                .setHeader(MailProcessingHeaders.CONTEXT, context)
-                .build();
+        return context;
+    }
+
+    private void recordRoutingAudit(MailProcessingContext context, RoutingDecision decision) {
+        String action = decision instanceof RoutingDecision.Quarantine ? "MAIL_ROUTE_QUARANTINE" : "MAIL_ROUTE";
+        boolean success = !(decision instanceof RoutingDecision.Quarantine);
+        MailProcessingAuditEvents.publish(
+                domainEventPublisher,
+                com.sealmail.domain.audit.AuditLogType.EMAIL_ROUTED,
+                context,
+                action,
+                MailProcessingAuditEvents.routeDecisionSummary(decision),
+                success);
+    }
+
+    private void recordCertificateSelectionAudit(MailProcessingContext context) {
+        MailProcessingAuditEvents.publish(
+                domainEventPublisher,
+                com.sealmail.domain.audit.AuditLogType.EMAIL_CERTIFICATE_SELECTED,
+                context,
+                "MAIL_CERTIFICATE_SELECTION",
+                MailProcessingAuditEvents.certificateSelectionSummary(context.certificateSelection()));
     }
 
     private CryptoProfile resolveCryptoProfile(MailProcessingContext context, DomainConfig domainConfig) {
@@ -297,6 +362,12 @@ public class RoutingService {
     private MailProcessingContext context(Message<?> message) {
         Object value = message.getHeaders().get(MailProcessingHeaders.CONTEXT);
         return value instanceof MailProcessingContext context ? context : null;
+    }
+
+    private String processingId(MailProcessingContext context) {
+        return context != null && context.processingId() != null && !context.processingId().isBlank()
+                ? context.processingId()
+                : java.util.UUID.randomUUID().toString();
     }
 
     private RelayProfile relayProfile(MailDirection direction) {

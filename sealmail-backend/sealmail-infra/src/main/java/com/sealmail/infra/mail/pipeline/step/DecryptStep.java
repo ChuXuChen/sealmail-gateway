@@ -1,5 +1,6 @@
 package com.sealmail.infra.mail.pipeline.step;
 
+import com.sealmail.domain.audit.AuditLogType;
 import com.sealmail.domain.certificate.CertificateId;
 import com.sealmail.domain.certificate.CertificateRepository;
 import com.sealmail.domain.certificate.spi.SMIMEOperations;
@@ -11,6 +12,7 @@ import com.sealmail.domain.mailsecurity.event.MailDecrypted;
 import com.sealmail.domain.shared.model.EmailAddress;
 import com.sealmail.infra.events.DomainEventPublisher;
 import com.sealmail.infra.mail.pipeline.MailProcessingHeaders;
+import com.sealmail.infra.mail.pipeline.MailProcessingAuditEvents;
 import com.sealmail.infra.mail.pipeline.MailProcessingMessages;
 import com.sealmail.infra.crypto.KeyStoreService;
 import org.slf4j.Logger;
@@ -90,18 +92,38 @@ public class DecryptStep {
             if (recipient != null) {
                 domainEventPublisher.publishEvent(new MailDecrypted(envelope.getMessageId(), recipient));
             }
+            recordAudit(context, "SMIME_DECRYPT", "recipientCertificateThumbprint=" + thumbprint, true);
             return MailProcessingMessages.withPayload(message, decrypted);
 
         } catch (Exception e) {
             if (e instanceof MailProcessingException mailProcessingException) {
+                recordAudit(
+                        mailProcessingException.context() != null ? mailProcessingException.context() : context,
+                        "SMIME_DECRYPT_FAILED",
+                        "errorType=" + mailProcessingException.errorType().name()
+                                + MailProcessingAuditEvents.detailPresence(mailProcessingException.getMessage()),
+                        false);
                 throw mailProcessingException;
             }
+            recordAudit(context, "SMIME_DECRYPT_FAILED",
+                    "errorType=" + MailProcessingErrorType.DECRYPTION
+                            + MailProcessingAuditEvents.detailPresence(e.getMessage()), false);
             throw new MailProcessingException(
                     MailProcessingErrorType.DECRYPTION,
                     "Decryption failed: " + e.getMessage(),
                     context,
                     e);
         }
+    }
+
+    private void recordAudit(MailProcessingContext context, String action, String detail, boolean success) {
+        MailProcessingAuditEvents.publish(
+                domainEventPublisher,
+                AuditLogType.EMAIL_DECRYPTED,
+                context,
+                action,
+                detail,
+                success);
     }
 
     public String getStepName() {
