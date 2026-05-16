@@ -17,7 +17,7 @@
     <properties>
         <sealmail.flyway.url>jdbc:postgresql://localhost:5432/sealmail</sealmail.flyway.url>
         <sealmail.flyway.user>sealmail</sealmail.flyway.user>
-        <sealmail.flyway.password>sealmail</sealmail.flyway.password>
+        <sealmail.flyway.password>${env.SEALMAIL_FLYWAY_PASSWORD}</sealmail.flyway.password>
     </properties>
 
     <dependencies>

@@ -8,10 +8,14 @@ import com.sealmail.domain.mailsecurity.MailProcessingContext;
 import com.sealmail.domain.mailsecurity.MailProcessingErrorType;
 import com.sealmail.domain.mailsecurity.MailProcessingException;
 import com.sealmail.domain.mailsecurity.MailRecordDisposition;
+import com.sealmail.domain.config.QuarantinePolicyPort;
 import com.sealmail.domain.quarantine.QuarantineReason;
+import com.sealmail.domain.quarantine.QuarantineRepository;
 import com.sealmail.domain.quarantine.QuarantinedMail;
+import com.sealmail.domain.quarantine.spi.QuarantineNotificationPort;
 import com.sealmail.infra.mail.pipeline.MailProcessingHeaders;
-import com.sealmail.infra.persistence.repository.QuarantineRepositoryImpl;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.messaging.Message;
 import org.springframework.stereotype.Component;
 
@@ -21,13 +25,21 @@ import org.springframework.stereotype.Component;
 @Component
 public class QuarantineStep {
 
-    private final QuarantineRepositoryImpl quarantineRepository;
-    private final ExceptionMailRepository exceptionMailRepository;
+    private static final Logger log = LoggerFactory.getLogger(QuarantineStep.class);
 
-    public QuarantineStep(QuarantineRepositoryImpl quarantineRepository,
-                          ExceptionMailRepository exceptionMailRepository) {
+    private final QuarantineRepository quarantineRepository;
+    private final ExceptionMailRepository exceptionMailRepository;
+    private final QuarantinePolicyPort quarantinePolicyPort;
+    private final QuarantineNotificationPort quarantineNotificationPort;
+
+    public QuarantineStep(QuarantineRepository quarantineRepository,
+                          ExceptionMailRepository exceptionMailRepository,
+                          QuarantinePolicyPort quarantinePolicyPort,
+                          QuarantineNotificationPort quarantineNotificationPort) {
         this.quarantineRepository = quarantineRepository;
         this.exceptionMailRepository = exceptionMailRepository;
+        this.quarantinePolicyPort = quarantinePolicyPort;
+        this.quarantineNotificationPort = quarantineNotificationPort;
     }
 
     public Message<byte[]> execute(Message<byte[]> message) {
@@ -57,6 +69,7 @@ public class QuarantineStep {
                         message.getPayload()
                 );
                 quarantineRepository.save(quarantined);
+                notifyIfEnabled(quarantined);
             } else {
                 ExceptionMail exceptionMail = ExceptionMail.create(
                         java.util.UUID.randomUUID().toString(),
@@ -82,6 +95,18 @@ public class QuarantineStep {
                     "Failed to quarantine mail: " + e.getMessage(),
                     context,
                     e);
+        }
+    }
+
+    private void notifyIfEnabled(QuarantinedMail quarantined) {
+        try {
+            if (!quarantinePolicyPort.getSettings().notificationEnabled()) {
+                return;
+            }
+            quarantineNotificationPort.notifyCreated(quarantined);
+        } catch (Exception e) {
+            log.warn("Failed to send quarantine notification for {}: {}",
+                    quarantined.getId(), e.getMessage());
         }
     }
 

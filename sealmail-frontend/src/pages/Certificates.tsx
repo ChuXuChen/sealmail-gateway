@@ -30,9 +30,10 @@ import {
   FileAddOutlined,
   AuditOutlined,
   DownOutlined,
+  LinkOutlined,
 } from '@ant-design/icons';
-import { Certificate } from '../types';
-import { certificateApi, caApi } from '../api/client';
+import { Certificate, CertificateBinding, CertificateBindingPurpose } from '../types';
+import { certificateApi, caApi, certificateBindingApi } from '../api/client';
 
 const { Title } = Typography;
 const { TextArea } = Input;
@@ -65,6 +66,7 @@ const StatusTags: React.FC<{ record: Certificate }> = ({ record }) => (
 const Certificates: React.FC = () => {
   const [data, setData] = useState<Certificate[]>([]);
   const [cas, setCas] = useState<Certificate[]>([]);
+  const [bindings, setBindings] = useState<CertificateBinding[]>([]);
   const [loading, setLoading] = useState(false);
   const [pagination, setPagination] = useState({ page: 1, size: 10, total: 0 });
   const [importModalVisible, setImportModalVisible] = useState(false);
@@ -86,12 +88,14 @@ const Certificates: React.FC = () => {
   const loadData = async () => {
     setLoading(true);
     try {
-      const [certRes, caRes] = await Promise.all([
+      const [certRes, caRes, bindingRes] = await Promise.all([
         certificateApi.list({ page: pagination.page, size: pagination.size }),
         caApi.list(),
+        certificateBindingApi.list(),
       ]);
       setData(certRes.data.data.items);
       setCas(caRes.data.data);
+      setBindings(bindingRes.data.data);
       setPagination((prev) => ({
         ...prev,
         total: certRes.data.data.total,
@@ -218,6 +222,34 @@ const Certificates: React.FC = () => {
     }
   };
 
+  const bindingFor = (record: Certificate, purpose: CertificateBindingPurpose) =>
+    bindings.find((binding) => binding.ownerEmail === record.ownerEmail && binding.purpose === purpose);
+
+  const handleBind = async (record: Certificate, purpose: CertificateBindingPurpose) => {
+    try {
+      await certificateBindingApi.upsert({
+        ownerEmail: record.ownerEmail,
+        certificateId: record.id,
+        purpose,
+        enabled: true,
+      });
+      message.success(purpose === 'ENCRYPTION' ? '加密证书绑定已更新' : '签名证书绑定已更新');
+      loadData();
+    } catch (err: any) {
+      message.error(err.response?.data?.message || '证书绑定失败');
+    }
+  };
+
+  const handleDeleteBinding = async (id: string) => {
+    try {
+      await certificateBindingApi.delete(id);
+      message.success('证书绑定已删除');
+      loadData();
+    } catch {
+      message.error('删除证书绑定失败');
+    }
+  };
+
   const columns = useMemo(
     () => [
       {
@@ -252,6 +284,56 @@ const Certificates: React.FC = () => {
         title: '状态',
         key: 'status',
         render: (_: unknown, record: Certificate) => <StatusTags record={record} />,
+      },
+      {
+        title: '绑定',
+        key: 'binding',
+        render: (_: unknown, record: Certificate) => {
+          const encryptionBinding = bindingFor(record, 'ENCRYPTION');
+          const signingBinding = bindingFor(record, 'SIGNING');
+          return (
+            <Space wrap>
+              {encryptionBinding?.certificateId === record.id && encryptionBinding.enabled ? (
+                <Popconfirm
+                  title="删除此加密绑定？"
+                  onConfirm={() => handleDeleteBinding(encryptionBinding.id)}
+                  okText="删除"
+                  cancelText="取消"
+                >
+                  <Tag color="success" icon={<LinkOutlined />}>加密</Tag>
+                </Popconfirm>
+              ) : (
+                <Button
+                  size="small"
+                  icon={<LinkOutlined />}
+                  disabled={!record.suitableForEncryption}
+                  onClick={() => handleBind(record, 'ENCRYPTION')}
+                >
+                  绑加密
+                </Button>
+              )}
+              {signingBinding?.certificateId === record.id && signingBinding.enabled ? (
+                <Popconfirm
+                  title="删除此签名绑定？"
+                  onConfirm={() => handleDeleteBinding(signingBinding.id)}
+                  okText="删除"
+                  cancelText="取消"
+                >
+                  <Tag color="processing" icon={<LinkOutlined />}>签名</Tag>
+                </Popconfirm>
+              ) : (
+                <Button
+                  size="small"
+                  icon={<LinkOutlined />}
+                  disabled={!record.suitableForSigning || !record.hasPrivateKey}
+                  onClick={() => handleBind(record, 'SIGNING')}
+                >
+                  绑签名
+                </Button>
+              )}
+            </Space>
+          );
+        },
       },
       {
         title: '有效期至',
@@ -338,7 +420,7 @@ const Certificates: React.FC = () => {
         ),
       },
     ],
-    [],
+    [bindings],
   );
 
   return (

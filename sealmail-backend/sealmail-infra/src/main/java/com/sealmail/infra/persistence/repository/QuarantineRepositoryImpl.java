@@ -13,6 +13,7 @@ import jakarta.persistence.TypedQuery;
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 
@@ -133,6 +134,17 @@ public class QuarantineRepositoryImpl implements QuarantineRepository {
         if (entity != null) {
             entityManager.remove(entity);
         }
+    }
+
+    @Override
+    public int deleteCreatedBefore(Instant cutoff) {
+        if (cutoff == null) {
+            throw new IllegalArgumentException("Cutoff cannot be null");
+        }
+        return entityManager.createQuery(
+                        "DELETE FROM QuarantinedMailEntity q WHERE q.createdAt < :cutoff")
+                .setParameter("cutoff", cutoff)
+                .executeUpdate();
     }
 
     @Override

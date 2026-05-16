@@ -4,6 +4,8 @@ import {
   LoginRequest,
   LoginResponse,
   Certificate,
+  CertificateBinding,
+  CertificateBindingPurpose,
   ExceptionMailItem,
   ExceptionMailStats,
   QuarantineItem,
@@ -191,6 +193,22 @@ export const certificateApi = {
 
   signCsr: (data: SignCsrRequest) =>
     apiClient.post<ApiResponse<Certificate>>('/api/v1/certificates/sign-csr', data),
+};
+
+export const certificateBindingApi = {
+  list: (params?: { domain?: string; owner?: string }) =>
+    apiClient.get<ApiResponse<CertificateBinding[]>>('/api/v1/certificate-bindings', { params }),
+
+  upsert: (data: {
+    ownerEmail: string;
+    certificateId: string;
+    purpose: CertificateBindingPurpose;
+    enabled: boolean;
+  }) =>
+    apiClient.post<ApiResponse<CertificateBinding>>('/api/v1/certificate-bindings', data),
+
+  delete: (id: string) =>
+    apiClient.delete<ApiResponse<void>>(`/api/v1/certificate-bindings/${encodeURIComponent(id)}`),
 };
 
 // CA API

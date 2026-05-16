@@ -6,6 +6,7 @@ import com.sealmail.domain.audit.AuditContextProvider;
 import com.sealmail.domain.audit.AuditLogRepository;
 import com.sealmail.domain.audit.AuditLogType;
 import com.sealmail.domain.certificate.event.CertificateDeleted;
+import com.sealmail.domain.certificate.event.CertificateBindingChanged;
 import com.sealmail.domain.certificate.event.CertificateImported;
 import com.sealmail.domain.certificate.event.CertificateIssued;
 import com.sealmail.domain.certificate.event.CertificateRevoked;
@@ -132,6 +133,18 @@ public class DomainEventAuditListener {
                     "CERTIFICATE",
                     certificateDeleted.getCertificateId().getThumbprint(),
                     "删除证书，所有者 " + certificateDeleted.getOwner().getValue());
+        }
+        if (event instanceof CertificateBindingChanged bindingChanged) {
+            return audit(
+                    AuditLogType.SYSTEM_CONFIG_CHANGED,
+                    actor,
+                    ipAddress,
+                    "CERTIFICATE_BINDING",
+                    bindingChanged.getBindingId(),
+                    "修改证书绑定: " + bindingChanged.getOwnerEmail()
+                            + " " + bindingChanged.getPurpose()
+                            + " -> " + bindingChanged.getCertificateId()
+                            + " (" + bindingChanged.getOperation() + ")");
         }
 
         if (event instanceof QuarantineCreated quarantineCreated) {

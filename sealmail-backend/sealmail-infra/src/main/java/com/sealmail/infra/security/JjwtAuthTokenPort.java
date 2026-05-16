@@ -1,5 +1,6 @@
 package com.sealmail.infra.security;
 
+import com.sealmail.domain.config.SecretReferenceResolver;
 import com.sealmail.domain.security.AuthTokenPort;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.JwtException;
@@ -25,8 +26,13 @@ public class JjwtAuthTokenPort implements AuthTokenPort {
     private final long tokenValidityInSeconds;
 
     public JjwtAuthTokenPort(
-            @Value("${jwt.secret}") String secret,
+            SecretReferenceResolver secretReferenceResolver,
+            @Value("${jwt.secret-ref:}") String secretRef,
             @Value("${jwt.token-validity-in-seconds:86400}") long tokenValidityInSeconds) {
+        String secret = secretReferenceResolver.resolve(secretRef);
+        if (secret == null || secret.isBlank()) {
+            throw new IllegalStateException("JWT secret is not configured. Set jwt.secret-ref to a resolvable secret reference.");
+        }
         this.secretKey = Keys.hmacShaKeyFor(secret.getBytes(StandardCharsets.UTF_8));
         this.tokenValidityInSeconds = tokenValidityInSeconds;
     }

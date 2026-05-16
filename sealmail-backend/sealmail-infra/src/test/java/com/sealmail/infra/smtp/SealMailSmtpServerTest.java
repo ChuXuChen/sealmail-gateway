@@ -72,7 +72,8 @@ class SealMailSmtpServerTest {
                 properties,
                 mock(MessageChannel.class),
                 mock(MessageChannel.class),
-                domainConfigRepository
+                domainConfigRepository,
+                secretRef -> null
         );
     }
 

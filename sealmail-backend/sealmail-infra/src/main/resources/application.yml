@@ -3,7 +3,7 @@ server:
   shutdown: graceful
 
 jwt:
-  secret: ${SEALMAIL_JWT_SECRET:change-this-local-development-secret-32}
+  secret-ref: ${SEALMAIL_JWT_SECRET_REF:env:SEALMAIL_JWT_SECRET}
   token-validity-in-seconds: 86400
 
 spring:
@@ -16,7 +16,7 @@ spring:
   datasource:
     url: ${SEALMAIL_DB_URL:jdbc:postgresql://localhost:5432/sealmail}
     username: ${SEALMAIL_DB_USERNAME:sealmail}
-    password: ${SEALMAIL_DB_PASSWORD:sealmail}
+    password: ${SEALMAIL_DB_PASSWORD:}
     driver-class-name: org.postgresql.Driver
     hikari:
       maximum-pool-size: 20
@@ -58,13 +58,13 @@ sealmail:
       require-tls: false
       # Option 1: Use PKCS12 keystore
       keystore-path:
-      keystore-password:
+      keystore-password-secret-ref: ${SEALMAIL_SMTP_KEYSTORE_PASSWORD_SECRET_REF:}
       key-alias: sealmail-smtp
-      key-password:
+      key-password-secret-ref: ${SEALMAIL_SMTP_KEY_PASSWORD_SECRET_REF:}
       # Option 2: Use PEM files (simpler)
       certificate-path:
       private-key-path:
-      private-key-password:
+      private-key-password-secret-ref: ${SEALMAIL_SMTP_PRIVATE_KEY_PASSWORD_SECRET_REF:}
 
   # Certificate Validation Security Settings
   security:
@@ -179,7 +179,7 @@ spring:
   datasource:
     url: ${SEALMAIL_DB_URL:jdbc:postgresql://localhost:5432/sealmail}
     username: ${SEALMAIL_DB_USERNAME:sealmail}
-    password: ${SEALMAIL_DB_PASSWORD:sealmail}
+    password: ${SEALMAIL_DB_PASSWORD:}
     driver-class-name: org.postgresql.Driver
 
   jpa:
@@ -200,7 +200,7 @@ spring:
   datasource:
     url: ${SEALMAIL_TEST_DB_URL:jdbc:postgresql://localhost:5432/sealmail}
     username: ${SEALMAIL_TEST_DB_USERNAME:sealmail}
-    password: ${SEALMAIL_TEST_DB_PASSWORD:sealmail}
+    password: ${SEALMAIL_TEST_DB_PASSWORD:}
     driver-class-name: org.postgresql.Driver
 
   flyway:

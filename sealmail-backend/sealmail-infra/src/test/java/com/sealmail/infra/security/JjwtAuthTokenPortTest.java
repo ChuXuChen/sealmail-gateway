@@ -14,7 +14,8 @@ class JjwtAuthTokenPortTest {
     @Test
     void tokenRoundTripsUserClaims() {
         JjwtAuthTokenPort port = new JjwtAuthTokenPort(
-                "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+                secretRef -> "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+                "env:JWT_SECRET",
                 3600);
 
         AuthTokenPort.IssuedToken issued = port.issue(new AuthTokenPort.TokenSubject(

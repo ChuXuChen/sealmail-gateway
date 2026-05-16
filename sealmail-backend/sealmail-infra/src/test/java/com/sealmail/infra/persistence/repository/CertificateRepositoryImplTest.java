@@ -2,6 +2,7 @@ package com.sealmail.infra.persistence.repository;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sealmail.domain.certificate.Certificate;
+import com.sealmail.domain.certificate.CertificateBindingRepository;
 import com.sealmail.domain.certificate.CertificateId;
 import com.sealmail.domain.certificate.KeyUsage;
 import com.sealmail.domain.certificate.ValidityPeriod;
@@ -18,6 +19,7 @@ import java.math.BigInteger;
 import java.time.Instant;
 import java.util.EnumSet;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -61,25 +63,84 @@ class CertificateRepositoryImplTest {
         assertEquals(leaf.getId().getThumbprint(), result.getFirst().getId().getThumbprint());
     }
 
+    @Test
+    void findTrustedForEncryptionUsesExplicitBindingWhenPresent() throws Exception {
+        Certificate root = issueRoot(true);
+        Certificate intermediate = issueIntermediate(root, true);
+        Certificate first = issueLeaf(intermediate, true);
+        Certificate bound = issueLeaf(intermediate, true);
+        CertificateBindingRepository bindingRepository = mock(CertificateBindingRepository.class);
+        when(bindingRepository.findActiveByOwnerAndPurpose(
+                org.mockito.ArgumentMatchers.eq(bound.getOwner()),
+                org.mockito.ArgumentMatchers.any()))
+                .thenReturn(Optional.of(com.sealmail.domain.certificate.CertificateBinding.restore(
+                        "binding-1",
+                        bound.getOwner().getDomain(),
+                        bound.getOwner(),
+                        bound.getId(),
+                        com.sealmail.domain.certificate.CertificateBindingPurpose.ENCRYPTION,
+                        true,
+                        Instant.now(),
+                        Instant.now())));
+
+        CertificateRepositoryImpl repository = repositoryBackedBy(
+                List.of(mapper.toEntity(first)),
+                List.of(mapper.toEntity(intermediate), mapper.toEntity(root)),
+                bindingRepository);
+        EntityManager entityManager = entityManagerWith(List.of(
+                mapper.toEntity(bound),
+                mapper.toEntity(intermediate),
+                mapper.toEntity(root)));
+        @SuppressWarnings("unchecked")
+        TypedQuery<CertificateEntity> query = mock(TypedQuery.class);
+        when(query.setParameter(anyString(), org.mockito.ArgumentMatchers.any())).thenReturn(query);
+        when(query.getResultList()).thenReturn(List.of(mapper.toEntity(first)));
+        when(entityManager.createQuery(anyString(), eq(CertificateEntity.class))).thenReturn(query);
+        ReflectionTestUtils.setField(repository, "entityManager", entityManager);
+
+        List<Certificate> result = repository.findTrustedForEncryption(bound.getOwner());
+
+        assertEquals(1, result.size());
+        assertEquals(bound.getId().getThumbprint(), result.getFirst().getId().getThumbprint());
+    }
+
     private CertificateRepositoryImpl repositoryBackedBy(
             List<CertificateEntity> trustedQueryResult,
             List<CertificateEntity> issuers) {
+        CertificateBindingRepository bindingRepository = mock(CertificateBindingRepository.class);
+        when(bindingRepository.findActiveByOwnerAndPurpose(
+                org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.any()))
+                .thenReturn(Optional.empty());
+        return repositoryBackedBy(trustedQueryResult, issuers, bindingRepository);
+    }
+
+    private CertificateRepositoryImpl repositoryBackedBy(
+            List<CertificateEntity> trustedQueryResult,
+            List<CertificateEntity> issuers,
+            CertificateBindingRepository bindingRepository) {
         @SuppressWarnings("unchecked")
         TypedQuery<CertificateEntity> query = mock(TypedQuery.class);
         when(query.setParameter(anyString(), org.mockito.ArgumentMatchers.any())).thenReturn(query);
         when(query.getResultList()).thenReturn(trustedQueryResult);
 
-        EntityManager entityManager = mock(EntityManager.class);
+        EntityManager entityManager = entityManagerWith(issuers);
         when(entityManager.createQuery(anyString(), eq(CertificateEntity.class))).thenReturn(query);
-        for (CertificateEntity issuer : issuers) {
-            when(entityManager.find(CertificateEntity.class, issuer.getThumbprint())).thenReturn(issuer);
-        }
 
         CertificateRepositoryImpl repository = new CertificateRepositoryImpl(
                 mapper,
-                mock(DomainEventPublisher.class));
+                mock(DomainEventPublisher.class),
+                bindingRepository);
         ReflectionTestUtils.setField(repository, "entityManager", entityManager);
         return repository;
+    }
+
+    private EntityManager entityManagerWith(List<CertificateEntity> certificates) {
+        EntityManager entityManager = mock(EntityManager.class);
+        for (CertificateEntity certificate : certificates) {
+            when(entityManager.find(CertificateEntity.class, certificate.getThumbprint())).thenReturn(certificate);
+        }
+        return entityManager;
     }
 
     private Certificate issueRoot(boolean trusted) {

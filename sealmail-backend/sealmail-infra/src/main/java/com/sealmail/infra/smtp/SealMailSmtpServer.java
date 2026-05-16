@@ -1,5 +1,6 @@
 package com.sealmail.infra.smtp;
 
+import com.sealmail.domain.config.SecretReferenceResolver;
 import com.sealmail.domain.mailsecurity.MailDirection;
 import com.sealmail.domain.mailsecurity.MailEnvelope;
 import com.sealmail.domain.mailsecurity.MailProcessingContext;
@@ -46,15 +47,18 @@ public class SealMailSmtpServer {
     private final MessageChannel mailInboundChannel;
     private final MessageChannel mailOutboundChannel;
     private final DomainConfigRepository domainConfigRepository;
+    private final SecretReferenceResolver secretReferenceResolver;
     private final AtomicBoolean running = new AtomicBoolean(false);
 
     public SealMailSmtpServer(SmtpServerProperties properties,
                               @Qualifier("mailInboundChannel") MessageChannel mailInboundChannel,
                               @Qualifier("mailOutboundChannel") MessageChannel mailOutboundChannel,
-                              DomainConfigRepository domainConfigRepository) {
+                              DomainConfigRepository domainConfigRepository,
+                              SecretReferenceResolver secretReferenceResolver) {
         this.mailInboundChannel = mailInboundChannel;
         this.mailOutboundChannel = mailOutboundChannel;
         this.domainConfigRepository = domainConfigRepository;
+        this.secretReferenceResolver = secretReferenceResolver;
         this.smtpServer = new SMTPServer(new SealMailMessageHandlerFactory());
         this.smtpServer.setPort(properties.getPort());
         try {
@@ -77,7 +81,9 @@ public class SealMailSmtpServer {
             if (properties.getKeystorePath() != null) {
                 // Set system properties for SubEtha SMTP which uses JVM default SSL context
                 System.setProperty("javax.net.ssl.keyStore", properties.getKeystorePath());
-                System.setProperty("javax.net.ssl.keyStorePassword", properties.getKeystorePassword());
+                System.setProperty("javax.net.ssl.keyStorePassword", requireSecret(
+                        properties.getKeystorePasswordSecretRef(),
+                        "sealmail.smtp.server.keystore-password-secret-ref"));
                 System.setProperty("javax.net.ssl.keyStoreType", "PKCS12");
             } else if (properties.getCertificatePath() != null && properties.getPrivateKeyPath() != null) {
                 // Create and set default SSL context for PEM certificates
@@ -119,8 +125,9 @@ public class SealMailSmtpServer {
 
         // Read private key
         String keyPem = new String(Files.readAllBytes(Paths.get(properties.getPrivateKeyPath())));
-        char[] keyPassword = properties.getPrivateKeyPassword() != null
-                ? properties.getPrivateKeyPassword().toCharArray()
+        String privateKeyPassword = resolveOptionalSecret(properties.getPrivateKeyPasswordSecretRef());
+        char[] keyPassword = privateKeyPassword != null
+                ? privateKeyPassword.toCharArray()
                 : null;
         PrivateKey privateKey = PemUtils.parsePrivateKey(keyPem, keyPassword);
 
@@ -140,13 +147,19 @@ public class SealMailSmtpServer {
     private SSLContext createSSLContextFromKeystore(SmtpServerProperties properties) throws Exception {
         KeyStore keyStore = KeyStore.getInstance("PKCS12");
         try (FileInputStream fis = new FileInputStream(properties.getKeystorePath())) {
-            keyStore.load(fis, properties.getKeystorePassword().toCharArray());
+            keyStore.load(fis, requireSecret(
+                    properties.getKeystorePasswordSecretRef(),
+                    "sealmail.smtp.server.keystore-password-secret-ref").toCharArray());
         }
 
         KeyManagerFactory kmf = KeyManagerFactory.getInstance(KeyManagerFactory.getDefaultAlgorithm());
-        char[] keyPassword = properties.getKeyPassword() != null
-                ? properties.getKeyPassword().toCharArray()
-                : properties.getKeystorePassword().toCharArray();
+        String keystorePassword = requireSecret(
+                properties.getKeystorePasswordSecretRef(),
+                "sealmail.smtp.server.keystore-password-secret-ref");
+        String keyPasswordSecret = resolveOptionalSecret(properties.getKeyPasswordSecretRef());
+        char[] keyPassword = keyPasswordSecret != null
+                ? keyPasswordSecret.toCharArray()
+                : keystorePassword.toCharArray();
         kmf.init(keyStore, keyPassword);
 
         SSLContext sslContext = SSLContext.getInstance("TLS");
@@ -257,6 +270,22 @@ public class SealMailSmtpServer {
 
     private boolean hasText(String value) {
         return value != null && !value.isBlank();
+    }
+
+    private String resolveOptionalSecret(String secretRef) {
+        if (!hasText(secretRef)) {
+            return null;
+        }
+        String secret = secretReferenceResolver.resolve(secretRef);
+        return hasText(secret) ? secret : null;
+    }
+
+    private String requireSecret(String secretRef, String propertyName) {
+        String secret = resolveOptionalSecret(secretRef);
+        if (secret == null) {
+            throw new IllegalStateException(propertyName + " must point to a resolvable secret");
+        }
+        return secret;
     }
 
     MailDirection resolveDirection(MailEnvelope envelope) {

@@ -5,6 +5,7 @@ import com.sealmail.domain.audit.AuditLogRepository;
 import com.sealmail.domain.audit.AuditLogType;
 import com.sealmail.infra.persistence.mapper.AuditLogMapper;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.SpringBootConfiguration;
 import org.springframework.boot.autoconfigure.EnableAutoConfiguration;
@@ -31,7 +32,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 @TestPropertySource(properties = {
         "spring.datasource.url=jdbc:postgresql://localhost:5432/sealmail?currentSchema=sealmail_test",
         "spring.datasource.username=sealmail",
-        "spring.datasource.password=sealmail",
+        "spring.datasource.password=${SEALMAIL_TEST_DB_PASSWORD:}",
         "spring.datasource.driver-class-name=org.postgresql.Driver",
         "spring.flyway.enabled=true",
         "spring.flyway.schemas=sealmail_test",
@@ -43,6 +44,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
         "spring.jpa.show-sql=false",
         "spring.sql.init.mode=never"
 })
+@EnabledIfEnvironmentVariable(named = "SEALMAIL_TEST_DB_PASSWORD", matches = ".+")
 class AuditLogRepositoryImplTest {
 
     @Autowired
@@ -115,7 +117,7 @@ class AuditLogRepositoryImplTest {
             try (var connection = DriverManager.getConnection(
                     "jdbc:postgresql://localhost:5432/sealmail",
                     "sealmail",
-                    "sealmail");
+                    System.getenv().getOrDefault("SEALMAIL_TEST_DB_PASSWORD", ""));
                  var statement = connection.createStatement()) {
                 statement.execute("DROP SCHEMA IF EXISTS sealmail_test CASCADE");
                 statement.execute("CREATE SCHEMA sealmail_test");

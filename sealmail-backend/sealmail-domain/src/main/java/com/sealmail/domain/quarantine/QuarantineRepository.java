@@ -1,5 +1,6 @@
 package com.sealmail.domain.quarantine;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 
@@ -22,6 +23,8 @@ public interface QuarantineRepository {
     List<QuarantinedMail> findByStatusAndReason(QuarantineStatus status, QuarantineReason reason, int offset, int limit);
 
     void deleteById(String id);
+
+    int deleteCreatedBefore(Instant cutoff);
 
     long count();
 

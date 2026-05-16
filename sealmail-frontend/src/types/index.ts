@@ -72,6 +72,20 @@ export interface Certificate {
   importedCrlAvailable?: boolean;
 }
 
+export type CertificateBindingPurpose = 'ENCRYPTION' | 'SIGNING';
+
+export interface CertificateBinding {
+  id: string;
+  domain: string;
+  ownerEmail: string;
+  certificateId: string;
+  certificateAlias?: string;
+  purpose: CertificateBindingPurpose;
+  enabled: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
 // Quarantine Types
 export interface QuarantineItem {
   id: string;

@@ -1,6 +1,9 @@
 package com.sealmail.infra.persistence.repository;
 
 import com.sealmail.domain.certificate.Certificate;
+import com.sealmail.domain.certificate.CertificateBinding;
+import com.sealmail.domain.certificate.CertificateBindingPurpose;
+import com.sealmail.domain.certificate.CertificateBindingRepository;
 import com.sealmail.domain.certificate.CertificateId;
 import com.sealmail.domain.certificate.CertificateRepository;
 import com.sealmail.domain.certificate.event.CertificateDeleted;
@@ -27,10 +30,14 @@ public class CertificateRepositoryImpl implements CertificateRepository {
 
     private final CertificateMapper mapper;
     private final DomainEventPublisher domainEventPublisher;
+    private final CertificateBindingRepository certificateBindingRepository;
 
-    public CertificateRepositoryImpl(CertificateMapper mapper, DomainEventPublisher domainEventPublisher) {
+    public CertificateRepositoryImpl(CertificateMapper mapper,
+                                     DomainEventPublisher domainEventPublisher,
+                                     CertificateBindingRepository certificateBindingRepository) {
         this.mapper = mapper;
         this.domainEventPublisher = domainEventPublisher;
+        this.certificateBindingRepository = certificateBindingRepository;
     }
 
     @Override
@@ -112,6 +119,12 @@ public class CertificateRepositoryImpl implements CertificateRepository {
     @Override
     @Transactional(readOnly = true)
     public List<Certificate> findTrustedForEncryption(EmailAddress owner) {
+        Optional<CertificateBinding> binding = certificateBindingRepository.findActiveByOwnerAndPurpose(
+                owner,
+                CertificateBindingPurpose.ENCRYPTION);
+        if (binding.isPresent()) {
+            return boundCertificate(binding.get(), owner, CertificateBindingPurpose.ENCRYPTION);
+        }
         TypedQuery<CertificateEntity> query = entityManager.createQuery(
                 "SELECT c FROM CertificateEntity c WHERE c.ownerEmail = :email " +
                         "AND c.trusted = true AND c.revoked = false AND c.notAfter > :now " +
@@ -130,6 +143,12 @@ public class CertificateRepositoryImpl implements CertificateRepository {
     @Override
     @Transactional(readOnly = true)
     public List<Certificate> findTrustedForSigning(EmailAddress owner) {
+        Optional<CertificateBinding> binding = certificateBindingRepository.findActiveByOwnerAndPurpose(
+                owner,
+                CertificateBindingPurpose.SIGNING);
+        if (binding.isPresent()) {
+            return boundCertificate(binding.get(), owner, CertificateBindingPurpose.SIGNING);
+        }
         TypedQuery<CertificateEntity> query = entityManager.createQuery(
                 "SELECT c FROM CertificateEntity c WHERE c.ownerEmail = :email " +
                         "AND c.trusted = true AND c.revoked = false AND c.notAfter > :now " +
@@ -150,6 +169,7 @@ public class CertificateRepositoryImpl implements CertificateRepository {
         CertificateEntity entity = entityManager.find(CertificateEntity.class, id.getThumbprint());
         if (entity != null) {
             EmailAddress owner = new EmailAddress(entity.getOwnerEmail());
+            certificateBindingRepository.deleteByCertificateId(id);
             entityManager.remove(entity);
             domainEventPublisher.publishEvent(new CertificateDeleted(id, owner));
         }
@@ -209,5 +229,27 @@ public class CertificateRepositoryImpl implements CertificateRepository {
         }
 
         return false;
+    }
+
+    private List<Certificate> boundCertificate(CertificateBinding binding,
+                                               EmailAddress owner,
+                                               CertificateBindingPurpose purpose) {
+        CertificateEntity entity = entityManager.find(
+                CertificateEntity.class,
+                binding.getCertificateId().getThumbprint());
+        if (entity == null) {
+            return List.of();
+        }
+        Certificate certificate = mapper.toDomain(entity);
+        if (!certificate.getOwner().equals(owner) || !isChainTrustedAndUsable(certificate)) {
+            return List.of();
+        }
+        if (purpose == CertificateBindingPurpose.ENCRYPTION && !certificate.isSuitableForEncryption()) {
+            return List.of();
+        }
+        if (purpose == CertificateBindingPurpose.SIGNING && !certificate.isSuitableForSigning()) {
+            return List.of();
+        }
+        return List.of(certificate);
     }
 }

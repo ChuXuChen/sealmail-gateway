@@ -12,12 +12,12 @@ public class SmtpServerProperties {
     private boolean enableStartTls = false;
     private boolean requireTls = false;
     private String keystorePath;
-    private String keystorePassword;
+    private String keystorePasswordSecretRef;
     private String keyAlias;
-    private String keyPassword;
+    private String keyPasswordSecretRef;
     private String certificatePath;
     private String privateKeyPath;
-    private String privateKeyPassword;
+    private String privateKeyPasswordSecretRef;
 
     public int getPort() {
         return port;
@@ -75,12 +75,12 @@ public class SmtpServerProperties {
         this.keystorePath = keystorePath;
     }
 
-    public String getKeystorePassword() {
-        return keystorePassword;
+    public String getKeystorePasswordSecretRef() {
+        return keystorePasswordSecretRef;
     }
 
-    public void setKeystorePassword(String keystorePassword) {
-        this.keystorePassword = keystorePassword;
+    public void setKeystorePasswordSecretRef(String keystorePasswordSecretRef) {
+        this.keystorePasswordSecretRef = keystorePasswordSecretRef;
     }
 
     public String getKeyAlias() {
@@ -91,12 +91,12 @@ public class SmtpServerProperties {
         this.keyAlias = keyAlias;
     }
 
-    public String getKeyPassword() {
-        return keyPassword;
+    public String getKeyPasswordSecretRef() {
+        return keyPasswordSecretRef;
     }
 
-    public void setKeyPassword(String keyPassword) {
-        this.keyPassword = keyPassword;
+    public void setKeyPasswordSecretRef(String keyPasswordSecretRef) {
+        this.keyPasswordSecretRef = keyPasswordSecretRef;
     }
 
     public String getCertificatePath() {
@@ -115,11 +115,11 @@ public class SmtpServerProperties {
         this.privateKeyPath = privateKeyPath;
     }
 
-    public String getPrivateKeyPassword() {
-        return privateKeyPassword;
+    public String getPrivateKeyPasswordSecretRef() {
+        return privateKeyPasswordSecretRef;
     }
 
-    public void setPrivateKeyPassword(String privateKeyPassword) {
-        this.privateKeyPassword = privateKeyPassword;
+    public void setPrivateKeyPasswordSecretRef(String privateKeyPasswordSecretRef) {
+        this.privateKeyPasswordSecretRef = privateKeyPasswordSecretRef;
     }
 }
