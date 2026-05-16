@@ -7,7 +7,6 @@ import com.sealmail.domain.mailsecurity.MailEnvelope;
 import com.sealmail.domain.mailsecurity.MailProcessingContext;
 import com.sealmail.domain.mailsecurity.MailProcessingErrorType;
 import com.sealmail.domain.mailsecurity.MailProcessingException;
-import com.sealmail.domain.mailsecurity.MailRecordDisposition;
 import com.sealmail.domain.mailsecurity.event.MailDecrypted;
 import com.sealmail.domain.shared.model.EmailAddress;
 import com.sealmail.infra.events.DomainEventPublisher;
@@ -80,12 +79,10 @@ public class DecryptStep {
             }
 
             if (recipientCert == null || privateKey == null) {
-                return MailProcessingMessages.quarantine(
-                        message,
-                        "DECRYPTION_FAILED",
+                throw new MailProcessingException(
+                        MailProcessingErrorType.DECRYPTION,
                         "Encrypted S/MIME mail cannot be decrypted: missing recipient certificate/private key",
-                        MailRecordDisposition.EXCEPTION
-                );
+                        context);
             }
 
             byte[] decrypted = smimeOperations.decrypt(message.getPayload(), privateKey, recipientCert);
@@ -96,6 +93,9 @@ public class DecryptStep {
             return MailProcessingMessages.withPayload(message, decrypted);
 
         } catch (Exception e) {
+            if (e instanceof MailProcessingException mailProcessingException) {
+                throw mailProcessingException;
+            }
             throw new MailProcessingException(
                     MailProcessingErrorType.DECRYPTION,
                     "Decryption failed: " + e.getMessage(),

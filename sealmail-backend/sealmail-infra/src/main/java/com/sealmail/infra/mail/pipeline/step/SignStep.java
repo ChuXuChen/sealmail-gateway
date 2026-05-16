@@ -44,7 +44,10 @@ public class SignStep {
         MailProcessingContext context = context(message);
         MailEnvelope envelope = context != null ? context.envelope() : null;
         if (envelope == null) {
-            return message;
+            throw new MailProcessingException(
+                    MailProcessingErrorType.SIGNING,
+                    "Mail processing context not found in message headers",
+                    context);
         }
 
         if (!context.decision().signingRequired()) {
@@ -59,14 +62,10 @@ public class SignStep {
             CryptoProfile profile = context.cryptoProfile();
 
             if (senderCert == null) {
-                if (profile != null && profile.isConcrete()) {
-                    throw new MailProcessingException(
-                            MailProcessingErrorType.SIGNING,
-                            profile + " profile 策略：未找到匹配签名证书",
-                            context);
-                }
-                log.info("Signing skipped: no sender certificate found");
-                return message;
+                throw new MailProcessingException(
+                        MailProcessingErrorType.SIGNING,
+                        signingMaterialMissingMessage(profile, "未找到匹配签名证书"),
+                        context);
             }
 
             // 根据证书算法加载对应私钥：优先证书关联私钥，其次 KeyStore。
@@ -89,8 +88,10 @@ public class SignStep {
             }
 
             if (privateKey == null) {
-                log.info("Signing skipped: private key not found for selected certificate");
-                return message;
+                throw new MailProcessingException(
+                        MailProcessingErrorType.SIGNING,
+                        signingMaterialMissingMessage(profile, "已选择签名证书但未找到对应私钥"),
+                        context);
             }
 
             byte[] original = message.getPayload();
@@ -130,5 +131,12 @@ public class SignStep {
     private MailProcessingContext context(Message<?> message) {
         Object value = message.getHeaders().get(MailProcessingHeaders.CONTEXT);
         return value instanceof MailProcessingContext context ? context : null;
+    }
+
+    private String signingMaterialMissingMessage(CryptoProfile profile, String detail) {
+        if (profile != null && profile.isConcrete()) {
+            return profile + " profile 策略：" + detail;
+        }
+        return detail;
     }
 }

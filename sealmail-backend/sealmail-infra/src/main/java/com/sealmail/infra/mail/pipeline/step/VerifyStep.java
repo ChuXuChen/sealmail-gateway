@@ -5,7 +5,6 @@ import com.sealmail.domain.mailsecurity.MailEnvelope;
 import com.sealmail.domain.mailsecurity.MailProcessingContext;
 import com.sealmail.domain.mailsecurity.MailProcessingErrorType;
 import com.sealmail.domain.mailsecurity.MailProcessingException;
-import com.sealmail.domain.mailsecurity.MailRecordDisposition;
 import com.sealmail.domain.mailsecurity.event.MailVerified;
 import com.sealmail.infra.events.DomainEventPublisher;
 import com.sealmail.infra.mail.pipeline.MailProcessingHeaders;
@@ -46,17 +45,19 @@ public class VerifyStep {
             String senderCert = context.certificateSelection().senderCertificatePem();
 
             if (senderCert == null) {
-                // Unknown sender certificate - skip verification instead of quarantining blindly.
-                return message;
+                throw new MailProcessingException(
+                        MailProcessingErrorType.VERIFICATION,
+                        "Signed S/MIME mail cannot be verified: missing sender certificate for "
+                                + envelope.getSender(),
+                        context);
             }
 
             boolean valid = smimeOperations.verifySignature(message.getPayload(), senderCert);
             if (!valid) {
-                return MailProcessingMessages.quarantine(
-                        message,
-                        "SIGNATURE_INVALID",
+                throw new MailProcessingException(
+                        MailProcessingErrorType.VERIFICATION,
                         "Invalid S/MIME signature from: " + envelope.getSender(),
-                        MailRecordDisposition.EXCEPTION);
+                        context);
             }
 
             byte[] extracted = smimeOperations.extractSignedContent(message.getPayload());
@@ -67,6 +68,9 @@ public class VerifyStep {
             return MailProcessingMessages.withPayload(message, extracted);
 
         } catch (Exception e) {
+            if (e instanceof MailProcessingException mailProcessingException) {
+                throw mailProcessingException;
+            }
             throw new MailProcessingException(
                     MailProcessingErrorType.VERIFICATION,
                     "Signature verification failed: " + e.getMessage(),

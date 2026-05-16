@@ -4,6 +4,8 @@ import com.sealmail.domain.certificate.CertificateRepository;
 import com.sealmail.domain.certificate.spi.SMIMEOperations;
 import com.sealmail.domain.mailsecurity.MailEnvelope;
 import com.sealmail.domain.mailsecurity.MailProcessingContext;
+import com.sealmail.domain.mailsecurity.MailProcessingErrorType;
+import com.sealmail.domain.mailsecurity.MailProcessingException;
 import com.sealmail.domain.shared.model.EmailAddress;
 import com.sealmail.infra.events.DomainEventPublisher;
 import com.sealmail.infra.mail.pipeline.MailProcessingHeaders;
@@ -18,7 +20,7 @@ import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
@@ -47,7 +49,7 @@ class DecryptStepTest {
     }
 
     @Test
-    void quarantinesEncryptedMailWithoutDecryptionMaterial() {
+    void encryptedMailWithoutDecryptionMaterialEntersUnifiedErrorFlow() {
         SMIMEOperations smimeOperations = mock(SMIMEOperations.class);
         DecryptStep decryptStep = new DecryptStep(
                 smimeOperations,
@@ -58,12 +60,12 @@ class DecryptStepTest {
         byte[] payload = "cipher-text".getBytes();
         when(smimeOperations.isEncrypted(payload)).thenReturn(true);
 
-        Message<byte[]> result = decryptStep.execute(message(payload));
+        MailProcessingException error = assertThrows(
+                MailProcessingException.class,
+                () -> decryptStep.execute(message(payload)));
 
-        MailProcessingContext context = context(result);
-        assertTrue(context.decision().requiresQuarantine());
-        assertEquals("DECRYPTION_FAILED", context.decision().quarantine().reason());
-        assertArrayEquals(payload, result.getPayload());
+        assertEquals(MailProcessingErrorType.DECRYPTION, error.errorType());
+        assertTrue(error.getMessage().contains("missing recipient certificate/private key"));
         verify(smimeOperations).isEncrypted(payload);
         verifyNoMoreInteractions(smimeOperations);
     }
@@ -83,7 +85,4 @@ class DecryptStepTest {
                 .build();
     }
 
-    private static MailProcessingContext context(Message<?> message) {
-        return (MailProcessingContext) message.getHeaders().get(MailProcessingHeaders.CONTEXT);
-    }
 }
