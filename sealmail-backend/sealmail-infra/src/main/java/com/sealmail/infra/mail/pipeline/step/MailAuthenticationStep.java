@@ -4,17 +4,17 @@ import com.sealmail.domain.mailsecurity.MailEnvelope;
 import com.sealmail.domain.mailsecurity.MailProcessingContext;
 import com.sealmail.domain.mailsecurity.MailProcessingErrorType;
 import com.sealmail.domain.mailsecurity.MailProcessingException;
+import com.sealmail.domain.mailsecurity.MailRecordDisposition;
 import com.sealmail.infra.mail.auth.MailAuthenticationService;
 import com.sealmail.infra.mail.pipeline.MailProcessingHeaders;
-import com.sealmail.infra.mail.pipeline.MailPipelineStep;
-import com.sealmail.infra.mail.pipeline.PipelineResult;
+import com.sealmail.infra.mail.pipeline.MailProcessingMessages;
 import org.springframework.messaging.Message;
 import org.springframework.stereotype.Component;
 
 import java.nio.charset.StandardCharsets;
 
 @Component
-public class MailAuthenticationStep implements MailPipelineStep {
+public class MailAuthenticationStep {
 
     private final MailAuthenticationService authenticationService;
 
@@ -22,18 +22,20 @@ public class MailAuthenticationStep implements MailPipelineStep {
         this.authenticationService = authenticationService;
     }
 
-    @Override
-    public PipelineResult execute(Message<byte[]> message) {
+    public Message<byte[]> execute(Message<byte[]> message) {
         MailProcessingContext context = context(message);
         MailEnvelope envelope = context != null ? context.envelope() : null;
         var result = authenticate(message, envelope, context);
         if (result.shouldQuarantine()) {
-            return PipelineResult.quarantine(message.getPayload(), "EMAIL_AUTH_FAILED", result.detail());
+            return MailProcessingMessages.quarantine(
+                    message,
+                    "EMAIL_AUTH_FAILED",
+                    result.detail(),
+                    MailRecordDisposition.EXCEPTION);
         }
-        return PipelineResult.success(prependAuthenticationResults(message.getPayload(), result.header()));
+        return MailProcessingMessages.withPayload(message, prependAuthenticationResults(message.getPayload(), result.header()));
     }
 
-    @Override
     public String getStepName() {
         return "mail-auth";
     }

@@ -5,10 +5,11 @@ import com.sealmail.domain.mailsecurity.MailEnvelope;
 import com.sealmail.domain.mailsecurity.MailProcessingContext;
 import com.sealmail.domain.mailsecurity.MailProcessingErrorType;
 import com.sealmail.domain.mailsecurity.MailProcessingException;
+import com.sealmail.domain.mailsecurity.MailRecordDisposition;
 import com.sealmail.domain.mailsecurity.event.MailVerified;
+import com.sealmail.infra.events.DomainEventPublisher;
 import com.sealmail.infra.mail.pipeline.MailProcessingHeaders;
-import com.sealmail.infra.mail.pipeline.MailPipelineStep;
-import com.sealmail.infra.mail.pipeline.PipelineResult;
+import com.sealmail.infra.mail.pipeline.MailProcessingMessages;
 import org.springframework.messaging.Message;
 import org.springframework.stereotype.Component;
 
@@ -16,16 +17,18 @@ import org.springframework.stereotype.Component;
  * Inbound pipeline step: Verify S/MIME signature.
  */
 @Component
-public class VerifyStep implements MailPipelineStep {
+public class VerifyStep {
 
     private final SMIMEOperations smimeOperations;
+    private final DomainEventPublisher domainEventPublisher;
 
-    public VerifyStep(SMIMEOperations smimeOperations) {
+    public VerifyStep(SMIMEOperations smimeOperations,
+                      DomainEventPublisher domainEventPublisher) {
         this.smimeOperations = smimeOperations;
+        this.domainEventPublisher = domainEventPublisher;
     }
 
-    @Override
-    public PipelineResult execute(Message<byte[]> message) {
+    public Message<byte[]> execute(Message<byte[]> message) {
         MailProcessingContext context = context(message);
         MailEnvelope envelope = context != null ? context.envelope() : null;
         if (envelope == null) {
@@ -37,29 +40,31 @@ public class VerifyStep implements MailPipelineStep {
 
         try {
             if (!smimeOperations.isSigned(message.getPayload())) {
-                return PipelineResult.success(message.getPayload());
+                return message;
             }
 
             String senderCert = context.certificateSelection().senderCertificatePem();
 
             if (senderCert == null) {
                 // Unknown sender certificate - skip verification instead of quarantining blindly.
-                return PipelineResult.success(message.getPayload());
+                return message;
             }
 
             boolean valid = smimeOperations.verifySignature(message.getPayload(), senderCert);
             if (!valid) {
-                return PipelineResult.quarantine(
-                        message.getPayload(),
+                return MailProcessingMessages.quarantine(
+                        message,
                         "SIGNATURE_INVALID",
-                        "Invalid S/MIME signature from: " + envelope.getSender());
+                        "Invalid S/MIME signature from: " + envelope.getSender(),
+                        MailRecordDisposition.EXCEPTION);
             }
 
             byte[] extracted = smimeOperations.extractSignedContent(message.getPayload());
-            return PipelineResult.success(extracted, new MailVerified(
+            domainEventPublisher.publishEvent(new MailVerified(
                     envelope.getMessageId(),
                     envelope.getSender(),
                     true));
+            return MailProcessingMessages.withPayload(message, extracted);
 
         } catch (Exception e) {
             throw new MailProcessingException(
@@ -70,7 +75,6 @@ public class VerifyStep implements MailPipelineStep {
         }
     }
 
-    @Override
     public String getStepName() {
         return "verify-signature";
     }

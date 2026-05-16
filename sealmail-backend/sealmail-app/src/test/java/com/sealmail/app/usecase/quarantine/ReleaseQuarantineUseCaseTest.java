@@ -20,6 +20,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -74,6 +75,19 @@ class ReleaseQuarantineUseCaseTest {
         assertEquals("Encrypted before release", response.getResolutionComment());
         verify(releaseRelay).relay(mail, true);
         verify(repository).save(mail);
+    }
+
+    @Test
+    void doesNotMarkReleasedWhenRelayFails() {
+        QuarantinedMail mail = mail("raw".getBytes());
+        when(repository.findById("q-1")).thenReturn(Optional.of(mail));
+        doThrow(new RuntimeException("relay failed")).when(releaseRelay).relay(mail, false);
+
+        assertThrows(RuntimeException.class,
+                () -> useCase.execute("q-1", new ReleaseQuarantineRequest(), admin()));
+
+        assertEquals(QuarantineStatus.QUARANTINED, mail.getStatus());
+        verify(repository, never()).save(mail);
     }
 
     private static QuarantinedMail mail(byte[] rawContent) {

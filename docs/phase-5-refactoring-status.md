@@ -33,7 +33,8 @@
 - 新增 `MailErrorDecisionHandler`，集中处理 Spring Integration error message。
 - `DeadLetterHandler` 保留 dead-letter 可观测计数和最近错误列表，并委托 `MailErrorDecisionHandler` 做状态、审计和隔离决策。
 - `MailPipelineFlow` 显式接入 `errorChannel`，route、step、relay、quarantine 异常都会发送 `ErrorMessage`。
-- `PipelineStepTracker.executeMessageWithTracking` 将非隔离型 failure result 转成 `MailProcessingException`，避免主 flow 继续依赖普通失败返回值。
+- 新增 `MailProcessingTracker`，只负责 Spring Integration handler 生命周期中的处理轨迹记录和终态写入。
+- 业务步骤直接返回 `Message<byte[]>`，隔离决策写入 `mailProcessingContext`，异常抛出 `MailProcessingException` 后进入统一错误流。
 - DLP、auth、decrypt、verify、sign、encrypt、dkimSign、relay、quarantine step 的异常改为抛出分类异常，不再自行吞异常或伪造普通 failure result。
 - Quarantine 持久化异常进入 dead-letter，不再重新投递到 quarantine channel，避免错误循环。
 - 错误流生成的隔离上下文 detail 包含 `processingId`、`errorType` 和错误详情。
@@ -41,24 +42,43 @@
 
 ## 3. 当前兼容边界
 
-仍保留短期兼容层：
+旧 Pipeline 生产抽象已清除：
 
-- `MailPipelineStep`
-- `PipelineResult`
-- `PipelineStepTracker.executeWithTracking`
+- 删除 `MailPipelineStep`。
+- 删除 `PipelineResult`。
+- 删除 `PipelineStepTracker`。
 
-保留原因：
+当前保留的邮件编排表面：
 
-- 现有 step 单元测试仍直接验证局部 `PipelineResult` 输出。
-- 业务型隔离结果仍用 `PipelineResult.quarantine` 表达，例如 DLP 命中、认证失败、证书缺失和签名无效。
-- 阶段 5 的目标是让异常进入统一错误流；彻底删除旧 step 接口和 `PipelineResult` 属于阶段 10 或后续拆分提交。
+- `MailPipelineFlow` 作为 Spring Integration flow 定义。
+- `MailProcessingTracker` 作为处理轨迹记录组件，不承载流程分支语义。
+- `MailProcessingMessages` 作为构造 message/context 的小工具。
 
 当前约束：
 
 - 新增邮件处理异常必须抛出 `MailProcessingException` 或让 flow 包装后发送到 `errorChannel`。
 - 主邮件流不得重新把异常转换成成功 payload 或普通 relay payload。
 - Quarantine 持久化失败不得重新进入 quarantine channel。
+- 生产代码不得恢复 `MailPipelineStep`、`PipelineResult` 或 `PipelineStepTracker`。
 - 密码算法 profile 选择、业务配置数据化、前端/API 收敛不属于阶段 5。
+
+## 3.1 阶段 5.5 Pipeline 小清理
+
+阶段 5 通过后追加了一个窄范围小清理，用于移除确定无引用或会绕过统一错误流的旧 pipeline 表面：
+
+- 删除旧 `SMIMEProcessor` 组件，避免阶段 6 同时维护两套 S/MIME 编排语义。
+- 删除 `MailPipelineFlow.relayFlow(MessageChannel)` 旧重载，保留带 `errorChannel` 和 `quarantineChannel` 的 relay flow。
+- 删除 `MailPipelineStep` / `PipelineResult` / `PipelineStepTracker` 旧生产抽象。
+- 删除 `PipelineStepTracker.wrap` / `wrapMessage` 未使用包装 API所在的旧 tracker。
+- 删除 `MailPipelineStep.isEnabled` 默认方法所在的旧 step 接口。
+- 删除 `PipelineResult.successWithHeader` 和 `PipelineResult.SUCCESS` 未使用 API所在的旧 result 模型。
+- 新增 `quarantineReleaseChannel` 和专用 Spring Integration release flow。
+- `QuarantineMailReleaseRelayImpl` 收敛为端口适配器，只负责把 DLP 隔离邮件封装成 `Message<byte[]>` 投递到 `quarantineReleaseChannel`。
+- DLP 隔离释放路径不再在适配器内手写 route、sign、encrypt、dkimSign、relay 或 exception-mail 记录。
+- release flow 负责 `route -> sign/encrypt/dkimSign/relay` 或 inbound direct relay，并在释放过程中再次触发隔离决策时进入 `errorChannel`、标记处理失败且向调用方传播失败。
+- DLP 隔离队列分页查询只返回 `QUARANTINED` 状态邮件；已放行或已拒绝邮件不再混入待处理列表。
+
+旧 `PipelineResult.failure("Pipeline step returned no result")` fallback 已随 `PipelineStepTracker` 删除。原生 handler 返回 `null` 时由 `MailProcessingTracker` 转换为 `MailProcessingException(PIPELINE)`。
 
 ## 4. 新增或补强测试
 
@@ -67,7 +87,7 @@
 - `MailPipelineFlowCharacterizationTest`
 - `DeadLetterHandlerTest`
 - `DlpStepTest`
-- `PipelineStepTrackerTest`
+- `MailProcessingTrackerTest`
 
 覆盖重点：
 
@@ -78,14 +98,22 @@
 - Quarantine 持久化失败保留为 dead-letter，不再重入 quarantine channel。
 - DLP scanner 异常抛出 `MailProcessingException(DLP)`，由统一错误流处理。
 - Exception mail 持久化保留 raw content。
+- DLP 隔离释放通过 `quarantineReleaseChannel` 进入 release flow，适配器不持有 pipeline step。
+- DLP 隔离释放失败时不会把原隔离记录标记为 `RELEASED`。
+- DLP 隔离列表只展示待处理的 `QUARANTINED` 记录，并支持在该状态内按 reason 过滤。
+- `MailPipelineFlow` 源码不再包含 `PipelineResult`、`PipelineStepTracker`、`MailPipelineStep` 或 `executeMessageWithTracking`。
 
 ## 5. 当前验证结果
 
 已通过的阶段 5 定向验证命令：
 
 ```bash
-mvn -pl sealmail-backend/sealmail-infra -am -Dtest=MailPipelineFlowCharacterizationTest,DeadLetterHandlerTest,PipelineStepTrackerTest -Dsurefire.failIfNoSpecifiedTests=false test
+mvn -pl sealmail-backend/sealmail-infra -am -Dtest=MailPipelineFlowCharacterizationTest,DeadLetterHandlerTest,MailProcessingTrackerTest -Dsurefire.failIfNoSpecifiedTests=false test
 mvn -pl sealmail-backend/sealmail-infra -am -Dtest=DeadLetterHandlerTest -Dsurefire.failIfNoSpecifiedTests=false test
+mvn -pl sealmail-backend/sealmail-infra -am -Dtest=QuarantineMailReleaseRelayImplTest -Dsurefire.failIfNoSpecifiedTests=false test
+mvn -pl sealmail-backend/sealmail-infra -am -Dtest=MailPipelineFlowCharacterizationTest,QuarantineMailReleaseRelayImplTest -Dsurefire.failIfNoSpecifiedTests=false test
+mvn -pl sealmail-backend/sealmail-app -am -Dtest=QueryQuarantineUseCaseTest,ReleaseQuarantineUseCaseTest -Dsurefire.failIfNoSpecifiedTests=false test
+mvn -pl sealmail-backend/sealmail-infra -am -Dtest=MailPipelineFlowCharacterizationTest,DeadLetterHandlerTest,MailProcessingTrackerTest,QuarantineMailReleaseRelayImplTest,DlpStepTest,EncryptStepTest,RelayStepTest,DecryptStepTest,VerifyStepTest,MailAuthenticationStepTest,QuarantineStepTest -Dsurefire.failIfNoSpecifiedTests=false test
 ```
 
 阶段最终验收命令：

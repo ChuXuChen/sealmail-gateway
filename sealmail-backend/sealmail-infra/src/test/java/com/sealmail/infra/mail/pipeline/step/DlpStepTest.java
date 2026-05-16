@@ -23,7 +23,6 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
@@ -39,10 +38,9 @@ class DlpStepTest {
         byte[] payload = mailPayload();
         DlpStep step = stepReturning(result(DispositionAction.WARN));
 
-        var pipelineResult = step.execute(MessageBuilder.withPayload(payload).build());
+        var result = step.execute(MessageBuilder.withPayload(payload).build());
 
-        assertTrue(pipelineResult.success());
-        assertArrayEquals(payload, pipelineResult.payload());
+        assertArrayEquals(payload, result.getPayload());
     }
 
     @Test
@@ -50,13 +48,11 @@ class DlpStepTest {
         byte[] payload = mailPayload();
         DlpStep step = stepReturning(result(DispositionAction.MUST_ENCRYPT));
 
-        var pipelineResult = step.execute(MessageBuilder.withPayload(payload)
+        var result = step.execute(MessageBuilder.withPayload(payload)
                 .setHeader(MailProcessingHeaders.CONTEXT, context(payload))
                 .build());
 
-        assertTrue(pipelineResult.success());
-        MailProcessingContext context = (MailProcessingContext) pipelineResult.headers()
-                .get(MailProcessingHeaders.CONTEXT);
+        MailProcessingContext context = context(result);
         assertTrue(context.decision().mustEncrypt());
     }
 
@@ -65,12 +61,14 @@ class DlpStepTest {
         byte[] payload = mailPayload();
         DlpStep step = stepReturning(result(DispositionAction.QUARANTINE));
 
-        var pipelineResult = step.execute(MessageBuilder.withPayload(payload).build());
+        var result = step.execute(MessageBuilder.withPayload(payload)
+                .setHeader(MailProcessingHeaders.CONTEXT, context(payload))
+                .build());
 
-        assertFalse(pipelineResult.success());
-        assertTrue(pipelineResult.requiresQuarantine());
-        assertEquals("POLICY_VIOLATION", pipelineResult.quarantineReason());
-        assertTrue(pipelineResult.quarantineDetail().startsWith("DLP QUARANTINE:"));
+        MailProcessingContext context = context(result);
+        assertTrue(context.decision().requiresQuarantine());
+        assertEquals("POLICY_VIOLATION", context.decision().quarantine().reason());
+        assertTrue(context.decision().quarantine().detail().startsWith("DLP QUARANTINE:"));
     }
 
     @Test
@@ -78,12 +76,14 @@ class DlpStepTest {
         byte[] payload = mailPayload();
         DlpStep step = stepReturning(result(DispositionAction.BLOCK));
 
-        var pipelineResult = step.execute(MessageBuilder.withPayload(payload).build());
+        var result = step.execute(MessageBuilder.withPayload(payload)
+                .setHeader(MailProcessingHeaders.CONTEXT, context(payload))
+                .build());
 
-        assertFalse(pipelineResult.success());
-        assertTrue(pipelineResult.requiresQuarantine());
-        assertEquals("POLICY_VIOLATION", pipelineResult.quarantineReason());
-        assertTrue(pipelineResult.quarantineDetail().startsWith("DLP BLOCK:"));
+        MailProcessingContext context = context(result);
+        assertTrue(context.decision().requiresQuarantine());
+        assertEquals("POLICY_VIOLATION", context.decision().quarantine().reason());
+        assertTrue(context.decision().quarantine().detail().startsWith("DLP BLOCK:"));
     }
 
     @Test
@@ -155,5 +155,9 @@ class DlpStepTest {
                 Instant.now(),
                 payload
         ));
+    }
+
+    private static MailProcessingContext context(org.springframework.messaging.Message<?> message) {
+        return (MailProcessingContext) message.getHeaders().get(MailProcessingHeaders.CONTEXT);
     }
 }

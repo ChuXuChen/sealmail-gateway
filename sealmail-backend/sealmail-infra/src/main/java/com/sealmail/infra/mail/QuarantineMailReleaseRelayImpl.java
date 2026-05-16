@@ -3,22 +3,12 @@ package com.sealmail.infra.mail;
 import com.sealmail.domain.mailsecurity.MailDirection;
 import com.sealmail.domain.mailsecurity.MailEnvelope;
 import com.sealmail.domain.mailsecurity.MailProcessingContext;
-import com.sealmail.domain.mailsecurity.MailRecordDisposition;
-import com.sealmail.domain.mailsecurity.ProcessingResult;
 import com.sealmail.domain.quarantine.QuarantinedMail;
 import com.sealmail.domain.quarantine.spi.QuarantineMailReleaseRelay;
 import com.sealmail.infra.mail.pipeline.MailProcessingHeaders;
-import com.sealmail.infra.mail.pipeline.MailPipelineStep;
-import com.sealmail.infra.mail.pipeline.PipelineStepTracker;
-import com.sealmail.infra.mail.pipeline.RoutingService;
-import com.sealmail.infra.mail.pipeline.step.DkimSignStep;
-import com.sealmail.infra.mail.pipeline.step.EncryptStep;
-import com.sealmail.infra.mail.pipeline.step.QuarantineStep;
-import com.sealmail.infra.mail.pipeline.step.RelayStep;
-import com.sealmail.infra.mail.pipeline.step.SignStep;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.messaging.Message;
+import org.springframework.messaging.MessageChannel;
 import org.springframework.messaging.support.MessageBuilder;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Propagation;
@@ -30,62 +20,30 @@ import org.springframework.transaction.annotation.Transactional;
 @Component
 public class QuarantineMailReleaseRelayImpl implements QuarantineMailReleaseRelay {
 
-    private static final Logger log = LoggerFactory.getLogger(QuarantineMailReleaseRelayImpl.class);
+    private final MessageChannel quarantineReleaseChannel;
 
-    private final RoutingService routingService;
-    private final PipelineStepTracker stepTracker;
-    private final SignStep signStep;
-    private final EncryptStep encryptStep;
-    private final DkimSignStep dkimSignStep;
-    private final RelayStep relayStep;
-    private final QuarantineStep quarantineStep;
-
-    public QuarantineMailReleaseRelayImpl(RoutingService routingService,
-                                          PipelineStepTracker stepTracker,
-                                          SignStep signStep,
-                                          EncryptStep encryptStep,
-                                          DkimSignStep dkimSignStep,
-                                          RelayStep relayStep,
-                                          QuarantineStep quarantineStep) {
-        this.routingService = routingService;
-        this.stepTracker = stepTracker;
-        this.signStep = signStep;
-        this.encryptStep = encryptStep;
-        this.dkimSignStep = dkimSignStep;
-        this.relayStep = relayStep;
-        this.quarantineStep = quarantineStep;
+    public QuarantineMailReleaseRelayImpl(
+            @Qualifier("quarantineReleaseChannel") MessageChannel quarantineReleaseChannel) {
+        this.quarantineReleaseChannel = quarantineReleaseChannel;
     }
 
     @Override
     @Transactional(propagation = Propagation.NOT_SUPPORTED)
     public void relay(QuarantinedMail mail, boolean encryptBeforeRelay) {
-        Message<byte[]> routed = route(mail, encryptBeforeRelay);
-        byte[] payload = routed.getPayload();
-
-        if (direction(mail) == MailDirection.OUTBOUND) {
-            Message<byte[]> stepMessage = messageWithPayload(routed, payload);
-            stepMessage = runStep(mail, stepMessage, signStep, "sign");
-            payload = stepMessage.getPayload();
-
-            stepMessage = messageWithPayload(routed, payload);
-            stepMessage = runStep(mail, stepMessage, encryptStep, "encrypt");
-            payload = stepMessage.getPayload();
-
-            stepMessage = messageWithPayload(routed, payload);
-            stepMessage = runStep(mail, stepMessage, dkimSignStep, "dkim-sign");
-            payload = stepMessage.getPayload();
-        } else if (encryptBeforeRelay) {
-            Message<byte[]> stepMessage = messageWithPayload(routed, payload);
-            stepMessage = runStep(mail, stepMessage, encryptStep, "encrypt");
-            payload = stepMessage.getPayload();
+        Message<byte[]> message = releaseMessage(mail, encryptBeforeRelay);
+        try {
+            boolean sent = quarantineReleaseChannel.send(message);
+            if (!sent) {
+                throw new QuarantineReleaseRelayException(mail.getId(), "Failed to enqueue quarantined mail release");
+            }
+        } catch (QuarantineReleaseRelayException e) {
+            throw e;
+        } catch (RuntimeException e) {
+            throw new QuarantineReleaseRelayException(mail.getId(), e);
         }
-
-        Message<byte[]> relayMessage = messageWithPayload(routed, payload);
-        runStep(mail, relayMessage, relayStep, "relay");
-        stepTracker.completeProcessing(context(routed).processingId(), ProcessingResult.SUCCESS);
     }
 
-    private Message<byte[]> route(QuarantinedMail mail, boolean encryptBeforeRelay) {
+    private Message<byte[]> releaseMessage(QuarantinedMail mail, boolean encryptBeforeRelay) {
         MailEnvelope envelope = envelope(mail);
         MailProcessingContext context = MailProcessingContext.initial(
                 envelope,
@@ -94,98 +52,14 @@ public class QuarantineMailReleaseRelayImpl implements QuarantineMailReleaseRela
                 mail.getRawContent(),
                 mail.getSubject(),
                 mail.getRemoteAddress());
-        var builder = MessageBuilder
-                .withPayload(mail.getRawContent())
-                .setHeader(MailProcessingHeaders.CONTEXT, context);
-        Message<byte[]> message = builder.build();
-
-        Message<byte[]> routed = direction(mail) == MailDirection.OUTBOUND
-                ? routingService.routeOutbound(message)
-                : routingService.routeInbound(message);
-        if (context(routed).decision().requiresQuarantine()) {
-            String detail = quarantineDetail(context(routed));
-            recordRoutingFailure(routed, detail);
-            throw new QuarantineReleaseRelayException(
-                    mail.getId(),
-                    detail != null ? detail : "released mail was routed back to quarantine");
-        }
-
-        MailProcessingContext routedContext = context(routed)
-                .withQuarantineReleaseId(mail.getId());
+        context = context.withQuarantineReleaseId(mail.getId());
         if (encryptBeforeRelay) {
-            routedContext = routedContext.withDecision(routedContext.decision()
+            context = context.withDecision(context.decision()
                     .withEncryptionRequired(true)
                     .withMustEncrypt(true));
         }
-        MessageBuilder<byte[]> routedBuilder = MessageBuilder.withPayload(routed.getPayload())
-                .copyHeaders(routed.getHeaders())
-                .setHeader(MailProcessingHeaders.CONTEXT, routedContext);
-        return routedBuilder.build();
-    }
-
-    private Message<byte[]> runStep(QuarantinedMail mail,
-                                    Message<byte[]> stepMessage,
-                                    MailPipelineStep step,
-                                    String stepName) {
-        Message<byte[]> result = stepTracker.executeMessageWithTracking(stepMessage, step);
-        MailProcessingContext context = context(result);
-        if (context == null || !context.decision().requiresQuarantine()) {
-            return result;
-        }
-        String detail = quarantineDetail(context);
-        recordReleaseFailure(result, detail);
-        throw new QuarantineReleaseRelayException(
-                mail.getId(),
-                stepName + " failed" + (detail != null && !detail.isBlank() ? ": " + detail : ""));
-    }
-
-    private void recordReleaseFailure(Message<byte[]> stepMessage, String detail) {
-        try {
-            MailProcessingContext context = context(stepMessage);
-            if (context != null) {
-                context = context
-                        .withDecision(context.decision().withQuarantine(
-                                hasText(quarantineReason(context)) ? quarantineReason(context) : "POLICY_VIOLATION",
-                                hasText(detail) ? detail : "released mail failed before relay"))
-                        .withRecordDisposition(MailRecordDisposition.EXCEPTION);
-            }
-            MessageBuilder<byte[]> quarantineBuilder = MessageBuilder
-                    .withPayload(stepMessage.getPayload())
-                    .copyHeaders(stepMessage.getHeaders())
-                    .setHeader(MailProcessingHeaders.CONTEXT, context);
-            Message<byte[]> quarantineMessage = quarantineBuilder.build();
-            stepTracker.executeMessageWithTracking(quarantineMessage, quarantineStep);
-        } catch (Exception e) {
-            log.error("Failed to record release failure as exception mail: {}", e.getMessage(), e);
-        }
-    }
-
-    private void recordRoutingFailure(Message<byte[]> routed, String detail) {
-        try {
-            MailProcessingContext context = context(routed);
-            if (context != null) {
-                context = context
-                        .withDecision(context.decision().withQuarantine(
-                                quarantineReason(context) != null
-                                        ? quarantineReason(context)
-                                        : "POLICY_VIOLATION",
-                                hasText(detail) ? detail : "released mail was routed back to quarantine"))
-                        .withRecordDisposition(MailRecordDisposition.EXCEPTION);
-            }
-            MessageBuilder<byte[]> quarantineBuilder = MessageBuilder
-                    .withPayload(routed.getPayload())
-                    .copyHeaders(routed.getHeaders())
-                    .setHeader(MailProcessingHeaders.CONTEXT, context);
-            Message<byte[]> quarantineMessage = quarantineBuilder.build();
-            stepTracker.executeMessageWithTracking(quarantineMessage, quarantineStep);
-        } catch (Exception e) {
-            log.error("Failed to record release routing failure as exception mail: {}", e.getMessage(), e);
-        }
-    }
-
-    private Message<byte[]> messageWithPayload(Message<byte[]> original, byte[] payload) {
-        return MessageBuilder.withPayload(payload)
-                .copyHeaders(original.getHeaders())
+        return MessageBuilder.withPayload(mail.getRawContent())
+                .setHeader(MailProcessingHeaders.CONTEXT, context)
                 .build();
     }
 
@@ -210,34 +84,6 @@ public class QuarantineMailReleaseRelayImpl implements QuarantineMailReleaseRela
     }
 
     private MailDirection direction(QuarantinedMail mail) {
-        if (mail.getDirection() != null) {
-            return mail.getDirection();
-        }
-        log.warn("Quarantined mail {} has no direction; releasing as outbound for backward compatibility",
-                mail.getId());
-        return MailDirection.OUTBOUND;
-    }
-
-    private boolean hasText(String value) {
-        return value != null && !value.isBlank();
-    }
-
-    private MailProcessingContext context(Message<?> message) {
-        Object value = message.getHeaders().get(MailProcessingHeaders.CONTEXT);
-        return value instanceof MailProcessingContext context ? context : null;
-    }
-
-    private String quarantineReason(MailProcessingContext context) {
-        if (context == null || context.decision().quarantine() == null) {
-            return null;
-        }
-        return context.decision().quarantine().reason();
-    }
-
-    private String quarantineDetail(MailProcessingContext context) {
-        if (context == null || context.decision().quarantine() == null) {
-            return null;
-        }
-        return context.decision().quarantine().detail();
+        return mail.getDirection() != null ? mail.getDirection() : MailDirection.OUTBOUND;
     }
 }

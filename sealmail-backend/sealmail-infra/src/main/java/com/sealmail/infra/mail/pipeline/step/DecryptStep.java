@@ -7,11 +7,12 @@ import com.sealmail.domain.mailsecurity.MailEnvelope;
 import com.sealmail.domain.mailsecurity.MailProcessingContext;
 import com.sealmail.domain.mailsecurity.MailProcessingErrorType;
 import com.sealmail.domain.mailsecurity.MailProcessingException;
+import com.sealmail.domain.mailsecurity.MailRecordDisposition;
 import com.sealmail.domain.mailsecurity.event.MailDecrypted;
 import com.sealmail.domain.shared.model.EmailAddress;
+import com.sealmail.infra.events.DomainEventPublisher;
 import com.sealmail.infra.mail.pipeline.MailProcessingHeaders;
-import com.sealmail.infra.mail.pipeline.MailPipelineStep;
-import com.sealmail.infra.mail.pipeline.PipelineResult;
+import com.sealmail.infra.mail.pipeline.MailProcessingMessages;
 import com.sealmail.infra.crypto.KeyStoreService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -22,24 +23,26 @@ import org.springframework.stereotype.Component;
  * Inbound pipeline step: Decrypt S/MIME encrypted mail.
  */
 @Component
-public class DecryptStep implements MailPipelineStep {
+public class DecryptStep {
 
     private static final Logger log = LoggerFactory.getLogger(DecryptStep.class);
 
     private final SMIMEOperations smimeOperations;
     private final KeyStoreService keyStoreService;
     private final CertificateRepository certificateRepository;
+    private final DomainEventPublisher domainEventPublisher;
 
     public DecryptStep(SMIMEOperations smimeOperations,
                        KeyStoreService keyStoreService,
-                       CertificateRepository certificateRepository) {
+                       CertificateRepository certificateRepository,
+                       DomainEventPublisher domainEventPublisher) {
         this.smimeOperations = smimeOperations;
         this.keyStoreService = keyStoreService;
         this.certificateRepository = certificateRepository;
+        this.domainEventPublisher = domainEventPublisher;
     }
 
-    @Override
-    public PipelineResult execute(Message<byte[]> message) {
+    public Message<byte[]> execute(Message<byte[]> message) {
         MailProcessingContext context = context(message);
         MailEnvelope envelope = context != null ? context.envelope() : null;
         if (envelope == null) {
@@ -51,7 +54,7 @@ public class DecryptStep implements MailPipelineStep {
 
         try {
             if (!smimeOperations.isEncrypted(message.getPayload())) {
-                return PipelineResult.success(message.getPayload());
+                return message;
             }
 
             String recipientCert = context.certificateSelection().recipientCertificatePem();
@@ -77,19 +80,20 @@ public class DecryptStep implements MailPipelineStep {
             }
 
             if (recipientCert == null || privateKey == null) {
-                return PipelineResult.quarantine(
-                        message.getPayload(),
+                return MailProcessingMessages.quarantine(
+                        message,
                         "DECRYPTION_FAILED",
-                        "Encrypted S/MIME mail cannot be decrypted: missing recipient certificate/private key"
+                        "Encrypted S/MIME mail cannot be decrypted: missing recipient certificate/private key",
+                        MailRecordDisposition.EXCEPTION
                 );
             }
 
             byte[] decrypted = smimeOperations.decrypt(message.getPayload(), privateKey, recipientCert);
             EmailAddress recipient = envelope.getRecipients().isEmpty() ? null : envelope.getRecipients().getFirst();
             if (recipient != null) {
-                return PipelineResult.success(decrypted, new MailDecrypted(envelope.getMessageId(), recipient));
+                domainEventPublisher.publishEvent(new MailDecrypted(envelope.getMessageId(), recipient));
             }
-            return PipelineResult.success(decrypted);
+            return MailProcessingMessages.withPayload(message, decrypted);
 
         } catch (Exception e) {
             throw new MailProcessingException(
@@ -100,7 +104,6 @@ public class DecryptStep implements MailPipelineStep {
         }
     }
 
-    @Override
     public String getStepName() {
         return "decrypt";
     }

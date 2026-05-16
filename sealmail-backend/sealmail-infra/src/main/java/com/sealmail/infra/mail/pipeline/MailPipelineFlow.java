@@ -1,5 +1,6 @@
 package com.sealmail.infra.mail.pipeline;
 
+import com.sealmail.domain.mailsecurity.MailDirection;
 import com.sealmail.domain.mailsecurity.MailProcessingContext;
 import com.sealmail.domain.mailsecurity.MailProcessingErrorType;
 import com.sealmail.domain.mailsecurity.MailProcessingException;
@@ -37,7 +38,7 @@ public class MailPipelineFlow {
     private final MailAuthenticationStep mailAuthenticationStep;
     private final DkimSignStep dkimSignStep;
     private final RoutingService routingService;
-    private final PipelineStepTracker stepTracker;
+    private final MailProcessingTracker tracker;
 
     public MailPipelineFlow(DecryptStep decryptStep,
                             VerifyStep verifyStep,
@@ -49,7 +50,7 @@ public class MailPipelineFlow {
                             MailAuthenticationStep mailAuthenticationStep,
                             DkimSignStep dkimSignStep,
                             RoutingService routingService,
-                            PipelineStepTracker stepTracker) {
+                            MailProcessingTracker tracker) {
         this.decryptStep = decryptStep;
         this.verifyStep = verifyStep;
         this.signStep = signStep;
@@ -60,7 +61,7 @@ public class MailPipelineFlow {
         this.mailAuthenticationStep = mailAuthenticationStep;
         this.dkimSignStep = dkimSignStep;
         this.routingService = routingService;
-        this.stepTracker = stepTracker;
+        this.tracker = tracker;
     }
 
     public IntegrationFlow inboundFlow(MessageChannel mailInboundChannel,
@@ -78,22 +79,26 @@ public class MailPipelineFlow {
                                 .channelMapping("error", "nullChannel")
                                 .subFlowMapping(RELAY_ROUTE, sf -> sf
                                         .handle(Message.class, (message, headers) ->
-                                                runStep(message, mailAuthenticationStep, errorChannel))
+                                                runStep(message, "mail-auth", MailProcessingErrorType.AUTHENTICATION,
+                                                        errorChannel, mailAuthenticationStep::execute))
                                         .route(Message.class, this::deliveryRoute,
                                                 authMapping -> authMapping
                                                         .subFlowMapping(RELAY_ROUTE, authSf -> authSf
                                                                 .handle(Message.class, (message, headers) ->
-                                                                        runStep(message, decryptStep, errorChannel))
+                                                                        runStep(message, "decrypt", MailProcessingErrorType.DECRYPTION,
+                                                                                errorChannel, decryptStep::execute))
                                                                 .route(Message.class, this::deliveryRoute,
                                                                         decryptMapping -> decryptMapping
                                                                                 .subFlowMapping(RELAY_ROUTE, decryptSf -> decryptSf
                                                                                         .handle(Message.class, (message, headers) ->
-                                                                                                runStep(message, verifyStep, errorChannel))
+                                                                                                runStep(message, "verify-signature", MailProcessingErrorType.VERIFICATION,
+                                                                                                        errorChannel, verifyStep::execute))
                                                                                         .route(Message.class, this::deliveryRoute,
                                                         verifyMapping -> verifyMapping
                                                                                                         .subFlowMapping(RELAY_ROUTE, verifySf -> verifySf
                                                                                                                 .handle(Message.class, (message, headers) ->
-                                                                                                                        runStep(message, dlpStep, errorChannel))
+                                                                                                                        runStep(message, "dlp", MailProcessingErrorType.DLP,
+                                                                                                                                errorChannel, dlpStep::execute))
                                                                                                                 .route(Message.class, this::deliveryRoute,
                                                                                                                         dlpMapping -> dlpMapping
                                                                                                                                 .channelMapping(RELAY_ROUTE, relayChannel)
@@ -125,22 +130,26 @@ public class MailPipelineFlow {
                                 .channelMapping("error", "nullChannel")
                                 .subFlowMapping(RELAY_ROUTE, sf -> sf
                                         .handle(Message.class, (message, headers) ->
-                                                runStep(message, dlpStep, errorChannel))
+                                                runStep(message, "dlp", MailProcessingErrorType.DLP,
+                                                        errorChannel, dlpStep::execute))
                                         .route(Message.class, this::deliveryRoute,
                                                 dlpMapping -> dlpMapping
                                                         .subFlowMapping(RELAY_ROUTE, dlpSf -> dlpSf
                                                                 .handle(Message.class, (message, headers) ->
-                                                                        runStep(message, signStep, errorChannel))
+                                                                        runStep(message, "sign", MailProcessingErrorType.SIGNING,
+                                                                                errorChannel, signStep::execute))
                                                                 .route(Message.class, this::deliveryRoute,
                                                                         signMapping -> signMapping
                                                                                 .subFlowMapping(RELAY_ROUTE, signSf -> signSf
                                                                                         .handle(Message.class, (message, headers) ->
-                                                                                                runStep(message, encryptStep, errorChannel))
+                                                                                                runStep(message, "encrypt", MailProcessingErrorType.ENCRYPTION,
+                                                                                                        errorChannel, encryptStep::execute))
                                                                                         .route(Message.class, this::deliveryRoute,
                                                                                                 encryptMapping -> encryptMapping
                                                                                                         .subFlowMapping(RELAY_ROUTE, encryptSf -> encryptSf
                                                                                                                 .handle(Message.class, (message, headers) ->
-                                                                                                                        runStep(message, dkimSignStep, errorChannel))
+                                                                                                                        runStep(message, "dkim-sign", MailProcessingErrorType.DKIM_SIGNING,
+                                                                                                                                errorChannel, dkimSignStep::execute))
                                                                                                                 .route(Message.class, this::deliveryRoute,
                                                                                                                         dkimMapping -> dkimMapping
                                                                                                                                 .channelMapping(RELAY_ROUTE, relayChannel)
@@ -160,7 +169,8 @@ public class MailPipelineFlow {
     public IntegrationFlow quarantineFlow(MessageChannel quarantineChannel, MessageChannel errorChannel) {
         return IntegrationFlow.from(quarantineChannel)
                 .handle(Message.class, (message, headers) ->
-                        runStep(message, quarantineStep, errorChannel))
+                        runStep(message, "quarantine", MailProcessingErrorType.QUARANTINE,
+                                errorChannel, quarantineStep::execute))
                 .nullChannel();
     }
 
@@ -168,7 +178,8 @@ public class MailPipelineFlow {
                                      MessageChannel quarantineChannel,
                                      MessageChannel errorChannel) {
         return IntegrationFlow.from(relayChannel)
-                .handle(Message.class, (message, headers) -> runStep(message, relayStep, errorChannel))
+                .handle(Message.class, (message, headers) ->
+                        runStep(message, "relay", MailProcessingErrorType.RELAY, errorChannel, relayStep::execute))
                 .route(Message.class, this::deliveryRoute,
                         mapping -> mapping
                                 .channelMapping("error", "nullChannel")
@@ -180,34 +191,172 @@ public class MailPipelineFlow {
                 .get();
     }
 
-    public IntegrationFlow relayFlow(MessageChannel relayChannel) {
-        return IntegrationFlow.from(relayChannel)
-                .handle(Message.class, (message, headers) -> runStep(message, relayStep))
-                .nullChannel();
+    public IntegrationFlow quarantineReleaseFlow(MessageChannel quarantineReleaseChannel,
+                                                 MessageChannel errorChannel) {
+        return IntegrationFlow.from(quarantineReleaseChannel)
+                .handle(Message.class, (message, headers) -> runReleaseFlowAction(
+                        message,
+                        errorChannel,
+                        MailProcessingErrorType.ROUTING,
+                        this::routeReleasedMail))
+                .handle(Message.class, (message, headers) ->
+                        failReleaseIfQuarantined(message, errorChannel, MailProcessingErrorType.ROUTING))
+                .route(Message.class, this::releaseDirectionRoute,
+                        mapping -> mapping
+                                .subFlowMapping("outbound", sf -> sf
+                                        .handle(Message.class, (message, headers) ->
+                                                runReleaseStep(message, "sign", MailProcessingErrorType.SIGNING,
+                                                        errorChannel, signStep::execute))
+                                        .handle(Message.class, (message, headers) ->
+                                                failReleaseIfQuarantined(message, errorChannel, MailProcessingErrorType.SIGNING))
+                                        .handle(Message.class, (message, headers) ->
+                                                runReleaseStep(message, "encrypt", MailProcessingErrorType.ENCRYPTION,
+                                                        errorChannel, encryptStep::execute))
+                                        .handle(Message.class, (message, headers) ->
+                                                failReleaseIfQuarantined(message, errorChannel, MailProcessingErrorType.ENCRYPTION))
+                                        .handle(Message.class, (message, headers) ->
+                                                runReleaseStep(message, "dkim-sign", MailProcessingErrorType.DKIM_SIGNING,
+                                                        errorChannel, dkimSignStep::execute))
+                                        .handle(Message.class, (message, headers) ->
+                                                failReleaseIfQuarantined(message, errorChannel, MailProcessingErrorType.DKIM_SIGNING))
+                                        .handle(Message.class, (message, headers) ->
+                                                runReleaseStep(message, "relay", MailProcessingErrorType.RELAY,
+                                                        errorChannel, relayStep::execute))
+                                        .handle(Message.class, (message, headers) ->
+                                                failReleaseIfQuarantined(message, errorChannel, MailProcessingErrorType.RELAY))
+                                        .handle(Message.class, (message, headers) -> completeSuccess(message))
+                                        .nullChannel())
+                                .subFlowMapping("inbound", sf -> sf
+                                        .route(Message.class, this::inboundReleaseRoute,
+                                                inboundMapping -> inboundMapping
+                                                        .subFlowMapping("encrypt", encryptSf -> encryptSf
+                                                                .handle(Message.class, (message, headers) ->
+                                                                        runReleaseStep(message, "encrypt", MailProcessingErrorType.ENCRYPTION,
+                                                                                errorChannel, encryptStep::execute))
+                                                                .handle(Message.class, (message, headers) ->
+                                                                        failReleaseIfQuarantined(message, errorChannel, MailProcessingErrorType.ENCRYPTION))
+                                                                .handle(Message.class, (message, headers) ->
+                                                                        runReleaseStep(message, "relay", MailProcessingErrorType.RELAY,
+                                                                                errorChannel, relayStep::execute))
+                                                                .handle(Message.class, (message, headers) ->
+                                                                        failReleaseIfQuarantined(message, errorChannel, MailProcessingErrorType.RELAY))
+                                                                .handle(Message.class, (message, headers) -> completeSuccess(message))
+                                                                .nullChannel())
+                                                        .subFlowMapping(RELAY_ROUTE, relaySf -> relaySf
+                                                                .handle(Message.class, (message, headers) ->
+                                                                        runReleaseStep(message, "relay", MailProcessingErrorType.RELAY,
+                                                                                errorChannel, relayStep::execute))
+                                                                .handle(Message.class, (message, headers) ->
+                                                                        failReleaseIfQuarantined(message, errorChannel, MailProcessingErrorType.RELAY))
+                                                                .handle(Message.class, (message, headers) -> completeSuccess(message))
+                                                                .nullChannel())
+                                                        .defaultOutputChannel("nullChannel")))
+                                .defaultOutputChannel("nullChannel"))
+                .get();
     }
 
-    private Message<byte[]> runStep(Object message, MailPipelineStep step) {
-        return stepTracker.executeMessageWithTracking(byteMessage(message), step);
+    private Message<byte[]> routeReleasedMail(Message<byte[]> message) {
+        MailProcessingContext context = context(message.getHeaders());
+        if (context != null && context.direction() == MailDirection.INBOUND) {
+            return routingService.routeInbound(message);
+        }
+        return routingService.routeOutbound(message);
     }
 
-    private Message<byte[]> runStep(Object message, MailPipelineStep step, MessageChannel errorChannel) {
+    private String releaseDirectionRoute(Message<?> message) {
+        MailProcessingContext context = context(message.getHeaders());
+        if (context != null && context.direction() == MailDirection.INBOUND) {
+            return "inbound";
+        }
+        return "outbound";
+    }
+
+    private String inboundReleaseRoute(Message<?> message) {
+        MailProcessingContext context = context(message.getHeaders());
+        if (context != null
+                && (context.decision().encryptionRequired() || context.decision().mustEncrypt())) {
+            return "encrypt";
+        }
+        return RELAY_ROUTE;
+    }
+
+    private Message<byte[]> runReleaseStep(Object message,
+                                           String stepName,
+                                           MailProcessingErrorType errorType,
+                                           MessageChannel errorChannel,
+                                           MailProcessingTracker.StepAction action) {
+        return runReleaseFlowAction(
+                message,
+                errorChannel,
+                errorType,
+                typedMessage -> tracker.executeStep(typedMessage, stepName, errorType, action));
+    }
+
+    private Message<byte[]> failReleaseIfQuarantined(Object message,
+                                                     MessageChannel errorChannel,
+                                                     MailProcessingErrorType errorType) {
+        Message<byte[]> typedMessage = byteMessage(message);
+        MailProcessingContext context = context(typedMessage.getHeaders());
+        if (context == null || !context.decision().requiresQuarantine()) {
+            return typedMessage;
+        }
+        tracker.completeProcessing(context.processingId(), ProcessingResult.FAILED);
+        MailProcessingException exception = new MailProcessingException(
+                errorType,
+                "Quarantine release stopped: " + releaseQuarantineDetail(context),
+                context);
+        sendError(errorChannel, typedMessage, errorType, exception);
+        throw exception;
+    }
+
+    private String releaseQuarantineDetail(MailProcessingContext context) {
+        if (context == null || context.decision().quarantine() == null) {
+            return "released mail cannot be delivered";
+        }
+        String detail = context.decision().quarantine().detail();
+        return detail != null && !detail.isBlank()
+                ? detail
+                : context.decision().quarantine().reason();
+    }
+
+    private Message<byte[]> runStep(Object message,
+                                    String stepName,
+                                    MailProcessingErrorType errorType,
+                                    MessageChannel errorChannel,
+                                    MailProcessingTracker.StepAction action) {
         return runFlowAction(
                 message,
                 errorChannel,
-                errorType(step),
-                typedMessage -> stepTracker.executeMessageWithTracking(typedMessage, step));
+                errorType,
+                typedMessage -> tracker.executeStep(typedMessage, stepName, errorType, action));
     }
 
     private Message<byte[]> runFlowAction(Object message,
                                           MessageChannel errorChannel,
                                           MailProcessingErrorType errorType,
-                                          StepAction action) {
+                                          MailProcessingTracker.StepAction action) {
         Message<byte[]> typedMessage = byteMessage(message);
         try {
             return action.apply(typedMessage);
         } catch (Exception e) {
             sendError(errorChannel, typedMessage, errorType, e);
             return markErrorHandled(typedMessage);
+        }
+    }
+
+    private Message<byte[]> runReleaseFlowAction(Object message,
+                                                 MessageChannel errorChannel,
+                                                 MailProcessingErrorType errorType,
+                                                 MailProcessingTracker.StepAction action) {
+        Message<byte[]> typedMessage = byteMessage(message);
+        try {
+            return action.apply(typedMessage);
+        } catch (Exception e) {
+            sendError(errorChannel, typedMessage, errorType, e);
+            if (e instanceof RuntimeException runtimeException) {
+                throw runtimeException;
+            }
+            throw new MailProcessingException(errorType, e.getMessage(), context(typedMessage.getHeaders()), e);
         }
     }
 
@@ -229,7 +378,7 @@ public class MailPipelineFlow {
 
     private Object completeSuccess(Object message) {
         Message<byte[]> typedMessage = byteMessage(message);
-        stepTracker.completeProcessing(processingId(typedMessage.getHeaders()), ProcessingResult.SUCCESS);
+        tracker.completeProcessing(processingId(typedMessage.getHeaders()), ProcessingResult.SUCCESS);
         return typedMessage;
     }
 
@@ -255,7 +404,7 @@ public class MailPipelineFlow {
         }
         MailProcessingContext context = context(message.getHeaders());
         if (context != null && context.decision().requiresQuarantine()) {
-            stepTracker.completeProcessing(context.processingId(), ProcessingResult.FAILED);
+            tracker.completeProcessing(context.processingId(), ProcessingResult.FAILED);
             return QUARANTINE_ROUTE;
         }
         return RELAY_ROUTE;
@@ -269,32 +418,5 @@ public class MailPipelineFlow {
     private String processingId(MessageHeaders headers) {
         MailProcessingContext context = context(headers);
         return context != null ? context.processingId() : null;
-    }
-
-    private MailProcessingErrorType errorType(MailPipelineStep step) {
-        if (step == null) {
-            return MailProcessingErrorType.UNKNOWN;
-        }
-        String stepName = step.getStepName();
-        if (stepName == null || stepName.isBlank()) {
-            return MailProcessingErrorType.UNKNOWN;
-        }
-        return switch (stepName) {
-            case "mail-auth" -> MailProcessingErrorType.AUTHENTICATION;
-            case "decrypt" -> MailProcessingErrorType.DECRYPTION;
-            case "verify-signature" -> MailProcessingErrorType.VERIFICATION;
-            case "dlp" -> MailProcessingErrorType.DLP;
-            case "sign" -> MailProcessingErrorType.SIGNING;
-            case "encrypt" -> MailProcessingErrorType.ENCRYPTION;
-            case "dkim-sign" -> MailProcessingErrorType.DKIM_SIGNING;
-            case "relay" -> MailProcessingErrorType.RELAY;
-            case "quarantine" -> MailProcessingErrorType.QUARANTINE;
-            default -> MailProcessingErrorType.PIPELINE;
-        };
-    }
-
-    @FunctionalInterface
-    private interface StepAction {
-        Message<byte[]> apply(Message<byte[]> message);
     }
 }

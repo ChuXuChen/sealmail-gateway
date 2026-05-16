@@ -16,8 +16,7 @@ import com.sealmail.infra.mail.relay.SmtpRelayClient;
 import com.sealmail.infra.mail.relay.SmtpRelayConnectionSettings;
 import com.sealmail.infra.mail.relay.SmtpRelayRequest;
 import com.sealmail.infra.mail.pipeline.MailProcessingHeaders;
-import com.sealmail.infra.mail.pipeline.MailPipelineStep;
-import com.sealmail.infra.mail.pipeline.PipelineResult;
+import com.sealmail.infra.mail.pipeline.MailProcessingMessages;
 import com.sealmail.infra.crypto.util.PemUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -33,7 +32,7 @@ import java.util.Locale;
  * Pipeline step: Relay processed mail to downstream SMTP server.
  */
 @Component
-public class RelayStep implements MailPipelineStep {
+public class RelayStep {
 
     private static final Logger log = LoggerFactory.getLogger(RelayStep.class);
 
@@ -49,8 +48,7 @@ public class RelayStep implements MailPipelineStep {
         this.certificateRepository = certificateRepository;
     }
 
-    @Override
-    public PipelineResult execute(Message<byte[]> message) {
+    public Message<byte[]> execute(Message<byte[]> message) {
         MailProcessingContext context = context(message);
         MailEnvelope envelope = context != null ? context.envelope() : null;
         if (envelope == null) {
@@ -68,7 +66,7 @@ public class RelayStep implements MailPipelineStep {
                     context);
         }
 
-        PipelineResult relayGuard = validateEncryptedOutboundRelay(context, envelope, mailContent);
+        Message<byte[]> relayGuard = validateEncryptedOutboundRelay(message, context, envelope, mailContent);
         if (relayGuard != null) {
             return relayGuard;
         }
@@ -110,7 +108,7 @@ public class RelayStep implements MailPipelineStep {
             log.info("  Size: {} bytes", mailContent.length);
             log.info("=================================");
 
-            return PipelineResult.success(mailContent);
+            return message;
 
         } catch (Exception e) {
             log.error("Relay step failed: {} - host: {}, port: {}, user: {}",
@@ -125,14 +123,14 @@ public class RelayStep implements MailPipelineStep {
         }
     }
 
-    @Override
     public String getStepName() {
         return "relay";
     }
 
-    private PipelineResult validateEncryptedOutboundRelay(MailProcessingContext context,
-                                                          MailEnvelope envelope,
-                                                          byte[] mailContent) {
+    private Message<byte[]> validateEncryptedOutboundRelay(Message<byte[]> message,
+                                                           MailProcessingContext context,
+                                                           MailEnvelope envelope,
+                                                           byte[] mailContent) {
         if (!isOutbound(context)) {
             return null;
         }
@@ -152,8 +150,8 @@ public class RelayStep implements MailPipelineStep {
 
         String detail = "Refusing to relay encrypted outbound mail: " + plan.failureDetail();
         log.error(detail);
-        return PipelineResult.quarantine(
-                mailContent,
+        return MailProcessingMessages.quarantine(
+                message,
                 "CERTIFICATE_MISSING",
                 detail,
                 MailRecordDisposition.EXCEPTION);

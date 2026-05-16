@@ -3,6 +3,7 @@ package com.sealmail.infra.mail.pipeline;
 import com.sealmail.domain.mailsecurity.MailProcessingContext;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.integration.annotation.ServiceActivator;
 import org.springframework.messaging.Message;
 import org.springframework.messaging.MessageChannel;
@@ -29,7 +30,7 @@ public class DeadLetterHandler {
     private final AtomicLong totalDeadLetters = new AtomicLong(0);
     private final int maxRecentErrors = 100;
 
-    public DeadLetterHandler(MessageChannel quarantineChannel,
+    public DeadLetterHandler(@Qualifier("quarantineChannel") MessageChannel quarantineChannel,
                              MailErrorDecisionHandler errorDecisionHandler) {
         this.quarantineChannel = quarantineChannel;
         this.errorDecisionHandler = errorDecisionHandler;

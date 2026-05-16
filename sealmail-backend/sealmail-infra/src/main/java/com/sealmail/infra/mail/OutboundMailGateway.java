@@ -10,6 +10,7 @@ import com.sealmail.domain.shared.model.EmailAddress;
 import com.sealmail.infra.mail.pipeline.MailProcessingHeaders;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.messaging.MessageChannel;
 import org.springframework.messaging.support.MessageBuilder;
 import org.springframework.stereotype.Component;
@@ -24,7 +25,7 @@ public class OutboundMailGateway implements OutboundMailSubmitter {
 
     private final MessageChannel mailOutboundChannel;
 
-    public OutboundMailGateway(MessageChannel mailOutboundChannel) {
+    public OutboundMailGateway(@Qualifier("mailOutboundChannel") MessageChannel mailOutboundChannel) {
         this.mailOutboundChannel = mailOutboundChannel;
     }
 

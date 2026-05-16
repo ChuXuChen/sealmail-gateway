@@ -28,6 +28,11 @@ public class IntegrationConfig {
     }
 
     @Bean
+    public MessageChannel quarantineReleaseChannel() {
+        return new DirectChannel();
+    }
+
+    @Bean
     public MessageChannel relayChannel() {
         return new DirectChannel();
     }
@@ -68,5 +73,14 @@ public class IntegrationConfig {
                                                 MessageChannel quarantineChannel,
                                                 MessageChannel errorChannel) {
         return pipelineFlow.relayFlow(relayChannel, quarantineChannel, errorChannel);
+    }
+
+    @Bean
+    public IntegrationFlow quarantineReleaseProcessingFlow(MailPipelineFlow pipelineFlow,
+                                                           MessageChannel quarantineReleaseChannel,
+                                                           MessageChannel errorChannel) {
+        return pipelineFlow.quarantineReleaseFlow(
+                quarantineReleaseChannel,
+                errorChannel);
     }
 }

@@ -15,14 +15,12 @@ import com.sealmail.infra.dlp.DlpService;
 import com.sealmail.infra.dlp.MimeContentExtractor;
 import com.sealmail.infra.events.DomainEventPublisher;
 import com.sealmail.infra.mail.pipeline.MailProcessingHeaders;
-import com.sealmail.infra.mail.pipeline.MailPipelineStep;
-import com.sealmail.infra.mail.pipeline.PipelineResult;
+import com.sealmail.infra.mail.pipeline.MailProcessingMessages;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.messaging.Message;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
-import java.util.Map;
 
 /**
  * DLP 检测步骤
@@ -30,7 +28,7 @@ import java.util.Map;
  */
 @Slf4j
 @Component
-public class DlpStep implements MailPipelineStep {
+public class DlpStep {
 
     private final DlpService dlpService;
     private final MimeContentExtractor contentExtractor;
@@ -44,8 +42,7 @@ public class DlpStep implements MailPipelineStep {
         this.domainEventPublisher = domainEventPublisher;
     }
 
-    @Override
-    public PipelineResult execute(Message<byte[]> message) {
+    public Message<byte[]> execute(Message<byte[]> message) {
         byte[] payload = message.getPayload();
 
         try {
@@ -56,7 +53,7 @@ public class DlpStep implements MailPipelineStep {
 
             if (!result.hasViolations()) {
                 log.debug("DLP scan passed, no violations found");
-                return PipelineResult.success(payload);
+                return message;
             }
 
             List<DlpViolation> violations = result.getViolations();
@@ -72,13 +69,13 @@ public class DlpStep implements MailPipelineStep {
             recordViolation(message, envelope, result);
 
             return switch (result.getFinalAction()) {
-                case BLOCK -> PipelineResult.quarantine(
-                        payload,
+                case BLOCK -> MailProcessingMessages.quarantine(
+                        message,
                         "POLICY_VIOLATION",
                         "DLP BLOCK: " + formatViolationSummary(violations),
                         MailRecordDisposition.EXCEPTION);
-                case QUARANTINE -> PipelineResult.quarantine(
-                        payload,
+                case QUARANTINE -> MailProcessingMessages.quarantine(
+                        message,
                         "POLICY_VIOLATION",
                         "DLP QUARANTINE: " + formatViolationSummary(violations),
                         MailRecordDisposition.DLP_QUARANTINE);
@@ -91,12 +88,11 @@ public class DlpStep implements MailPipelineStep {
                                         result.getMaxSeverity(),
                                         result.getViolations().stream().map(DlpViolation::getRuleName).toList()));
                         MailProcessingContext updatedContext = context.withDecision(decision);
-                        yield PipelineResult.successWithHeaders(payload, Map.of(
-                                MailProcessingHeaders.CONTEXT, updatedContext));
+                        yield MailProcessingMessages.withContext(message, updatedContext);
                     }
-                    yield PipelineResult.success(payload);
+                    yield message;
                 }
-                case WARN -> PipelineResult.success(payload);
+                case WARN -> message;
             };
 
         } catch (Exception e) {
@@ -149,7 +145,6 @@ public class DlpStep implements MailPipelineStep {
                 .orElse("");
     }
 
-    @Override
     public String getStepName() {
         return "dlp";
     }

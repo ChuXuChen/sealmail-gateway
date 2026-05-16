@@ -5,8 +5,8 @@ import com.sealmail.domain.mailsecurity.CertificateSelection;
 import com.sealmail.domain.mailsecurity.MailEnvelope;
 import com.sealmail.domain.mailsecurity.MailProcessingContext;
 import com.sealmail.domain.shared.model.EmailAddress;
+import com.sealmail.infra.events.DomainEventPublisher;
 import com.sealmail.infra.mail.pipeline.MailProcessingHeaders;
-import com.sealmail.infra.mail.pipeline.PipelineResult;
 import org.junit.jupiter.api.Test;
 import org.springframework.messaging.Message;
 import org.springframework.messaging.support.MessageBuilder;
@@ -26,7 +26,7 @@ class VerifyStepTest {
     @Test
     void extractsOriginalContentAfterSuccessfulSignatureVerification() {
         SMIMEOperations smimeOperations = mock(SMIMEOperations.class);
-        VerifyStep verifyStep = new VerifyStep(smimeOperations);
+        VerifyStep verifyStep = new VerifyStep(smimeOperations, mock(DomainEventPublisher.class));
         byte[] signedPayload = "signed".getBytes();
         byte[] extractedPayload = "plain".getBytes();
 
@@ -34,10 +34,9 @@ class VerifyStepTest {
         when(smimeOperations.verifySignature(signedPayload, "sender-cert")).thenReturn(true);
         when(smimeOperations.extractSignedContent(signedPayload)).thenReturn(extractedPayload);
 
-        PipelineResult result = verifyStep.execute(message(signedPayload));
+        Message<byte[]> result = verifyStep.execute(message(signedPayload));
 
-        assertTrue(result.success());
-        assertArrayEquals(extractedPayload, result.payload());
+        assertArrayEquals(extractedPayload, result.getPayload());
         verify(smimeOperations).isSigned(signedPayload);
         verify(smimeOperations).verifySignature(signedPayload, "sender-cert");
         verify(smimeOperations).extractSignedContent(signedPayload);

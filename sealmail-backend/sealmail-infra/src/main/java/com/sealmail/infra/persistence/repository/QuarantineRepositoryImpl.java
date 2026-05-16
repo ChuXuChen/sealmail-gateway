@@ -89,11 +89,38 @@ public class QuarantineRepositoryImpl implements QuarantineRepository {
 
     @Override
     @Transactional(readOnly = true)
+    public List<QuarantinedMail> findByStatus(QuarantineStatus status, int offset, int limit) {
+        TypedQuery<QuarantinedMailEntity> query = entityManager.createQuery(
+                "SELECT q FROM QuarantinedMailEntity q WHERE q.status = :status ORDER BY q.createdAt DESC",
+                QuarantinedMailEntity.class
+        );
+        query.setParameter("status", status.name());
+        query.setFirstResult(offset);
+        query.setMaxResults(limit);
+        return query.getResultList().stream().map(mapper::toDomain).toList();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
     public List<QuarantinedMail> findByReason(QuarantineReason reason, int offset, int limit) {
         TypedQuery<QuarantinedMailEntity> query = entityManager.createQuery(
                 "SELECT q FROM QuarantinedMailEntity q WHERE q.reason = :reason ORDER BY q.createdAt DESC",
                 QuarantinedMailEntity.class
         );
+        query.setParameter("reason", reason.name());
+        query.setFirstResult(offset);
+        query.setMaxResults(limit);
+        return query.getResultList().stream().map(mapper::toDomain).toList();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<QuarantinedMail> findByStatusAndReason(QuarantineStatus status, QuarantineReason reason, int offset, int limit) {
+        TypedQuery<QuarantinedMailEntity> query = entityManager.createQuery(
+                "SELECT q FROM QuarantinedMailEntity q WHERE q.status = :status AND q.reason = :reason ORDER BY q.createdAt DESC",
+                QuarantinedMailEntity.class
+        );
+        query.setParameter("status", status.name());
         query.setParameter("reason", reason.name());
         query.setFirstResult(offset);
         query.setMaxResults(limit);
@@ -130,6 +157,18 @@ public class QuarantineRepositoryImpl implements QuarantineRepository {
         return entityManager.createQuery(
                 "SELECT COUNT(q) FROM QuarantinedMailEntity q WHERE q.reason = :reason", Long.class
         ).setParameter("reason", reason.name()).getSingleResult();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public long countByStatusAndReason(QuarantineStatus status, QuarantineReason reason) {
+        return entityManager.createQuery(
+                "SELECT COUNT(q) FROM QuarantinedMailEntity q WHERE q.status = :status AND q.reason = :reason",
+                Long.class
+        )
+                .setParameter("status", status.name())
+                .setParameter("reason", reason.name())
+                .getSingleResult();
     }
 
 }

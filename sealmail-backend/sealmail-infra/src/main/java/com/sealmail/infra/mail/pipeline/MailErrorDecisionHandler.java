@@ -146,10 +146,16 @@ public class MailErrorDecisionHandler {
     }
 
     private Message<byte[]> quarantineMessage(MailProcessingContext context, ClassifiedError error) {
+        String reason = context.decision().quarantine() != null
+                ? context.decision().quarantine().reason()
+                : quarantineReason(error.errorType());
+        String detail = context.decision().quarantine() != null
+                ? context.decision().quarantine().detail()
+                : quarantineDetail(context, error);
         MailProcessingContext quarantineContext = context
                 .withDecision(MailProcessingDecision.none().withQuarantine(
-                        quarantineReason(error.errorType()),
-                        quarantineDetail(context, error)))
+                        reason,
+                        detail))
                 .withRecordDisposition(error.recordDisposition());
         return MessageBuilder.withPayload(context.originalMailContent())
                 .setHeader(MailProcessingHeaders.CONTEXT, quarantineContext)

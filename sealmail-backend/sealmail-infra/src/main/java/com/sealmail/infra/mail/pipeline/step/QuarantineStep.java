@@ -11,8 +11,6 @@ import com.sealmail.domain.mailsecurity.MailRecordDisposition;
 import com.sealmail.domain.quarantine.QuarantineReason;
 import com.sealmail.domain.quarantine.QuarantinedMail;
 import com.sealmail.infra.mail.pipeline.MailProcessingHeaders;
-import com.sealmail.infra.mail.pipeline.MailPipelineStep;
-import com.sealmail.infra.mail.pipeline.PipelineResult;
 import com.sealmail.infra.persistence.repository.QuarantineRepositoryImpl;
 import org.springframework.messaging.Message;
 import org.springframework.stereotype.Component;
@@ -21,7 +19,7 @@ import org.springframework.stereotype.Component;
  * Pipeline step: Persist mail to quarantine storage.
  */
 @Component
-public class QuarantineStep implements MailPipelineStep {
+public class QuarantineStep {
 
     private final QuarantineRepositoryImpl quarantineRepository;
     private final ExceptionMailRepository exceptionMailRepository;
@@ -32,8 +30,7 @@ public class QuarantineStep implements MailPipelineStep {
         this.exceptionMailRepository = exceptionMailRepository;
     }
 
-    @Override
-    public PipelineResult execute(Message<byte[]> message) {
+    public Message<byte[]> execute(Message<byte[]> message) {
         MailProcessingContext context = context(message);
         String reason = quarantineReason(context);
         if (reason == null) {
@@ -77,7 +74,7 @@ public class QuarantineStep implements MailPipelineStep {
                 exceptionMailRepository.save(exceptionMail);
             }
 
-            return PipelineResult.success(message.getPayload());
+            return message;
 
         } catch (Exception e) {
             throw new MailProcessingException(
@@ -88,7 +85,6 @@ public class QuarantineStep implements MailPipelineStep {
         }
     }
 
-    @Override
     public String getStepName() {
         return "quarantine";
     }

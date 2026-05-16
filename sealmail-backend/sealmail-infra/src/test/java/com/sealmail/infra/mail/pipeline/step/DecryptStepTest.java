@@ -5,9 +5,9 @@ import com.sealmail.domain.certificate.spi.SMIMEOperations;
 import com.sealmail.domain.mailsecurity.MailEnvelope;
 import com.sealmail.domain.mailsecurity.MailProcessingContext;
 import com.sealmail.domain.shared.model.EmailAddress;
+import com.sealmail.infra.events.DomainEventPublisher;
 import com.sealmail.infra.mail.pipeline.MailProcessingHeaders;
 import com.sealmail.infra.crypto.KeyStoreService;
-import com.sealmail.infra.mail.pipeline.PipelineResult;
 import org.junit.jupiter.api.Test;
 import org.springframework.messaging.Message;
 import org.springframework.messaging.support.MessageBuilder;
@@ -33,15 +33,15 @@ class DecryptStepTest {
         DecryptStep decryptStep = new DecryptStep(
                 smimeOperations,
                 mock(KeyStoreService.class),
-                mock(CertificateRepository.class)
+                mock(CertificateRepository.class),
+                mock(DomainEventPublisher.class)
         );
         byte[] payload = "plain-text".getBytes();
         when(smimeOperations.isEncrypted(payload)).thenReturn(false);
 
-        PipelineResult result = decryptStep.execute(message(payload));
+        Message<byte[]> result = decryptStep.execute(message(payload));
 
-        assertTrue(result.success());
-        assertArrayEquals(payload, result.payload());
+        assertArrayEquals(payload, result.getPayload());
         verify(smimeOperations).isEncrypted(payload);
         verifyNoMoreInteractions(smimeOperations);
     }
@@ -52,17 +52,18 @@ class DecryptStepTest {
         DecryptStep decryptStep = new DecryptStep(
                 smimeOperations,
                 mock(KeyStoreService.class),
-                mock(CertificateRepository.class)
+                mock(CertificateRepository.class),
+                mock(DomainEventPublisher.class)
         );
         byte[] payload = "cipher-text".getBytes();
         when(smimeOperations.isEncrypted(payload)).thenReturn(true);
 
-        PipelineResult result = decryptStep.execute(message(payload));
+        Message<byte[]> result = decryptStep.execute(message(payload));
 
-        assertFalse(result.success());
-        assertTrue(result.requiresQuarantine());
-        assertEquals("DECRYPTION_FAILED", result.quarantineReason());
-        assertArrayEquals(payload, result.payload());
+        MailProcessingContext context = context(result);
+        assertTrue(context.decision().requiresQuarantine());
+        assertEquals("DECRYPTION_FAILED", context.decision().quarantine().reason());
+        assertArrayEquals(payload, result.getPayload());
         verify(smimeOperations).isEncrypted(payload);
         verifyNoMoreInteractions(smimeOperations);
     }
@@ -80,5 +81,9 @@ class DecryptStepTest {
         return MessageBuilder.withPayload(payload)
                 .setHeader(MailProcessingHeaders.CONTEXT, MailProcessingContext.create(envelope))
                 .build();
+    }
+
+    private static MailProcessingContext context(Message<?> message) {
+        return (MailProcessingContext) message.getHeaders().get(MailProcessingHeaders.CONTEXT);
     }
 }

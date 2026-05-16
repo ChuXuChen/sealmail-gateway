@@ -6,6 +6,7 @@ import com.sealmail.app.security.PermissionChecker;
 import com.sealmail.app.security.UserContext;
 import com.sealmail.domain.quarantine.QuarantineReason;
 import com.sealmail.domain.quarantine.QuarantineRepository;
+import com.sealmail.domain.quarantine.QuarantineStatus;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -28,26 +29,28 @@ class QueryQuarantineUseCaseTest {
     @Test
     void usesOneBasedPageNumberForOffset() {
         PageRequest pageRequest = PageRequest.builder().page(1).size(20).build();
-        when(repository.findAll(0, 20)).thenReturn(List.of());
-        when(repository.count()).thenReturn(0L);
+        when(repository.findByStatus(QuarantineStatus.QUARANTINED, 0, 20)).thenReturn(List.of());
+        when(repository.countByStatus(QuarantineStatus.QUARANTINED)).thenReturn(0L);
 
         var response = useCase.findAll(pageRequest, admin());
 
         assertEquals(1, response.getPage());
-        verify(repository).findAll(0, 20);
+        verify(repository).findByStatus(QuarantineStatus.QUARANTINED, 0, 20);
     }
 
     @Test
     void appliesReasonFilterToItemsAndTotal() {
         PageRequest pageRequest = PageRequest.builder().page(2).size(10).build();
-        when(repository.findByReason(QuarantineReason.EMAIL_AUTH_FAILED, 10, 10)).thenReturn(List.of());
-        when(repository.countByReason(QuarantineReason.EMAIL_AUTH_FAILED)).thenReturn(12L);
+        when(repository.findByStatusAndReason(QuarantineStatus.QUARANTINED, QuarantineReason.EMAIL_AUTH_FAILED, 10, 10))
+                .thenReturn(List.of());
+        when(repository.countByStatusAndReason(QuarantineStatus.QUARANTINED, QuarantineReason.EMAIL_AUTH_FAILED))
+                .thenReturn(12L);
 
         var response = useCase.findAll(pageRequest, QuarantineReason.EMAIL_AUTH_FAILED, admin());
 
         assertEquals(12, response.getTotal());
-        verify(repository).findByReason(QuarantineReason.EMAIL_AUTH_FAILED, 10, 10);
-        verify(repository).countByReason(QuarantineReason.EMAIL_AUTH_FAILED);
+        verify(repository).findByStatusAndReason(QuarantineStatus.QUARANTINED, QuarantineReason.EMAIL_AUTH_FAILED, 10, 10);
+        verify(repository).countByStatusAndReason(QuarantineStatus.QUARANTINED, QuarantineReason.EMAIL_AUTH_FAILED);
     }
 
     private static UserContext admin() {

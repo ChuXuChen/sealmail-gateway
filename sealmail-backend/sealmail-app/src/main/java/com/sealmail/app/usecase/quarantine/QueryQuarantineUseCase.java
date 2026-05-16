@@ -68,16 +68,16 @@ public class QueryQuarantineUseCase {
 
     private List<QuarantinedMail> findItems(QuarantineReason reason, int offset, int size) {
         if (reason != null) {
-            return quarantineRepository.findByReason(reason, offset, size);
+            return quarantineRepository.findByStatusAndReason(QuarantineStatus.QUARANTINED, reason, offset, size);
         }
-        return quarantineRepository.findAll(offset, size);
+        return quarantineRepository.findByStatus(QuarantineStatus.QUARANTINED, offset, size);
     }
 
     private long countItems(QuarantineReason reason) {
         if (reason != null) {
-            return quarantineRepository.countByReason(reason);
+            return quarantineRepository.countByStatusAndReason(QuarantineStatus.QUARANTINED, reason);
         }
-        return quarantineRepository.count();
+        return quarantineRepository.countByStatus(QuarantineStatus.QUARANTINED);
     }
 
     public QuarantineItemResponse findById(String id, UserContext user) {

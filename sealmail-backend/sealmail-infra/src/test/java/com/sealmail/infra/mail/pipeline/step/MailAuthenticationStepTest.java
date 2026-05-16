@@ -16,7 +16,7 @@ import java.time.Instant;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -49,9 +49,8 @@ class MailAuthenticationStepTest {
                 .setHeader(MailProcessingHeaders.CONTEXT, MailProcessingContext.create(envelope))
                 .build());
 
-        assertEquals(true, result.success());
         assertEquals("Authentication-Results: sealmail; spf=none dkim=pass dmarc=pass\r\nFrom: sender@example.com\r\n\r\nbody\r\n",
-                new String(result.payload(), StandardCharsets.ISO_8859_1));
+                new String(result.getPayload(), StandardCharsets.ISO_8859_1));
         verify(service).authenticate(payload, envelope);
     }
 
@@ -81,10 +80,11 @@ class MailAuthenticationStepTest {
                 .setHeader(MailProcessingHeaders.CONTEXT, MailProcessingContext.create(envelope))
                 .build());
 
-        assertFalse(result.success());
-        assertEquals("EMAIL_AUTH_FAILED", result.quarantineReason());
-        assertEquals("spf=FAIL, dkim=FAIL, dmarc=FAIL, policy=REJECT", result.quarantineDetail());
-        assertEquals(new String(payload), new String(result.payload()));
+        MailProcessingContext resultContext = context(result);
+        assertTrue(resultContext.decision().requiresQuarantine());
+        assertEquals("EMAIL_AUTH_FAILED", resultContext.decision().quarantine().reason());
+        assertEquals("spf=FAIL, dkim=FAIL, dmarc=FAIL, policy=REJECT", resultContext.decision().quarantine().detail());
+        assertEquals(new String(payload), new String(result.getPayload()));
     }
 
     @Test
@@ -114,7 +114,10 @@ class MailAuthenticationStepTest {
                 .setHeader(MailProcessingHeaders.CONTEXT, MailProcessingContext.create(envelope))
                 .build());
 
-        assertEquals(true, result.success());
-        assertEquals(null, result.quarantineReason());
+        assertEquals(null, context(result).decision().quarantine());
+    }
+
+    private static MailProcessingContext context(org.springframework.messaging.Message<?> message) {
+        return (MailProcessingContext) message.getHeaders().get(MailProcessingHeaders.CONTEXT);
     }
 }

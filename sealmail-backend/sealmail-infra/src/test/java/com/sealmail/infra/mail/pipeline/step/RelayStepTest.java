@@ -15,7 +15,6 @@ import com.sealmail.infra.config.properties.RelayProperties;
 import com.sealmail.infra.mail.pipeline.MailProcessingHeaders;
 import com.sealmail.infra.mail.relay.SmtpRelayClient;
 import com.sealmail.infra.mail.relay.SmtpRelayRequest;
-import com.sealmail.infra.mail.pipeline.PipelineResult;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.messaging.Message;
@@ -29,7 +28,6 @@ import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.doNothing;
@@ -63,9 +61,9 @@ class RelayStepTest {
                 new RelayProfile("smtp.override.example.com", 587, true,
                         "auth@example.com", "auth-secret", 12000, null));
 
-        PipelineResult result = relayStep.execute(message);
+        Message<byte[]> result = relayStep.execute(message);
 
-        assertTrue(result.success());
+        assertArrayEquals(payload, result.getPayload());
         ArgumentCaptor<SmtpRelayRequest> requestCaptor = ArgumentCaptor.forClass(SmtpRelayRequest.class);
         verify(smtpRelayClient).send(requestCaptor.capture());
 
@@ -96,9 +94,9 @@ class RelayStepTest {
         Message<byte[]> message = message(payload, "sender@example.com", List.of("recipient@example.com"),
                 MailDirection.OUTBOUND, MailProcessingDecision.none(), null);
 
-        PipelineResult result = relayStep.execute(message);
+        Message<byte[]> result = relayStep.execute(message);
 
-        assertTrue(result.success());
+        assertArrayEquals(payload, result.getPayload());
         ArgumentCaptor<SmtpRelayRequest> requestCaptor = ArgumentCaptor.forClass(SmtpRelayRequest.class);
         verify(smtpRelayClient).send(requestCaptor.capture());
         assertEquals("sender@example.com", requestCaptor.getValue().envelopeFrom());
@@ -123,9 +121,9 @@ class RelayStepTest {
                 MailDirection.OUTBOUND, MailProcessingDecision.none(),
                 new RelayProfile("smtp.example.com", 25, false, "", "", 5000, "override@example.com"));
 
-        PipelineResult result = relayStep.execute(message);
+        Message<byte[]> result = relayStep.execute(message);
 
-        assertTrue(result.success());
+        assertArrayEquals(payload, result.getPayload());
         ArgumentCaptor<SmtpRelayRequest> requestCaptor = ArgumentCaptor.forClass(SmtpRelayRequest.class);
         verify(smtpRelayClient).send(requestCaptor.capture());
         assertEquals("override@example.com", requestCaptor.getValue().envelopeFrom());
@@ -160,9 +158,9 @@ class RelayStepTest {
                 .setHeader(MailProcessingHeaders.CONTEXT, context)
                 .build();
 
-        PipelineResult result = relayStep.execute(message);
+        Message<byte[]> result = relayStep.execute(message);
 
-        assertTrue(result.success());
+        assertArrayEquals(payload, result.getPayload());
         ArgumentCaptor<SmtpRelayRequest> requestCaptor = ArgumentCaptor.forClass(SmtpRelayRequest.class);
         verify(smtpRelayClient).send(requestCaptor.capture());
         assertEquals("context.smtp.example.com", requestCaptor.getValue().connection().host());
@@ -198,11 +196,11 @@ class RelayStepTest {
                 MailProcessingDecision.none().withEncryptionRequired(true),
                 null);
 
-        PipelineResult result = relayStep.execute(message);
+        Message<byte[]> result = relayStep.execute(message);
 
-        assertFalse(result.success());
-        assertTrue(result.requiresQuarantine());
-        assertTrue(result.quarantineDetail().contains("1261017453@qq.com"));
+        MailProcessingContext context = context(result);
+        assertTrue(context.decision().requiresQuarantine());
+        assertTrue(context.decision().quarantine().detail().contains("1261017453@qq.com"));
         verify(smtpRelayClient, never()).send(org.mockito.ArgumentMatchers.any(SmtpRelayRequest.class));
     }
 
@@ -238,12 +236,12 @@ class RelayStepTest {
                 MailProcessingDecision.none(),
                 null);
 
-        PipelineResult result = relayStep.execute(message);
+        Message<byte[]> result = relayStep.execute(message);
 
-        assertFalse(result.success());
-        assertTrue(result.requiresQuarantine());
-        assertEquals("CERTIFICATE_MISSING", result.quarantineReason());
-        assertTrue(result.quarantineDetail().contains("1261017453@qq.com"));
+        MailProcessingContext context = context(result);
+        assertTrue(context.decision().requiresQuarantine());
+        assertEquals("CERTIFICATE_MISSING", context.decision().quarantine().reason());
+        assertTrue(context.decision().quarantine().detail().contains("1261017453@qq.com"));
         verify(smtpRelayClient, never()).send(org.mockito.ArgumentMatchers.any(SmtpRelayRequest.class));
     }
 
@@ -289,5 +287,9 @@ class RelayStepTest {
         cert.trust();
         cert.setAlgorithm(algorithm);
         return cert;
+    }
+
+    private static MailProcessingContext context(Message<?> message) {
+        return (MailProcessingContext) message.getHeaders().get(MailProcessingHeaders.CONTEXT);
     }
 }

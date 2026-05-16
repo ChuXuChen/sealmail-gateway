@@ -14,8 +14,8 @@ import com.sealmail.domain.mailsecurity.MailRecordDisposition;
 import com.sealmail.domain.mailsecurity.event.MailEncrypted;
 import com.sealmail.domain.policy.PreferredAlgorithm;
 import com.sealmail.domain.shared.model.EmailAddress;
+import com.sealmail.infra.events.DomainEventPublisher;
 import com.sealmail.infra.mail.pipeline.MailProcessingHeaders;
-import com.sealmail.infra.mail.pipeline.PipelineResult;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.messaging.Message;
@@ -36,6 +36,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.same;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -45,7 +46,8 @@ class EncryptStepTest {
     void encryptsAllRecipientsInOneSmimeEnvelope() {
         SMIMEOperations smimeOperations = mock(SMIMEOperations.class);
         CertificateRepository certificateRepository = mock(CertificateRepository.class);
-        EncryptStep encryptStep = new EncryptStep(smimeOperations, certificateRepository);
+        DomainEventPublisher domainEventPublisher = mock(DomainEventPublisher.class);
+        EncryptStep encryptStep = new EncryptStep(smimeOperations, certificateRepository, domainEventPublisher);
 
         EmailAddress sender = new EmailAddress("sender@example.com");
         EmailAddress recipientA = new EmailAddress("a@example.com");
@@ -63,12 +65,10 @@ class EncryptStepTest {
                 MailProcessingDecision.none().withEncryptionRequired(true),
                 PreferredAlgorithm.AUTO);
 
-        PipelineResult result = encryptStep.execute(message);
+        Message<byte[]> result = encryptStep.execute(message);
 
-        assertTrue(result.success());
-        assertArrayEquals(encrypted, result.payload());
-        assertEquals(2, result.events().size());
-        assertTrue(result.events().stream().allMatch(MailEncrypted.class::isInstance));
+        assertArrayEquals(encrypted, result.getPayload());
+        verify(domainEventPublisher, times(2)).publishEvent(any(MailEncrypted.class));
 
         @SuppressWarnings("unchecked")
         ArgumentCaptor<List<String>> certCaptor = ArgumentCaptor.forClass(List.class);
@@ -86,7 +86,7 @@ class EncryptStepTest {
     void mustEncryptQuarantinesWhenNoRecipientCertificateExists() {
         SMIMEOperations smimeOperations = mock(SMIMEOperations.class);
         CertificateRepository certificateRepository = mock(CertificateRepository.class);
-        EncryptStep encryptStep = new EncryptStep(smimeOperations, certificateRepository);
+        EncryptStep encryptStep = new EncryptStep(smimeOperations, certificateRepository, mock(DomainEventPublisher.class));
 
         byte[] payload = "hello".getBytes();
         Message<byte[]> message = message(payload, new EmailAddress("sender@example.com"),
@@ -94,13 +94,13 @@ class EncryptStepTest {
                 MailProcessingDecision.none().withMustEncrypt(true),
                 PreferredAlgorithm.AUTO);
 
-        PipelineResult result = encryptStep.execute(message);
+        Message<byte[]> result = encryptStep.execute(message);
 
-        assertEquals(false, result.success());
-        assertTrue(result.requiresQuarantine());
-        assertEquals("CERTIFICATE_MISSING", result.quarantineReason());
-        assertEquals("DLP MUST_ENCRYPT: 未找到收件人加密证书", result.quarantineDetail());
-        assertEquals(MailRecordDisposition.EXCEPTION, result.recordDisposition());
+        MailProcessingContext context = context(result);
+        assertTrue(context.decision().requiresQuarantine());
+        assertEquals("CERTIFICATE_MISSING", context.decision().quarantine().reason());
+        assertEquals("DLP MUST_ENCRYPT: 未找到收件人加密证书", context.decision().quarantine().detail());
+        assertEquals(MailRecordDisposition.EXCEPTION, context.recordDisposition());
         verify(smimeOperations, never()).encryptMultiple(any(), any(), any());
     }
 
@@ -108,7 +108,7 @@ class EncryptStepTest {
     void mustEncryptFailureIsRecordedAsExceptionMail() {
         SMIMEOperations smimeOperations = mock(SMIMEOperations.class);
         CertificateRepository certificateRepository = mock(CertificateRepository.class);
-        EncryptStep encryptStep = new EncryptStep(smimeOperations, certificateRepository);
+        EncryptStep encryptStep = new EncryptStep(smimeOperations, certificateRepository, mock(DomainEventPublisher.class));
 
         byte[] payload = "hello".getBytes();
         Message<byte[]> message = message(payload, new EmailAddress("sender@example.com"),
@@ -116,17 +116,17 @@ class EncryptStepTest {
                 MailProcessingDecision.none().withMustEncrypt(true),
                 PreferredAlgorithm.AUTO);
 
-        PipelineResult result = encryptStep.execute(message);
+        Message<byte[]> result = encryptStep.execute(message);
 
-        assertTrue(result.requiresQuarantine());
-        assertEquals(MailRecordDisposition.EXCEPTION, result.recordDisposition());
+        assertTrue(context(result).decision().requiresQuarantine());
+        assertEquals(MailRecordDisposition.EXCEPTION, context(result).recordDisposition());
     }
 
     @Test
     void mustEncryptLoadsRecipientCertificatesWhenRoutingDidNotRequireEncryption() {
         SMIMEOperations smimeOperations = mock(SMIMEOperations.class);
         CertificateRepository certificateRepository = mock(CertificateRepository.class);
-        EncryptStep encryptStep = new EncryptStep(smimeOperations, certificateRepository);
+        EncryptStep encryptStep = new EncryptStep(smimeOperations, certificateRepository, mock(DomainEventPublisher.class));
 
         EmailAddress recipient = new EmailAddress("a@example.com");
         byte[] payload = "hello".getBytes();
@@ -141,10 +141,9 @@ class EncryptStepTest {
                 MailProcessingDecision.none().withMustEncrypt(true),
                 PreferredAlgorithm.AUTO);
 
-        PipelineResult result = encryptStep.execute(message);
+        Message<byte[]> result = encryptStep.execute(message);
 
-        assertTrue(result.success());
-        assertArrayEquals(encrypted, result.payload());
+        assertArrayEquals(encrypted, result.getPayload());
         verify(certificateRepository).findTrustedForEncryption(recipient);
         verify(smimeOperations).encryptMultiple(same(payload), any(), eq(SMIMEEncryptionSuite.STANDARD));
     }
@@ -153,7 +152,7 @@ class EncryptStepTest {
     void mustEncryptQuarantinesWhenAnyRecipientCertificateIsMissing() {
         SMIMEOperations smimeOperations = mock(SMIMEOperations.class);
         CertificateRepository certificateRepository = mock(CertificateRepository.class);
-        EncryptStep encryptStep = new EncryptStep(smimeOperations, certificateRepository);
+        EncryptStep encryptStep = new EncryptStep(smimeOperations, certificateRepository, mock(DomainEventPublisher.class));
 
         EmailAddress recipientA = new EmailAddress("a@example.com");
         EmailAddress recipientB = new EmailAddress("b@example.com");
@@ -168,11 +167,10 @@ class EncryptStepTest {
                 MailProcessingDecision.none().withMustEncrypt(true),
                 PreferredAlgorithm.AUTO);
 
-        PipelineResult result = encryptStep.execute(message);
+        Message<byte[]> result = encryptStep.execute(message);
 
-        assertEquals(false, result.success());
-        assertEquals("CERTIFICATE_MISSING", result.quarantineReason());
-        assertTrue(result.quarantineDetail().contains("b@example.com"));
+        assertEquals("CERTIFICATE_MISSING", context(result).decision().quarantine().reason());
+        assertTrue(context(result).decision().quarantine().detail().contains("b@example.com"));
         verify(smimeOperations, never()).encryptMultiple(any(), any(), any());
     }
 
@@ -180,7 +178,7 @@ class EncryptStepTest {
     void autoQuarantinesWhenRecipientsCannotShareOneEncryptionSuite() {
         SMIMEOperations smimeOperations = mock(SMIMEOperations.class);
         CertificateRepository certificateRepository = mock(CertificateRepository.class);
-        EncryptStep encryptStep = new EncryptStep(smimeOperations, certificateRepository);
+        EncryptStep encryptStep = new EncryptStep(smimeOperations, certificateRepository, mock(DomainEventPublisher.class));
 
         EmailAddress recipientA = new EmailAddress("a@example.com");
         EmailAddress recipientB = new EmailAddress("b@example.com");
@@ -195,10 +193,9 @@ class EncryptStepTest {
                 MailProcessingDecision.none().withEncryptionRequired(true),
                 PreferredAlgorithm.AUTO);
 
-        PipelineResult result = encryptStep.execute(message);
+        Message<byte[]> result = encryptStep.execute(message);
 
-        assertEquals(false, result.success());
-        assertTrue(result.quarantineDetail().contains("无法共享同一加密策略"));
+        assertTrue(context(result).decision().quarantine().detail().contains("无法共享同一加密策略"));
         verify(smimeOperations, never()).encryptMultiple(any(), any(), any());
     }
 
@@ -206,7 +203,7 @@ class EncryptStepTest {
     void gmOnlyUsesGmSuiteWhenAllRecipientsHaveSm2Certificates() {
         SMIMEOperations smimeOperations = mock(SMIMEOperations.class);
         CertificateRepository certificateRepository = mock(CertificateRepository.class);
-        EncryptStep encryptStep = new EncryptStep(smimeOperations, certificateRepository);
+        EncryptStep encryptStep = new EncryptStep(smimeOperations, certificateRepository, mock(DomainEventPublisher.class));
 
         EmailAddress recipientA = new EmailAddress("a@example.com");
         EmailAddress recipientB = new EmailAddress("b@example.com");
@@ -224,10 +221,9 @@ class EncryptStepTest {
                 MailProcessingDecision.none().withEncryptionRequired(true),
                 PreferredAlgorithm.GM_ONLY);
 
-        PipelineResult result = encryptStep.execute(message);
+        Message<byte[]> result = encryptStep.execute(message);
 
-        assertTrue(result.success());
-        assertArrayEquals(encrypted, result.payload());
+        assertArrayEquals(encrypted, result.getPayload());
         verify(smimeOperations).encryptMultiple(same(payload), any(), eq(SMIMEEncryptionSuite.GM));
     }
 
@@ -235,7 +231,7 @@ class EncryptStepTest {
     void encryptsWhenOnlyContextRequiresEncryption() {
         SMIMEOperations smimeOperations = mock(SMIMEOperations.class);
         CertificateRepository certificateRepository = mock(CertificateRepository.class);
-        EncryptStep encryptStep = new EncryptStep(smimeOperations, certificateRepository);
+        EncryptStep encryptStep = new EncryptStep(smimeOperations, certificateRepository, mock(DomainEventPublisher.class));
 
         EmailAddress recipient = new EmailAddress("a@example.com");
         byte[] payload = "hello".getBytes();
@@ -260,10 +256,9 @@ class EncryptStepTest {
                 .setHeader(MailProcessingHeaders.CONTEXT, context)
                 .build();
 
-        PipelineResult result = encryptStep.execute(message);
+        Message<byte[]> result = encryptStep.execute(message);
 
-        assertTrue(result.success());
-        assertArrayEquals(encrypted, result.payload());
+        assertArrayEquals(encrypted, result.getPayload());
         verify(smimeOperations).encryptMultiple(same(payload), any(), eq(SMIMEEncryptionSuite.STANDARD));
     }
 
@@ -304,5 +299,9 @@ class EncryptStepTest {
         return MessageBuilder.withPayload(payload)
                 .setHeader(MailProcessingHeaders.CONTEXT, context)
                 .build();
+    }
+
+    private static MailProcessingContext context(Message<?> message) {
+        return (MailProcessingContext) message.getHeaders().get(MailProcessingHeaders.CONTEXT);
     }
 }

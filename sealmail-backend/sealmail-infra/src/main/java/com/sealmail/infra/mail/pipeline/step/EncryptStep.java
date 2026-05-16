@@ -14,9 +14,9 @@ import com.sealmail.domain.mailsecurity.event.MailEncrypted;
 import com.sealmail.domain.policy.PreferredAlgorithm;
 import com.sealmail.domain.shared.model.EmailAddress;
 import com.sealmail.infra.crypto.util.PemUtils;
+import com.sealmail.infra.events.DomainEventPublisher;
 import com.sealmail.infra.mail.pipeline.MailProcessingHeaders;
-import com.sealmail.infra.mail.pipeline.MailPipelineStep;
-import com.sealmail.infra.mail.pipeline.PipelineResult;
+import com.sealmail.infra.mail.pipeline.MailProcessingMessages;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.messaging.Message;
@@ -31,21 +31,23 @@ import java.util.Map;
  * Outbound pipeline step: Encrypt outgoing mail with S/MIME for each recipient.
  */
 @Component
-public class EncryptStep implements MailPipelineStep {
+public class EncryptStep {
 
     private static final Logger log = LoggerFactory.getLogger(EncryptStep.class);
 
     private final SMIMEOperations smimeOperations;
     private final CertificateRepository certificateRepository;
+    private final DomainEventPublisher domainEventPublisher;
 
     public EncryptStep(SMIMEOperations smimeOperations,
-                       CertificateRepository certificateRepository) {
+                       CertificateRepository certificateRepository,
+                       DomainEventPublisher domainEventPublisher) {
         this.smimeOperations = smimeOperations;
         this.certificateRepository = certificateRepository;
+        this.domainEventPublisher = domainEventPublisher;
     }
 
-    @Override
-    public PipelineResult execute(Message<byte[]> message) {
+    public Message<byte[]> execute(Message<byte[]> message) {
         MailProcessingContext context = context(message);
         MailEnvelope envelope = context != null ? context.envelope() : null;
         if (envelope == null) {
@@ -58,7 +60,7 @@ public class EncryptStep implements MailPipelineStep {
         boolean encryptionEnabled = context.decision().encryptionRequired();
         boolean mustEncrypt = context.decision().mustEncrypt();
         if (!encryptionEnabled && !mustEncrypt) {
-            return PipelineResult.success(message.getPayload());
+            return message;
         }
 
         try {
@@ -66,8 +68,8 @@ public class EncryptStep implements MailPipelineStep {
 
             EncryptionPlan plan = buildEncryptionPlan(envelope, preference);
             if (!plan.success()) {
-                return PipelineResult.quarantine(
-                        message.getPayload(),
+                return MailProcessingMessages.quarantine(
+                        message,
                         "CERTIFICATE_MISSING",
                         mustEncrypt ? "DLP MUST_ENCRYPT: " + plan.failureDetail() : plan.failureDetail(),
                         MailRecordDisposition.EXCEPTION);
@@ -88,7 +90,8 @@ public class EncryptStep implements MailPipelineStep {
             log.info("  First 100 chars: {}", new String(payload).replaceAll("[\r\n]", " ").substring(0, Math.min(100, payload.length)));
 
             context = context.withSmimeEncryption(plan.suite().name(), List.copyOf(plan.certificates().keySet()));
-            return PipelineResult.successWithHeaders(payload, Map.of(MailProcessingHeaders.CONTEXT, context), events);
+            events.forEach(domainEventPublisher::publishEvent);
+            return MailProcessingMessages.withPayloadAndContext(message, payload, context);
 
         } catch (Exception e) {
             log.error("S/MIME encryption failed: {}", e.getMessage(), e);
@@ -100,7 +103,6 @@ public class EncryptStep implements MailPipelineStep {
         }
     }
 
-    @Override
     public String getStepName() {
         return "encrypt";
     }

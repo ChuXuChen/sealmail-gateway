@@ -10,9 +10,9 @@ import com.sealmail.domain.mailsecurity.event.MailSigned;
 import com.sealmail.domain.policy.PreferredAlgorithm;
 import com.sealmail.infra.crypto.KeyStoreService;
 import com.sealmail.infra.crypto.util.PemUtils;
+import com.sealmail.infra.events.DomainEventPublisher;
 import com.sealmail.infra.mail.pipeline.MailProcessingHeaders;
-import com.sealmail.infra.mail.pipeline.MailPipelineStep;
-import com.sealmail.infra.mail.pipeline.PipelineResult;
+import com.sealmail.infra.mail.pipeline.MailProcessingMessages;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.messaging.Message;
@@ -22,32 +22,34 @@ import org.springframework.stereotype.Component;
  * Outbound pipeline step: Sign outgoing mail with S/MIME.
  */
 @Component
-public class SignStep implements MailPipelineStep {
+public class SignStep {
 
     private static final Logger log = LoggerFactory.getLogger(SignStep.class);
 
     private final SMIMEOperations smimeOperations;
     private final KeyStoreService keyStoreService;
     private final CertificateRepository certificateRepository;
+    private final DomainEventPublisher domainEventPublisher;
 
     public SignStep(SMIMEOperations smimeOperations,
                     KeyStoreService keyStoreService,
-                    CertificateRepository certificateRepository) {
+                    CertificateRepository certificateRepository,
+                    DomainEventPublisher domainEventPublisher) {
         this.smimeOperations = smimeOperations;
         this.keyStoreService = keyStoreService;
         this.certificateRepository = certificateRepository;
+        this.domainEventPublisher = domainEventPublisher;
     }
 
-    @Override
-    public PipelineResult execute(Message<byte[]> message) {
+    public Message<byte[]> execute(Message<byte[]> message) {
         MailProcessingContext context = context(message);
         MailEnvelope envelope = context != null ? context.envelope() : null;
         if (envelope == null) {
-            return PipelineResult.success(message.getPayload());
+            return message;
         }
 
         if (!context.decision().signingRequired()) {
-            return PipelineResult.success(message.getPayload());
+            return message;
         }
 
         try {
@@ -118,7 +120,7 @@ public class SignStep implements MailPipelineStep {
                             context);
                 }
                 log.info("Signing skipped: no sender certificate found");
-                return PipelineResult.success(message.getPayload());
+                return message;
             }
 
             // 根据证书算法加载对应私钥：优先证书关联私钥，其次 KeyStore。
@@ -142,7 +144,7 @@ public class SignStep implements MailPipelineStep {
 
             if (privateKey == null) {
                 log.info("Signing skipped: privateKey not found for cert algorithm");
-                return PipelineResult.success(message.getPayload());
+                return message;
             }
 
             byte[] original = message.getPayload();
@@ -154,12 +156,13 @@ public class SignStep implements MailPipelineStep {
             log.info("  First 100 chars: {}", new String(signed).replaceAll("[\r\n]", " ").substring(0, Math.min(100, signed.length)));
 
             if (thumbprint != null && !thumbprint.isBlank()) {
-                return PipelineResult.success(signed, new MailSigned(
+                domainEventPublisher.publishEvent(new MailSigned(
                         envelope.getMessageId(),
                         envelope.getSender(),
                         new com.sealmail.domain.certificate.CertificateId(thumbprint)));
+                return MailProcessingMessages.withPayload(message, signed);
             }
-            return PipelineResult.success(signed);
+            return MailProcessingMessages.withPayload(message, signed);
 
         } catch (Exception e) {
             if (e instanceof MailProcessingException mailProcessingException) {
@@ -182,7 +185,6 @@ public class SignStep implements MailPipelineStep {
         }
     }
 
-    @Override
     public String getStepName() {
         return "sign";
     }

@@ -6,13 +6,12 @@ import com.sealmail.domain.mailsecurity.MailProcessingErrorType;
 import com.sealmail.domain.mailsecurity.MailProcessingException;
 import com.sealmail.infra.mail.auth.DkimSigner;
 import com.sealmail.infra.mail.pipeline.MailProcessingHeaders;
-import com.sealmail.infra.mail.pipeline.MailPipelineStep;
-import com.sealmail.infra.mail.pipeline.PipelineResult;
+import com.sealmail.infra.mail.pipeline.MailProcessingMessages;
 import org.springframework.messaging.Message;
 import org.springframework.stereotype.Component;
 
 @Component
-public class DkimSignStep implements MailPipelineStep {
+public class DkimSignStep {
 
     private final DkimSigner dkimSigner;
 
@@ -20,18 +19,19 @@ public class DkimSignStep implements MailPipelineStep {
         this.dkimSigner = dkimSigner;
     }
 
-    @Override
-    public PipelineResult execute(Message<byte[]> message) {
+    public Message<byte[]> execute(Message<byte[]> message) {
         MailProcessingContext context = context(message);
         if (context == null || !context.decision().dkimSigningRequired()) {
-            return PipelineResult.success(message.getPayload());
+            return message;
         }
         MailEnvelope envelope = context.envelope();
         if (envelope == null) {
-            return PipelineResult.success(message.getPayload());
+            return message;
         }
         try {
-            return PipelineResult.success(dkimSigner.sign(message.getPayload(), envelope.getSender().getDomain()));
+            return MailProcessingMessages.withPayload(
+                    message,
+                    dkimSigner.sign(message.getPayload(), envelope.getSender().getDomain()));
         } catch (Exception e) {
             throw new MailProcessingException(
                     MailProcessingErrorType.DKIM_SIGNING,
@@ -41,7 +41,6 @@ public class DkimSignStep implements MailPipelineStep {
         }
     }
 
-    @Override
     public String getStepName() {
         return "dkim-sign";
     }

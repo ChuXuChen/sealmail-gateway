@@ -15,7 +15,11 @@ public interface QuarantineRepository {
 
     List<QuarantinedMail> findAll(int offset, int limit);
 
+    List<QuarantinedMail> findByStatus(QuarantineStatus status, int offset, int limit);
+
     List<QuarantinedMail> findByReason(QuarantineReason reason, int offset, int limit);
+
+    List<QuarantinedMail> findByStatusAndReason(QuarantineStatus status, QuarantineReason reason, int offset, int limit);
 
     void deleteById(String id);
 
@@ -24,4 +28,6 @@ public interface QuarantineRepository {
     long countByStatus(QuarantineStatus status);
 
     long countByReason(QuarantineReason reason);
+
+    long countByStatusAndReason(QuarantineStatus status, QuarantineReason reason);
 }
