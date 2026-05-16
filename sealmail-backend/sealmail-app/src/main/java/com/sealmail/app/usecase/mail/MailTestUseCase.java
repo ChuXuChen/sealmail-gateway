@@ -10,6 +10,7 @@ import com.sealmail.domain.mail.spi.OutboundMailSubmitter;
 import com.sealmail.domain.mail.spi.MailSampleStore;
 import com.sealmail.domain.mail.spi.SmtpRelayProbe;
 import com.sealmail.domain.mailsecurity.MailEnvelope;
+import com.sealmail.domain.mailsecurity.CryptoProfileSelector;
 import com.sealmail.domain.policy.PreferredAlgorithm;
 import com.sealmail.domain.shared.model.EmailAddress;
 import com.sealmail.domain.system.SystemSettingsProvider;
@@ -29,19 +30,22 @@ public class MailTestUseCase {
     private final SmtpRelayProbe smtpRelayProbe;
     private final MailSampleStore mailSampleStore;
     private final MailMessageComposer mailMessageComposer;
+    private final CryptoProfileSelector cryptoProfileSelector;
 
     public MailTestUseCase(OutboundMailSubmitter outboundMailSubmitter,
                            CertificateRepository certificateRepository,
                            SystemSettingsProvider systemSettingsProvider,
                            SmtpRelayProbe smtpRelayProbe,
                            MailSampleStore mailSampleStore,
-                           MailMessageComposer mailMessageComposer) {
+                           MailMessageComposer mailMessageComposer,
+                           CryptoProfileSelector cryptoProfileSelector) {
         this.outboundMailSubmitter = outboundMailSubmitter;
         this.certificateRepository = certificateRepository;
         this.systemSettingsProvider = systemSettingsProvider;
         this.smtpRelayProbe = smtpRelayProbe;
         this.mailSampleStore = mailSampleStore;
         this.mailMessageComposer = mailMessageComposer;
+        this.cryptoProfileSelector = cryptoProfileSelector;
     }
 
     @Transactional(readOnly = true)
@@ -87,12 +91,12 @@ public class MailTestUseCase {
 
             PreferredAlgorithm preference = parsePreference(request.preferredAlgorithm());
             List<Certificate> senderCerts = certificateRepository.findTrustedForSigning(senderAddr);
-            Certificate selectedSenderCert = selectCertByPreference(senderCerts, preference);
+            Certificate selectedSenderCert = cryptoProfileSelector.select(senderCerts, preference).orElse(null);
 
             Map<EmailAddress, String> certMap = new HashMap<>();
             for (EmailAddress recipient : recipientAddrs) {
                 List<Certificate> certs = certificateRepository.findTrustedForEncryption(recipient);
-                Certificate selected = selectCertByPreference(certs, preference);
+                Certificate selected = cryptoProfileSelector.select(certs, preference).orElse(null);
                 if (selected != null) {
                     certMap.put(recipient, selected.getPemContent());
                 }
@@ -189,42 +193,6 @@ public class MailTestUseCase {
             return PreferredAlgorithm.AUTO;
         }
         return PreferredAlgorithm.valueOf(preferredAlgorithm);
-    }
-
-    private Certificate selectCertByPreference(List<Certificate> certs, PreferredAlgorithm preference) {
-        if (certs == null || certs.isEmpty()) {
-            return null;
-        }
-        if (preference == PreferredAlgorithm.GM_ONLY) {
-            for (Certificate cert : certs) {
-                if (isGmCert(cert)) {
-                    return cert;
-                }
-            }
-            return null;
-        }
-        if (preference == PreferredAlgorithm.STANDARD_ONLY) {
-            for (Certificate cert : certs) {
-                if (isRsaCert(cert)) {
-                    return cert;
-                }
-            }
-            return null;
-        }
-        for (Certificate cert : certs) {
-            if (isGmCert(cert)) {
-                return cert;
-            }
-        }
-        return certs.getFirst();
-    }
-
-    private boolean isGmCert(Certificate cert) {
-        return cert.isGmAlgorithmFamily();
-    }
-
-    private boolean isRsaCert(Certificate cert) {
-        return cert.isStandardAlgorithmFamily();
     }
 
     private void requireAdmin(UserContext user) {

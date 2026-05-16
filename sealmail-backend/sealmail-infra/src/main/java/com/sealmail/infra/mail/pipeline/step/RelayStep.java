@@ -2,6 +2,7 @@ package com.sealmail.infra.mail.pipeline.step;
 
 import com.sealmail.domain.certificate.Certificate;
 import com.sealmail.domain.certificate.CertificateRepository;
+import com.sealmail.domain.mailsecurity.CryptoProfileSelector;
 import com.sealmail.domain.mailsecurity.MailEnvelope;
 import com.sealmail.domain.mailsecurity.MailDirection;
 import com.sealmail.domain.mailsecurity.MailProcessingContext;
@@ -17,15 +18,16 @@ import com.sealmail.infra.mail.relay.SmtpRelayConnectionSettings;
 import com.sealmail.infra.mail.relay.SmtpRelayRequest;
 import com.sealmail.infra.mail.pipeline.MailProcessingHeaders;
 import com.sealmail.infra.mail.pipeline.MailProcessingMessages;
-import com.sealmail.infra.crypto.util.PemUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.messaging.Message;
 import org.springframework.stereotype.Component;
 
 import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Locale;
 
 /**
@@ -39,13 +41,23 @@ public class RelayStep {
     private final RelayProperties relayProperties;
     private final SmtpRelayClient smtpRelayClient;
     private final CertificateRepository certificateRepository;
+    private final CryptoProfileSelector cryptoProfileSelector;
 
     public RelayStep(RelayProperties relayProperties,
                      SmtpRelayClient smtpRelayClient,
                      CertificateRepository certificateRepository) {
+        this(relayProperties, smtpRelayClient, certificateRepository, new CryptoProfileSelector());
+    }
+
+    @Autowired
+    public RelayStep(RelayProperties relayProperties,
+                     SmtpRelayClient smtpRelayClient,
+                     CertificateRepository certificateRepository,
+                     CryptoProfileSelector cryptoProfileSelector) {
         this.relayProperties = relayProperties;
         this.smtpRelayClient = smtpRelayClient;
         this.certificateRepository = certificateRepository;
+        this.cryptoProfileSelector = cryptoProfileSelector;
     }
 
     public Message<byte[]> execute(Message<byte[]> message) {
@@ -175,104 +187,14 @@ public class RelayStep {
     }
 
     private EncryptionPlan buildEncryptionPlan(MailEnvelope envelope, PreferredAlgorithm preference) {
-        List<RecipientCertificateOptions> recipientOptions = new ArrayList<>();
+        Map<EmailAddress, List<Certificate>> certificatesByRecipient = new LinkedHashMap<>();
         for (EmailAddress recipient : envelope.getRecipients()) {
-            List<Certificate> certificates = certificateRepository.findTrustedForEncryption(recipient);
-            recipientOptions.add(new RecipientCertificateOptions(
-                    recipient,
-                    selectGmCertificate(certificates),
-                    selectStandardCertificate(certificates)));
+            certificatesByRecipient.put(recipient, certificateRepository.findTrustedForEncryption(recipient));
         }
-
-        if (preference == PreferredAlgorithm.GM_ONLY) {
-            return planForSuite(recipientOptions, true, "以下收件人没有SM2加密证书: ");
-        }
-        if (preference == PreferredAlgorithm.STANDARD_ONLY) {
-            return planForSuite(recipientOptions, false, "以下收件人没有RSA加密证书: ");
-        }
-
-        List<String> recipientsWithoutCertificates = recipientOptions.stream()
-                .filter(option -> !option.supportsGm() && !option.supportsStandard())
-                .map(option -> option.recipient().getValue())
-                .toList();
-        if (!recipientsWithoutCertificates.isEmpty()) {
-            if (recipientsWithoutCertificates.size() == envelope.getRecipients().size()) {
-                return EncryptionPlan.failure("未找到收件人加密证书");
-            }
-            return EncryptionPlan.failure("以下收件人没有加密证书: "
-                    + String.join(", ", recipientsWithoutCertificates));
-        }
-
-        if (recipientOptions.stream().allMatch(RecipientCertificateOptions::supportsGm)
-                || recipientOptions.stream().allMatch(RecipientCertificateOptions::supportsStandard)) {
-            return EncryptionPlan.ok();
-        }
-        return EncryptionPlan.failure("多收件人无法共享同一加密策略，需所有收件人同时具备SM2或RSA加密证书: "
-                + capabilitySummary(recipientOptions));
-    }
-
-    private EncryptionPlan planForSuite(List<RecipientCertificateOptions> recipientOptions,
-                                        boolean gm,
-                                        String missingPrefix) {
-        List<String> missingRecipients = recipientOptions.stream()
-                .filter(option -> gm ? !option.supportsGm() : !option.supportsStandard())
-                .map(option -> option.recipient().getValue())
-                .toList();
-        if (!missingRecipients.isEmpty()) {
-            return EncryptionPlan.failure(missingPrefix + String.join(", ", missingRecipients));
-        }
-        return EncryptionPlan.ok();
-    }
-
-    private Certificate selectGmCertificate(List<Certificate> certificates) {
-        if (certificates == null) {
-            return null;
-        }
-        return certificates.stream()
-                .filter(this::isGmCertificate)
-                .findFirst()
-                .orElse(null);
-    }
-
-    private Certificate selectStandardCertificate(List<Certificate> certificates) {
-        if (certificates == null) {
-            return null;
-        }
-        return certificates.stream()
-                .filter(this::isRsaCertificate)
-                .findFirst()
-                .orElse(null);
-    }
-
-    private boolean isRsaCertificate(Certificate certificate) {
-        return "RSA".equals(certificateAlgorithm(certificate));
-    }
-
-    private boolean isGmCertificate(Certificate certificate) {
-        String algorithm = certificateAlgorithm(certificate);
-        return "SM2".equals(algorithm) || "EC".equals(algorithm) || "ECDSA".equals(algorithm);
-    }
-
-    private String certificateAlgorithm(Certificate certificate) {
-        if (certificate.getAlgorithm() != null && !certificate.getAlgorithm().isBlank()) {
-            return certificate.getAlgorithm().trim().toUpperCase(Locale.ROOT);
-        }
-        try {
-            return PemUtils.parseCertificate(certificate.getPemContent())
-                    .getPublicKey()
-                    .getAlgorithm()
-                    .trim()
-                    .toUpperCase(Locale.ROOT);
-        } catch (Exception e) {
-            return "UNKNOWN";
-        }
-    }
-
-    private String capabilitySummary(List<RecipientCertificateOptions> recipientOptions) {
-        return recipientOptions.stream()
-                .map(option -> option.recipient().getValue() + "=" + option.capabilityLabel())
-                .reduce((left, right) -> left + ", " + right)
-                .orElse("");
+        CryptoProfileSelector.EncryptionProfilePlan plan = cryptoProfileSelector.encryptionPlan(
+                certificatesByRecipient,
+                preference);
+        return plan.success() ? EncryptionPlan.ok() : EncryptionPlan.failure(plan.failureDetail());
     }
 
     private static boolean hasText(String value) {
@@ -282,31 +204,6 @@ public class RelayStep {
     private MailProcessingContext context(Message<?> message) {
         Object value = message.getHeaders().get(MailProcessingHeaders.CONTEXT);
         return value instanceof MailProcessingContext context ? context : null;
-    }
-
-    private record RecipientCertificateOptions(EmailAddress recipient,
-                                               Certificate gmCertificate,
-                                               Certificate standardCertificate) {
-        boolean supportsGm() {
-            return gmCertificate != null;
-        }
-
-        boolean supportsStandard() {
-            return standardCertificate != null;
-        }
-
-        String capabilityLabel() {
-            if (supportsGm() && supportsStandard()) {
-                return "GM,STANDARD";
-            }
-            if (supportsGm()) {
-                return "GM";
-            }
-            if (supportsStandard()) {
-                return "STANDARD";
-            }
-            return "NONE";
-        }
     }
 
     private record EncryptionPlan(boolean success, String failureDetail) {

@@ -1,6 +1,8 @@
 package com.sealmail.infra.events;
 
 import com.sealmail.domain.audit.AuditLog;
+import com.sealmail.domain.audit.AuditContext;
+import com.sealmail.domain.audit.AuditContextProvider;
 import com.sealmail.domain.audit.AuditLogRepository;
 import com.sealmail.domain.audit.AuditLogType;
 import com.sealmail.domain.certificate.event.CertificateDeleted;
@@ -33,14 +35,11 @@ import com.sealmail.domain.quarantine.event.QuarantineRejected;
 import com.sealmail.domain.quarantine.event.QuarantineReleased;
 import com.sealmail.domain.shared.event.AuditEvent;
 import com.sealmail.domain.shared.event.DomainEvent;
-import jakarta.servlet.http.HttpServletRequest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.event.TransactionPhase;
 import org.springframework.transaction.event.TransactionalEventListener;
-import org.springframework.web.context.request.RequestContextHolder;
-import org.springframework.web.context.request.ServletRequestAttributes;
 
 import java.util.UUID;
 
@@ -50,9 +49,12 @@ public class DomainEventAuditListener {
     private static final Logger log = LoggerFactory.getLogger(DomainEventAuditListener.class);
 
     private final AuditLogRepository auditLogRepository;
+    private final AuditContextProvider auditContextProvider;
 
-    public DomainEventAuditListener(AuditLogRepository auditLogRepository) {
+    public DomainEventAuditListener(AuditLogRepository auditLogRepository,
+                                    AuditContextProvider auditContextProvider) {
         this.auditLogRepository = auditLogRepository;
+        this.auditContextProvider = auditContextProvider;
     }
 
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT, fallbackExecution = true)
@@ -71,8 +73,9 @@ public class DomainEventAuditListener {
     }
 
     private AuditLog toAuditLog(DomainEvent event) {
-        Actor actor = resolveActor();
-        String ipAddress = resolveIpAddress();
+        AuditContext auditContext = auditContextProvider.currentContext();
+        Actor actor = resolveActor(auditContext);
+        String ipAddress = resolveIpAddress(auditContext);
 
         if (event instanceof CertificateIssued certificateIssued) {
             return audit(
@@ -392,39 +395,17 @@ public class DomainEventAuditListener {
         }
     }
 
-    private Actor resolveActor() {
-        Object principal = currentPrincipal();
-        if (principal != null) {
-            String userId = readStringProperty(principal, "getUserId");
-            String username = readStringProperty(principal, "getUsername");
+    private Actor resolveActor(AuditContext auditContext) {
+        if (auditContext != null) {
+            String userId = blankToNull(auditContext.userId());
+            String username = blankToNull(auditContext.username());
             if (userId != null || username != null) {
-                return new Actor(userId, username);
+                return new Actor(
+                        userId != null ? userId : username,
+                        username != null ? username : userId);
             }
         }
         return new Actor("system", "system");
-    }
-
-    private Object currentPrincipal() {
-        try {
-            Class<?> holderClass = Class.forName("org.springframework.security.core.context.SecurityContextHolder");
-            Object context = holderClass.getMethod("getContext").invoke(null);
-            Object authentication = context.getClass().getMethod("getAuthentication").invoke(context);
-            if (authentication == null) {
-                return null;
-            }
-            return authentication.getClass().getMethod("getPrincipal").invoke(authentication);
-        } catch (Exception ignored) {
-            return null;
-        }
-    }
-
-    private String readStringProperty(Object target, String methodName) {
-        try {
-            Object value = target.getClass().getMethod(methodName).invoke(target);
-            return value instanceof String stringValue && !stringValue.isBlank() ? stringValue : null;
-        } catch (Exception ignored) {
-            return null;
-        }
     }
 
     private Actor actorFor(String userIdOrName, Actor fallback) {
@@ -434,16 +415,12 @@ public class DomainEventAuditListener {
         return new Actor(userIdOrName, userIdOrName);
     }
 
-    private String resolveIpAddress() {
-        if (RequestContextHolder.getRequestAttributes() instanceof ServletRequestAttributes attributes) {
-            HttpServletRequest request = attributes.getRequest();
-            String forwardedFor = request.getHeader("X-Forwarded-For");
-            if (forwardedFor != null && !forwardedFor.isBlank()) {
-                return forwardedFor.split(",", 2)[0].trim();
-            }
-            return request.getRemoteAddr();
-        }
-        return null;
+    private String resolveIpAddress(AuditContext auditContext) {
+        return auditContext != null ? blankToNull(auditContext.ipAddress()) : null;
+    }
+
+    private String blankToNull(String value) {
+        return value != null && !value.isBlank() ? value : null;
     }
 
     private String detailSuffix(String detail) {

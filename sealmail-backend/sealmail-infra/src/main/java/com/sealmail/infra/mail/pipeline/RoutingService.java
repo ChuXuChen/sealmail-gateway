@@ -9,14 +9,14 @@ import com.sealmail.domain.policy.PreferredAlgorithm;
 import com.sealmail.domain.quarantine.QuarantineReason;
 import com.sealmail.domain.shared.model.EmailAddress;
 import com.sealmail.infra.config.properties.PostfixProperties;
-import com.sealmail.infra.crypto.util.PemUtils;
 import org.slf4j.Logger;
 import org.springframework.messaging.Message;
 import org.springframework.messaging.support.MessageBuilder;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -31,17 +31,35 @@ public class RoutingService {
     private final CertificateRepository certificateRepository;
     private final MailProcessingRepository mailProcessingRepository;
     private final PostfixProperties postfixProperties;
+    private final CryptoProfileSelector cryptoProfileSelector;
 
     public RoutingService(MailRouter mailRouter,
                            DomainConfigRepository domainConfigRepository,
                            CertificateRepository certificateRepository,
                            MailProcessingRepository mailProcessingRepository,
                            PostfixProperties postfixProperties) {
+        this(
+                mailRouter,
+                domainConfigRepository,
+                certificateRepository,
+                mailProcessingRepository,
+                postfixProperties,
+                new CryptoProfileSelector());
+    }
+
+    @Autowired
+    public RoutingService(MailRouter mailRouter,
+                           DomainConfigRepository domainConfigRepository,
+                           CertificateRepository certificateRepository,
+                           MailProcessingRepository mailProcessingRepository,
+                           PostfixProperties postfixProperties,
+                           CryptoProfileSelector cryptoProfileSelector) {
         this.mailRouter = mailRouter;
         this.domainConfigRepository = domainConfigRepository;
         this.certificateRepository = certificateRepository;
         this.mailProcessingRepository = mailProcessingRepository;
         this.postfixProperties = postfixProperties;
+        this.cryptoProfileSelector = cryptoProfileSelector;
     }
 
     @Transactional
@@ -214,6 +232,7 @@ public class RoutingService {
         MailProcessingDecision processingDecision = baseContext.decision();
         CertificateSelection certificates = baseContext.certificateSelection();
         RelayProfile relayProfile = relayProfile(direction);
+        CryptoProfile cryptoProfile = baseContext.cryptoProfile();
 
         if (direction == MailDirection.OUTBOUND) {
             boolean signingEnabled = processingDecision.signingRequired()
@@ -228,10 +247,14 @@ public class RoutingService {
 
             if (decision instanceof RoutingDecision.OutboundEncrypt encrypt) {
                 processingDecision = processingDecision.withEncryptionRequired(true);
-                certificates = ensureOutboundEncryptionCertificates(
+                OutboundEncryptionSelection encryptionSelection = ensureOutboundEncryptionCertificates(
                         certificates,
                         encrypt.getRecipients(),
                         preferredAlgorithm);
+                certificates = encryptionSelection.certificates();
+                if (encryptionSelection.cryptoProfile() != null) {
+                    cryptoProfile = encryptionSelection.cryptoProfile();
+                }
             }
         }
 
@@ -257,6 +280,7 @@ public class RoutingService {
                 .withProcessingId(processingId)
                 .withDirection(direction)
                 .withPreferredAlgorithm(preferredAlgorithm)
+                .withCryptoProfile(cryptoProfile)
                 .withDecision(processingDecision)
                 .withCertificateSelection(certificates)
                 .withRelayProfile(relayProfile);
@@ -286,36 +310,34 @@ public class RoutingService {
             return certificates;
         }
         List<Certificate> signingCerts = certificateRepository.findTrustedForSigning(envelope.getSender());
-        Certificate selected = selectCertByPreference(
-                signingCerts,
-                preferredAlgorithm
-        );
+        Certificate selected = cryptoProfileSelector.select(signingCerts, preferredAlgorithm).orElse(null);
         if (selected != null) {
             return certificates.withSenderCertificate(selected.getPemContent(), selected.getId().getThumbprint());
         }
         return certificates;
     }
 
-    private CertificateSelection ensureOutboundEncryptionCertificates(CertificateSelection certificates,
-                                                                     List<EmailAddress> recipients,
-                                                                     PreferredAlgorithm preferredAlgorithm) {
+    private OutboundEncryptionSelection ensureOutboundEncryptionCertificates(CertificateSelection certificates,
+                                                                            List<EmailAddress> recipients,
+                                                                            PreferredAlgorithm preferredAlgorithm) {
         if (!certificates.recipientCertificates().isEmpty()) {
-            return certificates;
+            return new OutboundEncryptionSelection(
+                    certificates,
+                    CryptoProfile.fromPreferredAlgorithm(preferredAlgorithm));
         }
-        Map<EmailAddress, String> certMap = new HashMap<>();
-        Map<EmailAddress, String> thumbprintMap = new HashMap<>();
+        Map<EmailAddress, List<Certificate>> certificatesByRecipient = new LinkedHashMap<>();
         for (EmailAddress recipient : recipients) {
-            List<Certificate> certs = certificateRepository.findTrustedForEncryption(recipient);
-            Certificate selected = selectCertByPreference(
-                    certs,
-                    preferredAlgorithm
-            );
-            if (selected != null) {
-                certMap.put(recipient, selected.getPemContent());
-                thumbprintMap.put(recipient, selected.getId().getThumbprint());
-            }
+            certificatesByRecipient.put(recipient, certificateRepository.findTrustedForEncryption(recipient));
         }
-        return certificates.withRecipientCertificates(certMap, thumbprintMap);
+        CryptoProfileSelector.EncryptionProfilePlan plan = cryptoProfileSelector.encryptionPlan(
+                certificatesByRecipient,
+                preferredAlgorithm);
+        if (!plan.success()) {
+            return new OutboundEncryptionSelection(certificates, CryptoProfile.fromPreferredAlgorithm(preferredAlgorithm));
+        }
+        return new OutboundEncryptionSelection(
+                certificates.withRecipientCertificates(plan.certificatePems(), plan.certificateThumbprints()),
+                plan.profile());
     }
 
     private InboundCryptoSelection attachInboundCrypto(CertificateSelection certificates, MailEnvelope envelope) {
@@ -377,82 +399,20 @@ public class RoutingService {
                 .orElse(null);
     }
 
-    private Certificate selectCertByPreference(List<Certificate> certs, PreferredAlgorithm preference) {
-        if (certs == null || certs.isEmpty()) {
-            return null;
-        }
-        if (preference == null || preference == PreferredAlgorithm.AUTO) {
-            for (Certificate cert : certs) {
-                if (isGmCert(cert)) {
-                    return cert;
-                }
-            }
-            return certs.get(0);
-        }
-        if (preference == PreferredAlgorithm.GM_ONLY) {
-            for (Certificate cert : certs) {
-                if (isGmCert(cert)) {
-                    return cert;
-                }
-            }
-            log.warn("GM_ONLY偏好设置下未找到SM2/EC证书");
-            return null;
-        }
-        if (preference == PreferredAlgorithm.STANDARD_ONLY) {
-            for (Certificate cert : certs) {
-                if (isRsaCert(cert)) {
-                    return cert;
-                }
-            }
-            log.warn("STANDARD_ONLY偏好设置下未找到RSA证书");
-            return null;
-        }
-        return certs.get(0);
-    }
-
-    private String getCertAlgorithm(Certificate cert) {
-        if (cert.getAlgorithm() != null && !cert.getAlgorithm().isBlank()) {
-            return cert.getAlgorithm();
-        }
-        try {
-            return PemUtils.parseCertificate(cert.getPemContent()).getPublicKey().getAlgorithm();
-        } catch (Exception e) {
-            return "UNKNOWN";
-        }
-    }
-
-    private boolean isGmCert(Certificate cert) {
-        String curveOid = getCertCurveOid(cert);
-        if (curveOid != null) {
-            return "1.2.156.10197.1.301".equals(curveOid);
-        }
-        return "SM2".equals(getCertAlgorithm(cert));
-    }
-
-    private boolean isRsaCert(Certificate cert) {
-        return "RSA".equals(getCertAlgorithm(cert));
-    }
-
     private boolean hasText(String value) {
         return value != null && !value.isBlank();
-    }
-
-    private String getCertCurveOid(Certificate cert) {
-        try {
-            java.security.cert.X509Certificate x509 = PemUtils.parseCertificate(cert.getPemContent());
-            org.bouncycastle.cert.X509CertificateHolder holder =
-                    new org.bouncycastle.cert.X509CertificateHolder(x509.getEncoded());
-            Object parameters = holder.getSubjectPublicKeyInfo().getAlgorithm().getParameters();
-            return parameters != null ? parameters.toString() : null;
-        } catch (Exception e) {
-            return null;
-        }
     }
 
     private record InboundCryptoSelection(
             CertificateSelection certificates,
             boolean decryptionRequired,
             boolean verificationRequired
+    ) {
+    }
+
+    private record OutboundEncryptionSelection(
+            CertificateSelection certificates,
+            CryptoProfile cryptoProfile
     ) {
     }
 }

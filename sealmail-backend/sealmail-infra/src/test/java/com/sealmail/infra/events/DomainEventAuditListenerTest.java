@@ -3,6 +3,7 @@ package com.sealmail.infra.events;
 import com.sealmail.domain.audit.AuditLog;
 import com.sealmail.domain.audit.AuditLogRepository;
 import com.sealmail.domain.audit.AuditLogType;
+import com.sealmail.domain.audit.AuditContext;
 import com.sealmail.domain.certificate.CertificateId;
 import com.sealmail.domain.certificate.event.CertificateIssued;
 import com.sealmail.domain.certificate.event.CertificateRevoked;
@@ -26,7 +27,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 class DomainEventAuditListenerTest {
 
     private final CapturingAuditLogRepository repository = new CapturingAuditLogRepository();
-    private final DomainEventAuditListener listener = new DomainEventAuditListener(repository);
+    private final DomainEventAuditListener listener = new DomainEventAuditListener(repository, AuditContext::empty);
 
     @Test
     void recordsCertificateIssuedAuditLog() {

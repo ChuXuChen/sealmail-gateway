@@ -1,20 +1,22 @@
 package com.sealmail.infra.mail.pipeline.step;
 
+import com.sealmail.domain.certificate.Certificate;
 import com.sealmail.domain.certificate.CertificateRepository;
 import com.sealmail.domain.certificate.spi.SMIMEOperations;
+import com.sealmail.domain.mailsecurity.CryptoProfile;
+import com.sealmail.domain.mailsecurity.CryptoProfileSelector;
 import com.sealmail.domain.mailsecurity.MailEnvelope;
 import com.sealmail.domain.mailsecurity.MailProcessingContext;
 import com.sealmail.domain.mailsecurity.MailProcessingErrorType;
 import com.sealmail.domain.mailsecurity.MailProcessingException;
 import com.sealmail.domain.mailsecurity.event.MailSigned;
-import com.sealmail.domain.policy.PreferredAlgorithm;
 import com.sealmail.infra.crypto.KeyStoreService;
-import com.sealmail.infra.crypto.util.PemUtils;
 import com.sealmail.infra.events.DomainEventPublisher;
 import com.sealmail.infra.mail.pipeline.MailProcessingHeaders;
 import com.sealmail.infra.mail.pipeline.MailProcessingMessages;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.messaging.Message;
 import org.springframework.stereotype.Component;
 
@@ -30,15 +32,26 @@ public class SignStep {
     private final KeyStoreService keyStoreService;
     private final CertificateRepository certificateRepository;
     private final DomainEventPublisher domainEventPublisher;
+    private final CryptoProfileSelector cryptoProfileSelector;
 
     public SignStep(SMIMEOperations smimeOperations,
                     KeyStoreService keyStoreService,
                     CertificateRepository certificateRepository,
                     DomainEventPublisher domainEventPublisher) {
+        this(smimeOperations, keyStoreService, certificateRepository, domainEventPublisher, new CryptoProfileSelector());
+    }
+
+    @Autowired
+    public SignStep(SMIMEOperations smimeOperations,
+                    KeyStoreService keyStoreService,
+                    CertificateRepository certificateRepository,
+                    DomainEventPublisher domainEventPublisher,
+                    CryptoProfileSelector cryptoProfileSelector) {
         this.smimeOperations = smimeOperations;
         this.keyStoreService = keyStoreService;
         this.certificateRepository = certificateRepository;
         this.domainEventPublisher = domainEventPublisher;
+        this.cryptoProfileSelector = cryptoProfileSelector;
     }
 
     public Message<byte[]> execute(Message<byte[]> message) {
@@ -56,67 +69,30 @@ public class SignStep {
             String senderCert = context.certificateSelection().senderCertificatePem();
             String privateKey = null;
 
-            PreferredAlgorithm preference = context.preferredAlgorithm();
             String thumbprint = context.certificateSelection().senderCertificateThumbprint();
+            CryptoProfile profile = context.cryptoProfile();
+            if (profile == null || profile == CryptoProfile.AUTO) {
+                profile = CryptoProfile.fromPreferredAlgorithm(context.preferredAlgorithm());
+            }
 
-            // 根据算法偏好选择证书（RoutingService已预筛选，此处作为后备）
             if (senderCert == null) {
-                var certs = certificateRepository.findTrustedForSigning(envelope.getSender());
-                for (var cert : certs) {
-                    try {
-                        String alg = PemUtils.parseCertificate(cert.getPemContent()).getPublicKey().getAlgorithm();
-                        boolean isGm = "EC".equals(alg) || "ECDSA".equals(alg);
-                        boolean isStandard = "RSA".equals(alg);
-
-                        if (preference == PreferredAlgorithm.GM_ONLY && isGm) {
-                            senderCert = cert.getPemContent();
-                            thumbprint = cert.getId().getThumbprint();
-                            log.info("选择SM2证书用于国密签名");
-                            break;
-                        } else if (preference == PreferredAlgorithm.STANDARD_ONLY && isStandard) {
-                            senderCert = cert.getPemContent();
-                            thumbprint = cert.getId().getThumbprint();
-                            log.info("选择RSA证书用于标准签名");
-                            break;
-                        } else if (preference == PreferredAlgorithm.AUTO && isGm) {
-                            senderCert = cert.getPemContent();
-                            thumbprint = cert.getId().getThumbprint();
-                            log.info("选择SM2证书用于国密签名");
-                            break;
-                        }
-                    } catch (Exception e) {
-                        // skip
-                    }
-                }
-                // AUTO回退：找RSA
-                if (senderCert == null && preference == PreferredAlgorithm.AUTO) {
-                    for (var cert : certs) {
-                        try {
-                            String alg = PemUtils.parseCertificate(cert.getPemContent()).getPublicKey().getAlgorithm();
-                            if ("RSA".equals(alg)) {
-                                senderCert = cert.getPemContent();
-                                thumbprint = cert.getId().getThumbprint();
-                                log.info("选择RSA证书用于标准签名");
-                                break;
-                            }
-                        } catch (Exception e) {
-                            // skip
-                        }
-                    }
+                Certificate selected = cryptoProfileSelector
+                        .select(certificateRepository.findTrustedForSigning(envelope.getSender()), profile)
+                        .orElse(null);
+                if (selected != null) {
+                    senderCert = selected.getPemContent();
+                    thumbprint = selected.getId().getThumbprint();
+                    cryptoProfileSelector.profileOf(selected).ifPresent(selectedProfile -> {
+                        log.info("选择 {} profile 证书用于签名", selectedProfile);
+                    });
                 }
             }
 
             if (senderCert == null) {
-                if (preference == PreferredAlgorithm.GM_ONLY) {
+                if (profile != null && profile.isConcrete()) {
                     throw new MailProcessingException(
                             MailProcessingErrorType.SIGNING,
-                            "GM_ONLY策略：未找到SM2签名证书",
-                            context);
-                }
-                if (preference == PreferredAlgorithm.STANDARD_ONLY) {
-                    throw new MailProcessingException(
-                            MailProcessingErrorType.SIGNING,
-                            "STANDARD_ONLY策略：未找到RSA签名证书",
+                            profile + " profile 策略：未找到匹配签名证书",
                             context);
                 }
                 log.info("Signing skipped: no sender certificate found");
@@ -143,7 +119,7 @@ public class SignStep {
             }
 
             if (privateKey == null) {
-                log.info("Signing skipped: privateKey not found for cert algorithm");
+                log.info("Signing skipped: private key not found for selected certificate");
                 return message;
             }
 
@@ -174,14 +150,6 @@ public class SignStep {
                     "S/MIME signing failed: " + e.getMessage(),
                     context,
                     e);
-        }
-    }
-
-    private String resolveAlgorithm(String certPem) {
-        try {
-            return PemUtils.parseCertificate(certPem).getPublicKey().getAlgorithm();
-        } catch (Exception e) {
-            return "UNKNOWN";
         }
     }
 

@@ -16,7 +16,9 @@ class InfraDependencyRulesTest {
         List<Path> violations = javaFiles(Path.of("src/main/java")).stream()
                 .filter(path -> containsAny(path,
                         "import com.sealmail.app.",
-                        "import com.sealmail.web."))
+                        "import com.sealmail.web.",
+                        "import org.springframework.web.",
+                        "import jakarta.servlet."))
                 .toList();
 
         assertTrue(violations.isEmpty(), () -> "Infra dependency violations: " + violations);
@@ -27,8 +29,9 @@ class InfraDependencyRulesTest {
         String pom = Files.readString(Path.of("pom.xml"));
 
         assertTrue(!pom.contains("<artifactId>sealmail-app</artifactId>")
-                        && !pom.contains("<artifactId>sealmail-web</artifactId>"),
-                "Infra module must not depend on app or web modules");
+                        && !pom.contains("<artifactId>sealmail-web</artifactId>")
+                        && !pom.contains("<artifactId>spring-boot-starter-web</artifactId>"),
+                "Infra module must not depend on app, web or web runtime modules");
     }
 
     @Test

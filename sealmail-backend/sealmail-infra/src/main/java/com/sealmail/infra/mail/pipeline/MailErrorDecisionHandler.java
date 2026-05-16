@@ -33,9 +33,6 @@ public class MailErrorDecisionHandler {
     }
 
     public ErrorDecision decide(Message<?> errorMessage) {
-        if (alreadyHandled(errorMessage)) {
-            return ErrorDecision.deadLetter();
-        }
         Throwable error = error(errorMessage);
         Message<?> failedMessage = failedMessage(errorMessage, error);
         MailProcessingContext context = context(errorMessage);
@@ -187,17 +184,6 @@ public class MailErrorDecisionHandler {
     private MailProcessingContext context(Message<?> message) {
         Object value = message.getHeaders().get(MailProcessingHeaders.CONTEXT);
         return value instanceof MailProcessingContext context ? context : null;
-    }
-
-    private boolean alreadyHandled(Message<?> errorMessage) {
-        Object value = errorMessage.getHeaders().get(MailProcessingHeaders.ERROR_HANDLED);
-        if (Boolean.TRUE.equals(value)) {
-            return true;
-        }
-        Throwable error = error(errorMessage);
-        Message<?> failedMessage = failedMessage(errorMessage, error);
-        return failedMessage != null
-                && Boolean.TRUE.equals(failedMessage.getHeaders().get(MailProcessingHeaders.ERROR_HANDLED));
     }
 
     public record ErrorDecision(boolean quarantine, Message<byte[]> quarantineMessage) {

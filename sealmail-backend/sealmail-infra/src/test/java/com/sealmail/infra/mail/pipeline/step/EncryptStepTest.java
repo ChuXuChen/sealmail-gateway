@@ -5,8 +5,8 @@ import com.sealmail.domain.certificate.CertificateId;
 import com.sealmail.domain.certificate.CertificateRepository;
 import com.sealmail.domain.certificate.KeyUsage;
 import com.sealmail.domain.certificate.ValidityPeriod;
-import com.sealmail.domain.certificate.spi.SMIMEEncryptionSuite;
 import com.sealmail.domain.certificate.spi.SMIMEOperations;
+import com.sealmail.domain.mailsecurity.CryptoProfile;
 import com.sealmail.domain.mailsecurity.MailProcessingContext;
 import com.sealmail.domain.mailsecurity.MailProcessingDecision;
 import com.sealmail.domain.mailsecurity.MailEnvelope;
@@ -58,7 +58,7 @@ class EncryptStepTest {
                 .thenReturn(List.of(certificate(recipientA, "cert-A", "RSA")));
         when(certificateRepository.findTrustedForEncryption(recipientB))
                 .thenReturn(List.of(certificate(recipientB, "cert-B", "RSA")));
-        when(smimeOperations.encryptMultiple(same(payload), any(), eq(SMIMEEncryptionSuite.STANDARD)))
+        when(smimeOperations.encryptMultiple(same(payload), any(), eq(CryptoProfile.STANDARD)))
                 .thenReturn(encrypted);
 
         Message<byte[]> message = message(payload, sender, List.of(recipientA, recipientB),
@@ -75,7 +75,7 @@ class EncryptStepTest {
         verify(smimeOperations).encryptMultiple(
                 same(payload),
                 certCaptor.capture(),
-                eq(SMIMEEncryptionSuite.STANDARD));
+                eq(CryptoProfile.STANDARD));
         assertEquals(2, certCaptor.getValue().size());
         assertTrue(certCaptor.getValue().contains("cert-A"));
         assertTrue(certCaptor.getValue().contains("cert-B"));
@@ -101,7 +101,7 @@ class EncryptStepTest {
         assertEquals("CERTIFICATE_MISSING", context.decision().quarantine().reason());
         assertEquals("DLP MUST_ENCRYPT: 未找到收件人加密证书", context.decision().quarantine().detail());
         assertEquals(MailRecordDisposition.EXCEPTION, context.recordDisposition());
-        verify(smimeOperations, never()).encryptMultiple(any(), any(), any());
+        verify(smimeOperations, never()).encryptMultiple(any(), any(), any(CryptoProfile.class));
     }
 
     @Test
@@ -133,7 +133,7 @@ class EncryptStepTest {
         byte[] encrypted = "encrypted".getBytes();
         when(certificateRepository.findTrustedForEncryption(recipient))
                 .thenReturn(List.of(certificate(recipient, "cert-A", "RSA")));
-        when(smimeOperations.encryptMultiple(same(payload), any(), eq(SMIMEEncryptionSuite.STANDARD)))
+        when(smimeOperations.encryptMultiple(same(payload), any(), eq(CryptoProfile.STANDARD)))
                 .thenReturn(encrypted);
 
         Message<byte[]> message = message(payload, new EmailAddress("sender@example.com"),
@@ -145,7 +145,7 @@ class EncryptStepTest {
 
         assertArrayEquals(encrypted, result.getPayload());
         verify(certificateRepository).findTrustedForEncryption(recipient);
-        verify(smimeOperations).encryptMultiple(same(payload), any(), eq(SMIMEEncryptionSuite.STANDARD));
+        verify(smimeOperations).encryptMultiple(same(payload), any(), eq(CryptoProfile.STANDARD));
     }
 
     @Test
@@ -171,11 +171,11 @@ class EncryptStepTest {
 
         assertEquals("CERTIFICATE_MISSING", context(result).decision().quarantine().reason());
         assertTrue(context(result).decision().quarantine().detail().contains("b@example.com"));
-        verify(smimeOperations, never()).encryptMultiple(any(), any(), any());
+        verify(smimeOperations, never()).encryptMultiple(any(), any(), any(CryptoProfile.class));
     }
 
     @Test
-    void autoQuarantinesWhenRecipientsCannotShareOneEncryptionSuite() {
+    void autoQuarantinesWhenRecipientsCannotShareOneCryptoProfile() {
         SMIMEOperations smimeOperations = mock(SMIMEOperations.class);
         CertificateRepository certificateRepository = mock(CertificateRepository.class);
         EncryptStep encryptStep = new EncryptStep(smimeOperations, certificateRepository, mock(DomainEventPublisher.class));
@@ -195,8 +195,8 @@ class EncryptStepTest {
 
         Message<byte[]> result = encryptStep.execute(message);
 
-        assertTrue(context(result).decision().quarantine().detail().contains("无法共享同一加密策略"));
-        verify(smimeOperations, never()).encryptMultiple(any(), any(), any());
+        assertTrue(context(result).decision().quarantine().detail().contains("无法共享同一加密Profile"));
+        verify(smimeOperations, never()).encryptMultiple(any(), any(), any(CryptoProfile.class));
     }
 
     @Test
@@ -213,7 +213,7 @@ class EncryptStepTest {
                 .thenReturn(List.of(certificate(recipientA, "cert-A", "SM2")));
         when(certificateRepository.findTrustedForEncryption(recipientB))
                 .thenReturn(List.of(certificate(recipientB, "cert-B", "SM2")));
-        when(smimeOperations.encryptMultiple(same(payload), any(), eq(SMIMEEncryptionSuite.GM)))
+        when(smimeOperations.encryptMultiple(same(payload), any(), eq(CryptoProfile.GM)))
                 .thenReturn(encrypted);
 
         Message<byte[]> message = message(payload, new EmailAddress("sender@example.com"),
@@ -224,7 +224,7 @@ class EncryptStepTest {
         Message<byte[]> result = encryptStep.execute(message);
 
         assertArrayEquals(encrypted, result.getPayload());
-        verify(smimeOperations).encryptMultiple(same(payload), any(), eq(SMIMEEncryptionSuite.GM));
+        verify(smimeOperations).encryptMultiple(same(payload), any(), eq(CryptoProfile.GM));
     }
 
     @Test
@@ -238,7 +238,7 @@ class EncryptStepTest {
         byte[] encrypted = "encrypted".getBytes();
         when(certificateRepository.findTrustedForEncryption(recipient))
                 .thenReturn(List.of(certificate(recipient, "cert-A", "RSA")));
-        when(smimeOperations.encryptMultiple(same(payload), any(), eq(SMIMEEncryptionSuite.STANDARD)))
+        when(smimeOperations.encryptMultiple(same(payload), any(), eq(CryptoProfile.STANDARD)))
                 .thenReturn(encrypted);
 
         MailEnvelope envelope = new MailEnvelope(
@@ -259,7 +259,7 @@ class EncryptStepTest {
         Message<byte[]> result = encryptStep.execute(message);
 
         assertArrayEquals(encrypted, result.getPayload());
-        verify(smimeOperations).encryptMultiple(same(payload), any(), eq(SMIMEEncryptionSuite.STANDARD));
+        verify(smimeOperations).encryptMultiple(same(payload), any(), eq(CryptoProfile.STANDARD));
     }
 
     private static Certificate certificate(EmailAddress owner, String pemContent, String algorithm) {

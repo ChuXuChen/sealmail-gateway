@@ -1,6 +1,7 @@
 package com.sealmail.infra.crypto;
 
 import com.sealmail.domain.certificate.spi.SMIMEEncryptionSuite;
+import com.sealmail.domain.mailsecurity.CryptoProfile;
 import com.sealmail.infra.config.properties.SmimeCryptoProperties;
 
 import java.util.EnumMap;
@@ -28,5 +29,23 @@ public class SmimeAlgorithmSuites {
             throw new IllegalArgumentException("No S/MIME algorithm suite configured for " + suite);
         }
         return algorithmSuite;
+    }
+
+    public SmimeAlgorithmSuite get(CryptoProfile profile) {
+        return get(toSuite(profile));
+    }
+
+    public static SMIMEEncryptionSuite toSuite(CryptoProfile profile) {
+        if (profile == CryptoProfile.GM) {
+            return SMIMEEncryptionSuite.GM;
+        }
+        if (profile == CryptoProfile.STANDARD) {
+            return SMIMEEncryptionSuite.STANDARD;
+        }
+        throw new IllegalArgumentException("Concrete crypto profile is required");
+    }
+
+    public static CryptoProfile toProfile(SMIMEEncryptionSuite suite) {
+        return suite == SMIMEEncryptionSuite.GM ? CryptoProfile.GM : CryptoProfile.STANDARD;
     }
 }

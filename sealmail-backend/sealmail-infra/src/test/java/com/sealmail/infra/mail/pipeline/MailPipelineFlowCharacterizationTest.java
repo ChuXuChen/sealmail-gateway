@@ -35,6 +35,7 @@ import org.springframework.test.context.junit.jupiter.SpringJUnitConfig;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.lang.reflect.Modifier;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
@@ -242,10 +243,15 @@ class MailPipelineFlowCharacterizationTest {
         when(tracker.executeStep(any(), eq("dlp"), eq(MailProcessingErrorType.DLP), any()))
                 .thenThrow(new IllegalStateException("scanner down"));
 
-        assertTrue(mailOutboundChannel.send(outboundMessage("raw".getBytes())));
+        MessageHandlingException exception = assertThrows(MessageHandlingException.class,
+                () -> mailOutboundChannel.send(outboundMessage("raw".getBytes())));
+        assertTrue(exception.getCause() instanceof MailProcessingException);
 
         Message<?> error = errorChannel.receive(1000);
-        assertEquals("scanner down", ((Throwable) error.getPayload()).getCause().getMessage());
+        Throwable payload = (Throwable) error.getPayload();
+        assertTrue(payload instanceof MailProcessingException);
+        assertEquals(MailProcessingErrorType.DLP, ((MailProcessingException) payload).errorType());
+        assertEquals("scanner down", payload.getCause().getMessage());
         assertNull(relayChannel.receive(0));
         assertNull(quarantineChannel.receive(0));
         verifyNotTracked("sign");
@@ -256,10 +262,15 @@ class MailPipelineFlowCharacterizationTest {
     void inboundRoutingExceptionRoutesToErrorChannelAndStopsPipeline() {
         when(routingService.routeInbound(any())).thenThrow(new IllegalStateException("route store down"));
 
-        assertTrue(mailInboundChannel.send(inboundMessage("raw".getBytes())));
+        MessageHandlingException exception = assertThrows(MessageHandlingException.class,
+                () -> mailInboundChannel.send(inboundMessage("raw".getBytes())));
+        assertTrue(exception.getCause() instanceof MailProcessingException);
 
         Message<?> error = errorChannel.receive(1000);
-        assertEquals("route store down", ((Throwable) error.getPayload()).getCause().getMessage());
+        Throwable payload = (Throwable) error.getPayload();
+        assertTrue(payload instanceof MailProcessingException);
+        assertEquals(MailProcessingErrorType.ROUTING, ((MailProcessingException) payload).errorType());
+        assertEquals("route store down", payload.getCause().getMessage());
         assertNull(relayChannel.receive(0));
         assertNull(quarantineChannel.receive(0));
         verifyNotTracked("mail-auth");
@@ -274,6 +285,19 @@ class MailPipelineFlowCharacterizationTest {
         assertFalse(source.contains("PipelineStepTracker"));
         assertFalse(source.contains("MailPipelineStep"));
         assertFalse(source.contains("executeMessageWithTracking"));
+    }
+
+    @Test
+    void mailProcessingHeadersOnlyExposesStronglyTypedContextHeader() {
+        List<String> publicConstants = java.util.Arrays.stream(MailProcessingHeaders.class.getDeclaredFields())
+                .filter(field -> Modifier.isPublic(field.getModifiers()))
+                .filter(field -> Modifier.isStatic(field.getModifiers()))
+                .filter(field -> Modifier.isFinal(field.getModifiers()))
+                .map(java.lang.reflect.Field::getName)
+                .toList();
+
+        assertEquals(List.of("CONTEXT"), publicConstants);
+        assertEquals("mailProcessingContext", MailProcessingHeaders.CONTEXT);
     }
 
     @Test

@@ -1,5 +1,7 @@
 package com.sealmail.domain.certificate.spi;
 
+import com.sealmail.domain.mailsecurity.CryptoProfile;
+
 import java.util.List;
 
 /**
@@ -25,6 +27,15 @@ public interface SMIMEOperations {
     default byte[] encryptMultiple(byte[] mimeMessage,
                                    List<String> recipientPemCerts,
                                    SMIMEEncryptionSuite suite) {
+        return encryptMultiple(mimeMessage, recipientPemCerts);
+    }
+
+    /**
+     * 使用明确密码 profile 加密邮件（多收件人）。
+     */
+    default byte[] encryptMultiple(byte[] mimeMessage,
+                                   List<String> recipientPemCerts,
+                                   CryptoProfile profile) {
         return encryptMultiple(mimeMessage, recipientPemCerts);
     }
 

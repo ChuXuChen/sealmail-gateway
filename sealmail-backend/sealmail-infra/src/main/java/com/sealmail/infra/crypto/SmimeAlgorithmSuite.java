@@ -1,11 +1,12 @@
 package com.sealmail.infra.crypto;
 
 import com.sealmail.domain.certificate.spi.SMIMEEncryptionSuite;
+import com.sealmail.domain.mailsecurity.CryptoProfile;
 import com.sealmail.infra.config.properties.SmimeCryptoProperties;
 import org.bouncycastle.asn1.ASN1ObjectIdentifier;
 
 public record SmimeAlgorithmSuite(
-        SMIMEEncryptionSuite suite,
+        CryptoProfile profile,
         ASN1ObjectIdentifier recipientKeyAlgorithm,
         String recipientKeyCipher,
         ASN1ObjectIdentifier contentEncryptionAlgorithm,
@@ -17,7 +18,7 @@ public record SmimeAlgorithmSuite(
     public static SmimeAlgorithmSuite from(SMIMEEncryptionSuite suite,
                                            SmimeCryptoProperties.Suite properties) {
         return new SmimeAlgorithmSuite(
-                suite,
+                SmimeAlgorithmSuites.toProfile(suite),
                 new ASN1ObjectIdentifier(required(properties.getRecipientKeyAlgorithmOid(), "recipientKeyAlgorithmOid")),
                 required(properties.getRecipientKeyCipher(), "recipientKeyCipher"),
                 new ASN1ObjectIdentifier(required(properties.getContentEncryptionAlgorithmOid(), "contentEncryptionAlgorithmOid")),

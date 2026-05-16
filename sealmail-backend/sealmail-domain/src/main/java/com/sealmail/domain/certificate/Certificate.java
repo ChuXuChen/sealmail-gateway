@@ -7,7 +7,7 @@ import com.sealmail.domain.certificate.event.CertificateRevoked;
 import com.sealmail.domain.certificate.event.CertificateTrusted;
 import com.sealmail.domain.certificate.event.CertificateUntrusted;
 import com.sealmail.domain.certificate.event.KeyUsagesUpdated;
-import com.sealmail.domain.certificate.spi.SMIMEEncryptionSuite;
+import com.sealmail.domain.mailsecurity.CryptoProfile;
 import com.sealmail.domain.shared.exception.DomainException;
 import com.sealmail.domain.shared.model.AggregateRoot;
 import com.sealmail.domain.shared.model.EmailAddress;
@@ -16,6 +16,7 @@ import java.math.BigInteger;
 import java.time.Instant;
 import java.util.Collections;
 import java.util.EnumSet;
+import java.util.Optional;
 import java.util.Set;
 
 public class Certificate extends AggregateRoot<CertificateId> {
@@ -224,21 +225,16 @@ public class Certificate extends AggregateRoot<CertificateId> {
         return algorithm;
     }
 
-    public boolean supportsEncryptionSuite(SMIMEEncryptionSuite suite) {
-        if (suite == SMIMEEncryptionSuite.GM) {
-            return isGmAlgorithmFamily();
-        }
-        return isStandardAlgorithmFamily();
+    public Optional<CryptoProfile> cryptoProfile() {
+        return CryptoProfile.fromCertificateAlgorithm(algorithm);
     }
 
     public boolean isGmAlgorithmFamily() {
-        return "EC".equalsIgnoreCase(algorithm)
-                || "ECDSA".equalsIgnoreCase(algorithm)
-                || "SM2".equalsIgnoreCase(algorithm);
+        return cryptoProfile().filter(CryptoProfile.GM::equals).isPresent();
     }
 
     public boolean isStandardAlgorithmFamily() {
-        return "RSA".equalsIgnoreCase(algorithm);
+        return cryptoProfile().filter(CryptoProfile.STANDARD::equals).isPresent();
     }
 
     public void setAlgorithm(String algorithm) {

@@ -3,16 +3,16 @@ package com.sealmail.infra.crypto;
 import com.sealmail.domain.certificate.spi.SMIMEOperations;
 import com.sealmail.domain.certificate.spi.SMIMEEncryptionSuite;
 import com.sealmail.domain.certificate.spi.SignatureValidationResult;
+import com.sealmail.domain.mailsecurity.CryptoProfile;
 import com.sealmail.infra.config.properties.SmimeCryptoProperties;
 import com.sealmail.infra.crypto.util.PemUtils;
 import org.bouncycastle.asn1.ASN1ObjectIdentifier;
-import org.bouncycastle.asn1.x509.AlgorithmIdentifier;
 import org.bouncycastle.asn1.gm.GMObjectIdentifiers;
 import org.bouncycastle.asn1.pkcs.PKCSObjectIdentifiers;
 import org.bouncycastle.asn1.smime.SMIMECapabilitiesAttribute;
 import org.bouncycastle.asn1.smime.SMIMECapability;
 import org.bouncycastle.asn1.smime.SMIMECapabilityVector;
-import org.bouncycastle.cert.X509CertificateHolder;
+import org.bouncycastle.asn1.x509.AlgorithmIdentifier;
 import org.bouncycastle.cert.jcajce.JcaCertStore;
 import org.bouncycastle.cms.CMSProcessableByteArray;
 import org.bouncycastle.cms.CMSSignedData;
@@ -59,7 +59,6 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Date;
 import java.util.List;
-import java.util.Locale;
 
 /**
  * 完整的 Bouncy Castle S/MIME 加密引擎实现
@@ -98,20 +97,24 @@ public class BcSMIMEOperations implements SMIMEOperations {
     }
 
     private final SmimeAlgorithmSuites algorithmSuites;
+    private final X509CryptoProfileResolver profileResolver;
     private final SecureRandom secureRandom;
 
     @Autowired
     public BcSMIMEOperations(SmimeCryptoProperties cryptoProperties) {
-        this(new SmimeAlgorithmSuites(cryptoProperties), new SecureRandom());
+        this(new SmimeAlgorithmSuites(cryptoProperties), new X509CryptoProfileResolver(), new SecureRandom());
     }
 
-    BcSMIMEOperations(SmimeAlgorithmSuites algorithmSuites, SecureRandom secureRandom) {
+    BcSMIMEOperations(SmimeAlgorithmSuites algorithmSuites,
+                      X509CryptoProfileResolver profileResolver,
+                      SecureRandom secureRandom) {
         this.algorithmSuites = algorithmSuites;
+        this.profileResolver = profileResolver;
         this.secureRandom = secureRandom;
     }
 
     BcSMIMEOperations() {
-        this(SmimeAlgorithmSuites.defaults(), new SecureRandom());
+        this(SmimeAlgorithmSuites.defaults(), new X509CryptoProfileResolver(), new SecureRandom());
     }
 
     private static void setupMailcap() {
@@ -131,16 +134,23 @@ public class BcSMIMEOperations implements SMIMEOperations {
 
     @Override
     public byte[] encryptMultiple(byte[] mimeMessage, List<String> recipientPemCerts) {
-        SMIMEEncryptionSuite suite = inferEncryptionSuite(recipientPemCerts);
-        return encryptMultiple(mimeMessage, recipientPemCerts, suite);
+        CryptoProfile profile = inferEncryptionProfile(recipientPemCerts);
+        return encryptMultiple(mimeMessage, recipientPemCerts, profile);
     }
 
     @Override
     public byte[] encryptMultiple(byte[] mimeMessage,
                                   List<String> recipientPemCerts,
                                   SMIMEEncryptionSuite suite) {
+        return encryptMultiple(mimeMessage, recipientPemCerts, SmimeAlgorithmSuites.toProfile(suite));
+    }
+
+    @Override
+    public byte[] encryptMultiple(byte[] mimeMessage,
+                                  List<String> recipientPemCerts,
+                                  CryptoProfile profile) {
         try {
-            SmimeAlgorithmSuite algorithmSuite = algorithmSuites.get(suite);
+            SmimeAlgorithmSuite algorithmSuite = algorithmSuites.get(profile);
             RawMimeSections originalMessage = splitMessage(mimeMessage);
             MimeBodyPart msg = extractMimeEntity(mimeMessage);
             SMIMEEnvelopedGenerator gen = new SMIMEEnvelopedGenerator();
@@ -148,7 +158,7 @@ public class BcSMIMEOperations implements SMIMEOperations {
 
             for (String pemCert : recipientPemCerts) {
                 X509Certificate cert = PemUtils.parseCertificate(pemCert);
-                validateCertificateSuite(cert, suite);
+                validateCertificateProfile(cert, profile);
                 certificates.add(cert);
             }
             if (certificates.isEmpty()) {
@@ -160,8 +170,8 @@ public class BcSMIMEOperations implements SMIMEOperations {
             }
 
             OutputEncryptor encryptor = new ConfigurableContentOutputEncryptor(algorithmSuite, secureRandom);
-            log.info("使用 {} suite 加密邮件，收件人: {}, keyAlg={}, contentAlg={}",
-                    suite,
+            log.info("使用 {} profile 加密邮件，收件人: {}, keyAlg={}, contentAlg={}",
+                    profile,
                     certificates.size(),
                     algorithmSuite.recipientKeyAlgorithm().getId(),
                     algorithmSuite.contentEncryptionAlgorithm().getId());
@@ -184,63 +194,36 @@ public class BcSMIMEOperations implements SMIMEOperations {
         return generator;
     }
 
-    private SMIMEEncryptionSuite inferEncryptionSuite(List<String> recipientPemCerts) {
+    private CryptoProfile inferEncryptionProfile(List<String> recipientPemCerts) {
         if (recipientPemCerts == null || recipientPemCerts.isEmpty()) {
-            return SMIMEEncryptionSuite.STANDARD;
+            return CryptoProfile.STANDARD;
         }
         try {
             boolean allGm = true;
             boolean allStandard = true;
             for (String recipientPemCert : recipientPemCerts) {
                 X509Certificate cert = PemUtils.parseCertificate(recipientPemCert);
-                boolean gm = isSm2Certificate(cert);
-                boolean standard = "RSA".equals(cert.getPublicKey().getAlgorithm());
-                allGm &= gm;
-                allStandard &= standard;
+                CryptoProfile certProfile = profileResolver.requireProfile(cert);
+                allGm &= certProfile == CryptoProfile.GM;
+                allStandard &= certProfile == CryptoProfile.STANDARD;
             }
             if (allGm) {
-                return SMIMEEncryptionSuite.GM;
+                return CryptoProfile.GM;
             }
             if (allStandard) {
-                return SMIMEEncryptionSuite.STANDARD;
+                return CryptoProfile.STANDARD;
             }
-            throw new CryptoException("recipient certificates do not share one S/MIME encryption suite");
+            throw new CryptoException("recipient certificates do not share one crypto profile");
         } catch (CryptoException e) {
             throw e;
         } catch (Exception e) {
-            throw new CryptoException("failed to infer S/MIME encryption suite: " + e.getMessage(), e);
+            throw new CryptoException("failed to infer S/MIME crypto profile: " + e.getMessage(), e);
         }
     }
 
-    private void validateCertificateSuite(X509Certificate cert, SMIMEEncryptionSuite suite) {
-        if (suite == SMIMEEncryptionSuite.STANDARD && !"RSA".equals(cert.getPublicKey().getAlgorithm())) {
-            throw new CryptoException("STANDARD suite requires RSA recipient certificates");
-        }
-        if (suite == SMIMEEncryptionSuite.GM && !isSm2Certificate(cert)) {
-            throw new CryptoException("GM suite requires SM2 recipient certificates");
-        }
-    }
-
-    private boolean isSm2Certificate(X509Certificate cert) {
-        if ("SM2".equalsIgnoreCase(cert.getPublicKey().getAlgorithm())) {
-            return true;
-        }
-        try {
-            X509CertificateHolder holder = new X509CertificateHolder(cert.getEncoded());
-            String algorithmOid = holder.getSubjectPublicKeyInfo()
-                    .getAlgorithm()
-                    .getAlgorithm()
-                    .getId();
-            String parameters = holder.getSubjectPublicKeyInfo()
-                    .getAlgorithm()
-                    .getParameters() != null
-                    ? holder.getSubjectPublicKeyInfo().getAlgorithm().getParameters().toString()
-                    : "";
-            return SM2_OID.getId().equals(algorithmOid)
-                    || SM2_OID.getId().equals(parameters)
-                    || parameters.toLowerCase(Locale.ROOT).contains("sm2p256v1");
-        } catch (Exception e) {
-            return false;
+    private void validateCertificateProfile(X509Certificate cert, CryptoProfile profile) {
+        if (!profileResolver.matches(cert, profile)) {
+            throw new CryptoException(profile + " profile requires compatible recipient certificates");
         }
     }
 
@@ -291,8 +274,8 @@ public class BcSMIMEOperations implements SMIMEOperations {
         JceKeyTransEnvelopedRecipient recipient = new JceKeyTransEnvelopedRecipient(privateKey);
         recipient.setProvider(BouncyCastleProvider.PROVIDER_NAME);
         recipient.setContentProvider((Provider) null);
-        for (SMIMEEncryptionSuite suite : SMIMEEncryptionSuite.values()) {
-            SmimeAlgorithmSuite algorithmSuite = algorithmSuites.get(suite);
+        for (CryptoProfile profile : List.of(CryptoProfile.STANDARD, CryptoProfile.GM)) {
+            SmimeAlgorithmSuite algorithmSuite = algorithmSuites.get(profile);
             recipient.setAlgorithmMapping(
                     algorithmSuite.recipientKeyAlgorithm(),
                     algorithmSuite.recipientKeyCipher());
@@ -306,8 +289,8 @@ public class BcSMIMEOperations implements SMIMEOperations {
     }
 
     private SmimeAlgorithmSuite algorithmSuiteForRecipientKeyAlgorithm(ASN1ObjectIdentifier keyAlgorithm) {
-        for (SMIMEEncryptionSuite suite : SMIMEEncryptionSuite.values()) {
-            SmimeAlgorithmSuite algorithmSuite = algorithmSuites.get(suite);
+        for (CryptoProfile profile : List.of(CryptoProfile.STANDARD, CryptoProfile.GM)) {
+            SmimeAlgorithmSuite algorithmSuite = algorithmSuites.get(profile);
             if (algorithmSuite.recipientKeyAlgorithm().equals(keyAlgorithm)) {
                 return algorithmSuite;
             }
@@ -327,16 +310,14 @@ public class BcSMIMEOperations implements SMIMEOperations {
 
             // 添加签名能力声明 - 国密算法优先
             SMIMECapabilityVector capabilities = new SMIMECapabilityVector();
-            capabilities.addCapability(algorithmSuites.get(SMIMEEncryptionSuite.GM).contentEncryptionAlgorithm());
+            capabilities.addCapability(algorithmSuites.get(CryptoProfile.GM).contentEncryptionAlgorithm());
             capabilities.addCapability(SM3_OID);            // SM3哈希
-            capabilities.addCapability(algorithmSuites.get(SMIMEEncryptionSuite.STANDARD).contentEncryptionAlgorithm());
+            capabilities.addCapability(algorithmSuites.get(CryptoProfile.STANDARD).contentEncryptionAlgorithm());
             capabilities.addCapability(SMIMECapability.aES128_CBC);
 
-            SMIMEEncryptionSuite signingSuite = isSm2Certificate(cert)
-                    ? SMIMEEncryptionSuite.GM
-                    : SMIMEEncryptionSuite.STANDARD;
-            String sigAlg = algorithmSuites.get(signingSuite).signatureAlgorithm();
-            log.info("使用签名算法: {}, suite: {}, 密钥类型: {}", sigAlg, signingSuite, privateKey.getAlgorithm());
+            CryptoProfile signingProfile = profileResolver.requireProfile(cert);
+            String sigAlg = algorithmSuites.get(signingProfile).signatureAlgorithm();
+            log.info("使用签名算法: {}, profile: {}, 密钥类型: {}", sigAlg, signingProfile, privateKey.getAlgorithm());
 
             gen.addSignerInfoGenerator(
                     new JcaSimpleSignerInfoGeneratorBuilder()
