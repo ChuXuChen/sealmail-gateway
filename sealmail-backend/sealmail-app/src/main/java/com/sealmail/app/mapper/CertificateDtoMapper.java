@@ -17,7 +17,7 @@ public class CertificateDtoMapper {
     public CertificateResponse toResponse(Certificate certificate) {
         String algorithm = certificate.getAlgorithm();
         if (algorithm == null || algorithm.isBlank()) {
-            algorithm = parseAlgorithm(certificate.getPemContent());
+            algorithm = "UNKNOWN";
         }
         boolean chainUsable = certificateChainService.isChainTrustedAndUsable(certificate);
         return CertificateResponse.builder()
@@ -53,29 +53,4 @@ public class CertificateDtoMapper {
                 .build();
     }
 
-    private String parseAlgorithm(String pemContent) {
-        if (pemContent == null || pemContent.isBlank()) {
-            return "UNKNOWN";
-        }
-        try {
-            String cleaned = pemContent
-                    .replace("-----BEGIN CERTIFICATE-----", "")
-                    .replace("-----END CERTIFICATE-----", "")
-                    .replaceAll("\\s", "");
-            byte[] decoded = java.util.Base64.getMimeDecoder().decode(cleaned);
-            java.security.cert.CertificateFactory cf =
-                    java.security.cert.CertificateFactory.getInstance("X.509");
-            java.security.cert.X509Certificate cert =
-                    (java.security.cert.X509Certificate) cf.generateCertificate(
-                            new java.io.ByteArrayInputStream(decoded));
-            String alg = cert.getPublicKey().getAlgorithm();
-            return switch (alg) {
-                case "EC", "ECDSA" -> "SM2";
-                case "RSA" -> "RSA";
-                default -> alg;
-            };
-        } catch (Exception e) {
-            return "UNKNOWN";
-        }
-    }
 }

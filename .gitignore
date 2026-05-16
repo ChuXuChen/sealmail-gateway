@@ -1,0 +1,38 @@
+# Build outputs
+target/
+build/
+dist/
+dist-ssr/
+
+# Dependency directories
+node_modules/
+
+# Logs and local runtime files
+logs/
+*.log
+*.local
+
+# IDE/editor files
+.idea/
+.vscode/
+*.iml
+*.ipr
+*.iws
+.DS_Store
+*.sw?
+
+# Local secrets and key material
+*.pem
+*.key
+*.crt
+*.cer
+*.p12
+*.pfx
+*.jks
+*.keystore
+
+# Environment files
+.env
+.env.*
+!.env.example
+

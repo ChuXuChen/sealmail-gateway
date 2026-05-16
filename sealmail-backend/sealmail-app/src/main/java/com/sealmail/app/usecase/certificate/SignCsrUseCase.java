@@ -10,22 +10,14 @@ import com.sealmail.app.security.UserContext;
 import com.sealmail.domain.certificate.Certificate;
 import com.sealmail.domain.certificate.CertificateId;
 import com.sealmail.domain.certificate.CertificateRepository;
+import com.sealmail.domain.certificate.spi.CertificateCryptoPort;
 import com.sealmail.domain.shared.model.EmailAddress;
 import lombok.RequiredArgsConstructor;
-import org.bouncycastle.asn1.ASN1Encodable;
-import org.bouncycastle.asn1.x500.RDN;
-import org.bouncycastle.asn1.x500.X500Name;
-import org.bouncycastle.asn1.x500.style.BCStyle;
-import org.bouncycastle.asn1.x500.style.IETFUtils;
-import org.bouncycastle.pkcs.PKCS10CertificationRequest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-
-import java.security.PrivateKey;
-import java.security.cert.X509Certificate;
 
 @Service
 @RequiredArgsConstructor
@@ -37,7 +29,8 @@ public class SignCsrUseCase {
     private final CertificateRepository certificateRepository;
     private final CertificateDtoMapper mapper;
     private final PermissionChecker permissionChecker;
-    private final CertificateCryptoService cryptoService;
+    private final CertificateCryptoPort certificateCryptoPort;
+    private final CertificateMaterialAssembler certificateMaterialAssembler;
     private final CertificateChainService certificateChainService;
 
     @Value("${sealmail.ca.crl-base-url:http://localhost:8080/api/v1/crl/}")
@@ -60,29 +53,30 @@ public class SignCsrUseCase {
         }
 
         try {
-            PKCS10CertificationRequest csr = cryptoService.parseCsr(request.getCsrPem());
-            cryptoService.validateCsr(csr);
-            EmailAddress owner = extractEmail(csr.getSubject());
+            CertificateCryptoPort.CsrInfo csr = certificateCryptoPort.validateCsr(request.getCsrPem());
+            EmailAddress owner = csr.ownerEmail() == null ? null : new EmailAddress(csr.ownerEmail());
             if (owner == null) {
                 throw BusinessException.badRequest("CSR 的 Subject 中未找到 emailAddress 或可识别的邮箱");
             }
             permissionChecker.checkCanManageCertificates(user, owner.getDomain());
 
-            PrivateKey caPriv = cryptoService.parsePrivateKey(caCert.getPrivateKeyData());
-            X509Certificate caX509 = cryptoService.parseCertificate(caCert.getPemContent());
-
             int validity = request.getValidityDays() != null ? request.getValidityDays() : 365;
             String crlUrl = buildCrlUrl(caCert.getId().getThumbprint());
-            X509Certificate signed = cryptoService.signCsr(csr, caX509, caPriv, validity, crlUrl);
+            CertificateCryptoPort.CertificateDescriptor signed = certificateCryptoPort.signCsr(
+                    new CertificateCryptoPort.SignCsrCommand(
+                            request.getCsrPem(),
+                            caCert.getPemContent(),
+                            caCert.getPrivateKeyData(),
+                            validity,
+                            crlUrl));
 
-            String thumbprint = cryptoService.computeThumbprint(signed);
+            String thumbprint = signed.thumbprint();
             CertificateId certId = new CertificateId(thumbprint);
             if (certificateRepository.findById(certId).isPresent()) {
                 throw BusinessException.badRequest("相同指纹的证书已存在: " + thumbprint);
             }
 
-            String algorithm = cryptoService.detectAlgorithm(csr.getSubjectPublicKeyInfo());
-            Certificate cert = cryptoService.toIssuedDomainCertificate(certId, owner, signed, algorithm);
+            Certificate cert = certificateMaterialAssembler.issued(signed, owner);
             cert.setIssuerCertId(caCert.getId().getThumbprint());
             cert.setCrlDistributionPointUrl(crlUrl);
             // CSR signing: requestor holds the private key, we don't store it here.
@@ -113,30 +107,5 @@ public class SignCsrUseCase {
         String prefix = crlBaseUrl;
         if (!prefix.endsWith("/")) prefix = prefix + "/";
         return prefix + caId;
-    }
-
-    private EmailAddress extractEmail(X500Name subject) {
-        // RFC 2985 emailAddress attribute or CN that contains an '@'.
-        for (RDN rdn : subject.getRDNs(BCStyle.EmailAddress)) {
-            String email = readRdn(rdn);
-            if (email != null) return new EmailAddress(email);
-        }
-        for (RDN rdn : subject.getRDNs(BCStyle.E)) {
-            String email = readRdn(rdn);
-            if (email != null) return new EmailAddress(email);
-        }
-        for (RDN rdn : subject.getRDNs(BCStyle.CN)) {
-            String cn = readRdn(rdn);
-            if (cn != null && cn.contains("@")) {
-                return new EmailAddress(cn);
-            }
-        }
-        return null;
-    }
-
-    private String readRdn(RDN rdn) {
-        ASN1Encodable enc = rdn.getFirst() == null ? null : rdn.getFirst().getValue();
-        if (enc == null) return null;
-        return IETFUtils.valueToString(enc);
     }
 }

@@ -2,6 +2,7 @@ package com.sealmail.infra.mail.auth.config;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.sealmail.domain.mailauth.MailAuthConfigPort;
 import com.sealmail.domain.policy.DomainName;
 import com.sealmail.domain.policy.event.MailAuthConfigChanged;
 import com.sealmail.infra.config.properties.MailAuthProperties;
@@ -29,7 +30,7 @@ import java.util.Locale;
 import java.util.Set;
 
 @Service
-public class MailAuthConfigService {
+public class MailAuthConfigService implements MailAuthConfigPort {
 
     private static final String DEFAULT_ID = "default";
     private static final TypeReference<List<String>> STRING_LIST = new TypeReference<>() {
@@ -66,6 +67,12 @@ public class MailAuthConfigService {
         return toResponse(entity());
     }
 
+    @Override
+    @Transactional
+    public MailAuthSettings getSettings() {
+        return toSettings(getConfig());
+    }
+
     @Transactional
     public MailAuthConfig updateConfig(MailAuthConfigUpdate update) {
         MailAuthConfigEntity entity = entity();
@@ -79,6 +86,12 @@ public class MailAuthConfigService {
         return toResponse(saved);
     }
 
+    @Override
+    @Transactional
+    public MailAuthSettings updateSettings(MailAuthSettingsUpdate update) {
+        return toSettings(updateConfig(toUpdate(update)));
+    }
+
     @Transactional
     public List<DnsRecordResponse> dnsRecords(String domain) {
         String normalizedDomain = DomainName.requireValid(domain);
@@ -88,6 +101,18 @@ public class MailAuthConfigService {
                 spfRecord(entity, normalizedDomain),
                 dmarcRecord(entity, normalizedDomain)
         );
+    }
+
+    @Override
+    @Transactional
+    public List<DnsRecordSettings> dnsRecordSettings(String domain) {
+        return dnsRecords(domain).stream()
+                .map(record -> new DnsRecordSettings(
+                        record.type(),
+                        record.name(),
+                        record.value(),
+                        record.available()))
+                .toList();
     }
 
     private MailAuthConfigEntity entity() {
@@ -262,6 +287,68 @@ public class MailAuthConfigService {
                 entity.getDmarcFailureAction(),
                 entity.isDmarcQuarantineRejectPolicy(),
                 entity.getUpdatedAt()
+        );
+    }
+
+    private MailAuthSettings toSettings(MailAuthConfig config) {
+        return new MailAuthSettings(
+                config.enabled(),
+                config.authservId(),
+                config.skipPrivateRelay(),
+                config.dkimEnabled(),
+                config.dkimSelector(),
+                config.dkimPrivateKeyPath(),
+                config.dkimPrivateKeyConfigured(),
+                config.dkimSignedHeaders(),
+                config.spfEnabled(),
+                config.spfMaxDnsLookups(),
+                config.spfUseA(),
+                config.spfUseMx(),
+                config.spfIp4(),
+                config.spfIp6(),
+                config.spfIncludes(),
+                config.spfAllPolicy(),
+                config.dmarcEnabled(),
+                config.dmarcPolicy(),
+                config.dmarcAdkim(),
+                config.dmarcAspf(),
+                config.dmarcPct(),
+                config.dmarcRua(),
+                config.dmarcRuf(),
+                config.dmarcFailureAction(),
+                config.dmarcQuarantineRejectPolicy(),
+                config.updatedAt()
+        );
+    }
+
+    private MailAuthConfigUpdate toUpdate(MailAuthSettingsUpdate update) {
+        return new MailAuthConfigUpdate(
+                update.enabled(),
+                update.authservId(),
+                update.skipPrivateRelay(),
+                update.dkimEnabled(),
+                update.dkimSelector(),
+                update.dkimPrivateKeyPath(),
+                update.dkimPrivateKeyPem(),
+                update.clearDkimPrivateKeyPem(),
+                update.dkimSignedHeaders(),
+                update.spfEnabled(),
+                update.spfMaxDnsLookups(),
+                update.spfUseA(),
+                update.spfUseMx(),
+                update.spfIp4(),
+                update.spfIp6(),
+                update.spfIncludes(),
+                update.spfAllPolicy(),
+                update.dmarcEnabled(),
+                update.dmarcPolicy(),
+                update.dmarcAdkim(),
+                update.dmarcAspf(),
+                update.dmarcPct(),
+                update.dmarcRua(),
+                update.dmarcRuf(),
+                update.dmarcFailureAction(),
+                update.dmarcQuarantineRejectPolicy()
         );
     }
 

@@ -49,6 +49,13 @@ public class QueryExceptionMailUseCase {
                 pageRequest);
     }
 
+    public PageResponse<ExceptionMailItemResponse> findAll(
+            PageRequest pageRequest,
+            String reason,
+            UserContext user) {
+        return findAll(pageRequest, parseReason(reason), user);
+    }
+
     public ExceptionMailItemResponse findById(String id, UserContext user) {
         permissionChecker.checkCanViewQuarantine(user);
 
@@ -69,5 +76,12 @@ public class QueryExceptionMailUseCase {
                 .total(exceptionMailRepository.count())
                 .byReason(byReason)
                 .build();
+    }
+
+    private QuarantineReason parseReason(String reason) {
+        if (reason == null || reason.isBlank()) {
+            return null;
+        }
+        return QuarantineReason.valueOf(reason);
     }
 }

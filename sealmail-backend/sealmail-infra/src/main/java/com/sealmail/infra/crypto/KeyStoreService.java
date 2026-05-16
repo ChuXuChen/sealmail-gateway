@@ -23,11 +23,17 @@ public class KeyStoreService {
     private final char[] keyStorePassword;
 
     public KeyStoreService(
-            @Value("${sealmail.security.keystore.path:sealmail-keystore.p12}") String keyStorePath,
-            @Value("${sealmail.security.keystore.password:changeit}") String keyStorePassword) throws Exception {
+            @Value("${sealmail.security.keystore.path:${SEALMAIL_KEYSTORE_PATH:}}") String keyStorePath,
+            @Value("${sealmail.security.keystore.password:${SEALMAIL_KEYSTORE_PASSWORD:}}") String keyStorePassword) throws Exception {
         this.keyStorePath = keyStorePath;
         this.keyStorePassword = keyStorePassword.toCharArray();
         this.keyStore = KeyStore.getInstance("PKCS12");
+
+        if (keyStorePath == null || keyStorePath.isBlank()) {
+            log.warn("Keystore path is not configured; in-memory keystore will be used for this process");
+            keyStore.load(null, this.keyStorePassword);
+            return;
+        }
 
         try {
             keyStore.load(new FileInputStream(keyStorePath), this.keyStorePassword);

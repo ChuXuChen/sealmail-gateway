@@ -12,11 +12,8 @@ import com.sealmail.app.security.PermissionChecker;
 import com.sealmail.app.security.UserContext;
 import com.sealmail.domain.certificate.CertificateRequest;
 import com.sealmail.domain.certificate.CertificateRequestRepository;
+import com.sealmail.domain.certificate.spi.CertificateCryptoPort;
 import lombok.RequiredArgsConstructor;
-import org.bouncycastle.asn1.x500.RDN;
-import org.bouncycastle.asn1.x500.style.BCStyle;
-import org.bouncycastle.asn1.x500.style.IETFUtils;
-import org.bouncycastle.pkcs.PKCS10CertificationRequest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -39,16 +36,14 @@ public class CertificateRequestUseCase {
 
     private final CertificateRequestRepository repository;
     private final SignCsrUseCase signCsrUseCase;
-    private final CertificateCryptoService cryptoService;
+    private final CertificateCryptoPort certificateCryptoPort;
     private final PermissionChecker permissionChecker;
 
     /** Anonymous submission. */
     public CertificateRequestResponse submit(SubmitCertRequestRequest request, String submitterIp) {
         try {
-            // Validate CSR is parseable; pull email out for the queue record.
-            PKCS10CertificationRequest csr = cryptoService.parseCsr(request.getCsrPem());
-            cryptoService.validateCsr(csr);
-            String emailFromCsr = extractEmail(csr);
+            CertificateCryptoPort.CsrInfo csr = certificateCryptoPort.validateCsr(request.getCsrPem());
+            String emailFromCsr = csr.ownerEmail();
             String requestedOwner = request.getRequestedOwnerEmail() != null
                     ? request.getRequestedOwnerEmail()
                     : emailFromCsr;
@@ -126,9 +121,8 @@ public class CertificateRequestUseCase {
 
     private void assertRequestedOwnerMatchesCsr(String requestedOwnerEmail, String csrPem) {
         try {
-            PKCS10CertificationRequest csr = cryptoService.parseCsr(csrPem);
-            cryptoService.validateCsr(csr);
-            String emailFromCsr = extractEmail(csr);
+            CertificateCryptoPort.CsrInfo csr = certificateCryptoPort.validateCsr(csrPem);
+            String emailFromCsr = csr.ownerEmail();
             if (emailFromCsr == null || emailFromCsr.isBlank()) {
                 throw BusinessException.badRequest("CSR 的 Subject 中未找到 emailAddress 或可识别的邮箱");
             }
@@ -184,19 +178,5 @@ public class CertificateRequestUseCase {
                 .intermediateCaId(r.getIntermediateCaId())
                 .csrPreview(preview)
                 .build();
-    }
-
-    private String extractEmail(PKCS10CertificationRequest csr) {
-        for (RDN rdn : csr.getSubject().getRDNs(BCStyle.EmailAddress)) {
-            return IETFUtils.valueToString(rdn.getFirst().getValue());
-        }
-        for (RDN rdn : csr.getSubject().getRDNs(BCStyle.E)) {
-            return IETFUtils.valueToString(rdn.getFirst().getValue());
-        }
-        for (RDN rdn : csr.getSubject().getRDNs(BCStyle.CN)) {
-            String cn = IETFUtils.valueToString(rdn.getFirst().getValue());
-            if (cn != null && cn.contains("@")) return cn;
-        }
-        return null;
     }
 }

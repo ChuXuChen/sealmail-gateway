@@ -42,6 +42,12 @@ public record PipelineResult(
     }
 
     public static PipelineResult successWithHeaders(byte[] payload, Map<String, ?> headers) {
+        return successWithHeaders(payload, headers, List.of());
+    }
+
+    public static PipelineResult successWithHeaders(byte[] payload,
+                                                    Map<String, ?> headers,
+                                                    List<? extends DomainEvent> events) {
         Map<String, Object> copiedHeaders = copyHeaders(headers);
         String firstHeaderName = copiedHeaders.keySet().stream().findFirst().orElse(null);
         Object firstHeaderValue = firstHeaderName != null ? copiedHeaders.get(firstHeaderName) : null;
@@ -56,7 +62,7 @@ public record PipelineResult(
                 firstHeaderName,
                 firstHeaderValue != null ? firstHeaderValue.toString() : null,
                 copiedHeaders,
-                List.of());
+                events != null ? List.copyOf(events) : List.of());
     }
 
     private static Map<String, Object> copyHeaders(Map<String, ?> headers) {

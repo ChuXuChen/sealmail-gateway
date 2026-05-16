@@ -6,7 +6,6 @@ import com.sealmail.app.dto.response.ExceptionMailItemResponse;
 import com.sealmail.app.dto.response.ExceptionMailStatsResponse;
 import com.sealmail.app.security.UserContext;
 import com.sealmail.app.usecase.exceptionmail.QueryExceptionMailUseCase;
-import com.sealmail.domain.quarantine.QuarantineReason;
 import com.sealmail.web.util.ApiResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -58,11 +57,6 @@ public class ExceptionMailController {
                 .size(size)
                 .build();
 
-        QuarantineReason parsedReason = null;
-        if (reason != null && !reason.isBlank()) {
-            parsedReason = QuarantineReason.valueOf(reason);
-        }
-
-        return ApiResponse.ok(queryExceptionMailUseCase.findAll(pageRequest, parsedReason, user));
+        return ApiResponse.ok(queryExceptionMailUseCase.findAll(pageRequest, reason, user));
     }
 }

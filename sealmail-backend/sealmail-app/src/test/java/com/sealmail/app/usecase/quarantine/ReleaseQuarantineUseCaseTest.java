@@ -8,6 +8,7 @@ import com.sealmail.domain.quarantine.QuarantineReason;
 import com.sealmail.domain.quarantine.QuarantineRepository;
 import com.sealmail.domain.quarantine.QuarantineStatus;
 import com.sealmail.domain.quarantine.QuarantinedMail;
+import com.sealmail.domain.quarantine.spi.QuarantineMailReleaseRelay;
 import com.sealmail.domain.shared.model.EmailAddress;
 import org.junit.jupiter.api.Test;
 

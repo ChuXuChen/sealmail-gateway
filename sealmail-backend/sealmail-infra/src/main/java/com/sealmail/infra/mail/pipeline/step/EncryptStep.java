@@ -4,11 +4,11 @@ import com.sealmail.domain.certificate.Certificate;
 import com.sealmail.domain.certificate.CertificateId;
 import com.sealmail.domain.certificate.CertificateRepository;
 import com.sealmail.domain.certificate.spi.SMIMEOperations;
+import com.sealmail.domain.certificate.spi.SMIMEEncryptionSuite;
 import com.sealmail.domain.mailsecurity.MailEnvelope;
 import com.sealmail.domain.mailsecurity.event.MailEncrypted;
 import com.sealmail.domain.policy.PreferredAlgorithm;
 import com.sealmail.domain.shared.model.EmailAddress;
-import com.sealmail.infra.config.properties.DlpProperties;
 import com.sealmail.infra.crypto.util.PemUtils;
 import com.sealmail.infra.mail.pipeline.MailPipelineStep;
 import com.sealmail.infra.mail.pipeline.MailRecordDisposition;
@@ -19,6 +19,7 @@ import org.springframework.messaging.Message;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -32,18 +33,14 @@ public class EncryptStep implements MailPipelineStep {
 
     private final SMIMEOperations smimeOperations;
     private final CertificateRepository certificateRepository;
-    private final DlpProperties dlpProperties;
 
     public EncryptStep(SMIMEOperations smimeOperations,
-                       CertificateRepository certificateRepository,
-                       DlpProperties dlpProperties) {
+                       CertificateRepository certificateRepository) {
         this.smimeOperations = smimeOperations;
         this.certificateRepository = certificateRepository;
-        this.dlpProperties = dlpProperties;
     }
 
     @Override
-    @SuppressWarnings("unchecked")
     public PipelineResult execute(Message<byte[]> message) {
         MailEnvelope envelope = (MailEnvelope) message.getHeaders().get("mailEnvelope");
         if (envelope == null) {
@@ -58,122 +55,25 @@ public class EncryptStep implements MailPipelineStep {
         }
 
         try {
-            Map<EmailAddress, String> recipientCerts =
-                    (Map<EmailAddress, String>) message.getHeaders().get("recipientCertificates");
-            Map<EmailAddress, String> recipientThumbprints =
-                    (Map<EmailAddress, String>) message.getHeaders().get("recipientCertificateThumbprints");
-
             String prefStr = (String) message.getHeaders().get("preferredAlgorithm");
             PreferredAlgorithm preference = prefStr != null ? PreferredAlgorithm.valueOf(prefStr) : PreferredAlgorithm.AUTO;
-            if (mustEncrypt) {
-                RecipientCertificateSelection selection = loadRecipientCertificates(envelope, preference);
-                recipientCerts = selection.certificates();
-                recipientThumbprints = selection.thumbprints();
-            }
 
-            if (recipientCerts == null || recipientCerts.isEmpty()) {
-                if (mustEncrypt) {
-                    return PipelineResult.quarantine(
-                            message.getPayload(),
-                            "CERTIFICATE_MISSING",
-                            "DLP MUST_ENCRYPT: 未找到收件人加密证书",
-                            mustEncryptFailureDisposition());
-                }
-                if (preference == PreferredAlgorithm.GM_ONLY) {
-                    return PipelineResult.quarantine(
-                            message.getPayload(), "CERTIFICATE_MISSING", "GM_ONLY策略：未找到SM2加密证书");
-                }
-                if (preference == PreferredAlgorithm.STANDARD_ONLY) {
-                    return PipelineResult.quarantine(
-                            message.getPayload(), "CERTIFICATE_MISSING", "STANDARD_ONLY策略：未找到RSA加密证书");
-                }
-                return PipelineResult.success(message.getPayload());
-            }
-            if (mustEncrypt) {
-                List<String> missingRecipients = missingRecipients(envelope, recipientCerts);
-                if (!missingRecipients.isEmpty()) {
-                    return PipelineResult.quarantine(
-                            message.getPayload(),
-                            "CERTIFICATE_MISSING",
-                            "DLP MUST_ENCRYPT: 未找到以下收件人加密证书: " + String.join(", ", missingRecipients),
-                            mustEncryptFailureDisposition());
-                }
-            }
-
-            // 根据算法偏好过滤证书
-            Map<EmailAddress, String> filteredCerts = new java.util.HashMap<>();
-            for (Map.Entry<EmailAddress, String> entry : recipientCerts.entrySet()) {
-                try {
-                    String alg = PemUtils.parseCertificate(entry.getValue()).getPublicKey().getAlgorithm();
-                    log.info("收件人 {} 证书算法: {}", entry.getKey(), alg);
-                    boolean isGm = isGmAlgorithm(alg);
-                    boolean isStandard = isRsaAlgorithm(alg);
-
-                    if (preference == PreferredAlgorithm.GM_ONLY && isGm) {
-                        filteredCerts.put(entry.getKey(), entry.getValue());
-                        log.info("选择SM2证书用于国密加密");
-                    } else if (preference == PreferredAlgorithm.STANDARD_ONLY && isStandard) {
-                        filteredCerts.put(entry.getKey(), entry.getValue());
-                        log.info("选择RSA证书用于标准加密");
-                    } else if (preference == PreferredAlgorithm.AUTO) {
-                        // AUTO: 优先国密，其次国际
-                        if (isGm) {
-                            filteredCerts.put(entry.getKey(), entry.getValue());
-                            log.info("选择SM2证书用于国密加密");
-                        } else if (isStandard) {
-                            filteredCerts.put(entry.getKey(), entry.getValue());
-                            log.info("选择RSA证书用于AES加密");
-                        }
-                    }
-                } catch (Exception e) {
-                    log.warn("解析证书失败: {}", e.getMessage());
-                }
-            }
-
-            if (filteredCerts.isEmpty()) {
-                if (preference == PreferredAlgorithm.GM_ONLY) {
-                    if (mustEncrypt) {
-                        return PipelineResult.quarantine(
-                                message.getPayload(),
-                                "CERTIFICATE_MISSING",
-                                "DLP MUST_ENCRYPT: 收件人证书中没有SM2算法",
-                                mustEncryptFailureDisposition());
-                    }
-                    return PipelineResult.quarantine(
-                            message.getPayload(), "CERTIFICATE_MISSING", "GM_ONLY策略：收件人证书中没有SM2算法");
-                }
-                if (preference == PreferredAlgorithm.STANDARD_ONLY) {
-                    if (mustEncrypt) {
-                        return PipelineResult.quarantine(
-                                message.getPayload(),
-                                "CERTIFICATE_MISSING",
-                                "DLP MUST_ENCRYPT: 收件人证书中没有RSA算法",
-                                mustEncryptFailureDisposition());
-                    }
-                    return PipelineResult.quarantine(
-                            message.getPayload(), "CERTIFICATE_MISSING", "STANDARD_ONLY策略：收件人证书中没有RSA算法");
-                }
-                filteredCerts = recipientCerts;
-            }
-            if (mustEncrypt) {
-                List<String> missingRecipients = missingRecipients(envelope, filteredCerts);
-                if (!missingRecipients.isEmpty()) {
-                    return PipelineResult.quarantine(
-                            message.getPayload(),
-                            "CERTIFICATE_MISSING",
-                            "DLP MUST_ENCRYPT: 以下收件人没有符合算法偏好的加密证书: "
-                                    + String.join(", ", missingRecipients),
-                            mustEncryptFailureDisposition());
-                }
+            EncryptionPlan plan = buildEncryptionPlan(envelope, preference);
+            if (!plan.success()) {
+                return PipelineResult.quarantine(
+                        message.getPayload(),
+                        "CERTIFICATE_MISSING",
+                        mustEncrypt ? "DLP MUST_ENCRYPT: " + plan.failureDetail() : plan.failureDetail(),
+                        MailRecordDisposition.EXCEPTION);
             }
 
             byte[] payload = message.getPayload();
             int originalSize = payload.length;
-            List<String> certChain = filteredCerts.values().stream().toList();
-            payload = smimeOperations.encryptMultiple(payload, certChain);
-            List<MailEncrypted> events = encryptedEvents(envelope, filteredCerts, recipientThumbprints);
-            for (EmailAddress recipient : filteredCerts.keySet()) {
-                log.info("  Encrypted for recipient: {}", recipient);
+            List<String> certChain = plan.certificates().values().stream().toList();
+            payload = smimeOperations.encryptMultiple(payload, certChain, plan.suite());
+            List<MailEncrypted> events = encryptedEvents(envelope, plan.certificates(), plan.thumbprints());
+            for (EmailAddress recipient : plan.certificates().keySet()) {
+                log.info("  Encrypted for recipient: {} using {}", recipient, plan.suite());
             }
 
             log.info("=== S/MIME ENCRYPTION COMPLETED ===");
@@ -181,7 +81,12 @@ public class EncryptStep implements MailPipelineStep {
             log.info("  Encrypted size: {} bytes", payload.length);
             log.info("  First 100 chars: {}", new String(payload).replaceAll("[\r\n]", " ").substring(0, Math.min(100, payload.length)));
 
-            return PipelineResult.success(payload, events);
+            return PipelineResult.successWithHeaders(payload, Map.of(
+                    "smimeEncrypted", true,
+                    "smimeEncryptionSuite", plan.suite().name(),
+                    "smimeEncryptedRecipients", List.copyOf(plan.certificates().keySet()),
+                    "smimeEncryptedRecipientCount", plan.certificates().size()
+            ), events);
 
         } catch (Exception e) {
             log.error("S/MIME encryption failed: {}", e.getMessage(), e);
@@ -189,7 +94,7 @@ public class EncryptStep implements MailPipelineStep {
                     message.getPayload(),
                     "ENCRYPTION_FAILED",
                     "S/MIME encryption failed: " + e.getMessage(),
-                    mustEncrypt ? mustEncryptFailureDisposition() : MailRecordDisposition.EXCEPTION);
+                    MailRecordDisposition.EXCEPTION);
         }
     }
 
@@ -198,45 +103,101 @@ public class EncryptStep implements MailPipelineStep {
         return "encrypt";
     }
 
-    private RecipientCertificateSelection loadRecipientCertificates(MailEnvelope envelope,
-                                                                    PreferredAlgorithm preference) {
-        Map<EmailAddress, String> certificates = new java.util.HashMap<>();
-        Map<EmailAddress, String> thumbprints = new java.util.HashMap<>();
+    private EncryptionPlan buildEncryptionPlan(MailEnvelope envelope, PreferredAlgorithm preference) {
+        List<RecipientCertificateOptions> recipientOptions = new ArrayList<>();
         for (EmailAddress recipient : envelope.getRecipients()) {
-            Certificate selected = selectCertificate(
-                    certificateRepository.findTrustedForEncryption(recipient),
-                    preference);
-            if (selected != null) {
-                certificates.put(recipient, selected.getPemContent());
-                thumbprints.put(recipient, selected.getId().getThumbprint());
-            }
+            List<Certificate> certificates = certificateRepository.findTrustedForEncryption(recipient);
+            recipientOptions.add(new RecipientCertificateOptions(
+                    recipient,
+                    selectGmCertificate(certificates),
+                    selectStandardCertificate(certificates)));
         }
-        return new RecipientCertificateSelection(certificates, thumbprints);
-    }
 
-    private Certificate selectCertificate(List<Certificate> certificates, PreferredAlgorithm preference) {
-        if (certificates == null || certificates.isEmpty()) {
-            return null;
-        }
         if (preference == PreferredAlgorithm.GM_ONLY) {
-            return certificates.stream()
-                    .filter(certificate -> isGmAlgorithm(certificateAlgorithm(certificate)))
-                    .findFirst()
-                    .orElse(null);
+            return planForSuite(recipientOptions, SMIMEEncryptionSuite.GM,
+                    "以下收件人没有SM2加密证书: ");
         }
         if (preference == PreferredAlgorithm.STANDARD_ONLY) {
-            return certificates.stream()
-                    .filter(certificate -> isRsaAlgorithm(certificateAlgorithm(certificate)))
-                    .findFirst()
-                    .orElse(null);
+            return planForSuite(recipientOptions, SMIMEEncryptionSuite.STANDARD,
+                    "以下收件人没有RSA加密证书: ");
+        }
+
+        List<String> recipientsWithoutCertificates = recipientOptions.stream()
+                .filter(option -> !option.supportsGm() && !option.supportsStandard())
+                .map(option -> option.recipient().getValue())
+                .toList();
+        if (!recipientsWithoutCertificates.isEmpty()) {
+            if (recipientsWithoutCertificates.size() == envelope.getRecipients().size()) {
+                return EncryptionPlan.failure("未找到收件人加密证书");
+            }
+            return EncryptionPlan.failure("以下收件人没有加密证书: "
+                    + String.join(", ", recipientsWithoutCertificates));
+        }
+
+        if (recipientOptions.stream().allMatch(RecipientCertificateOptions::supportsGm)) {
+            return planForSuite(recipientOptions, SMIMEEncryptionSuite.GM,
+                    "以下收件人没有SM2加密证书: ");
+        }
+        if (recipientOptions.stream().allMatch(RecipientCertificateOptions::supportsStandard)) {
+            return planForSuite(recipientOptions, SMIMEEncryptionSuite.STANDARD,
+                    "以下收件人没有RSA加密证书: ");
+        }
+        return EncryptionPlan.failure("多收件人无法共享同一加密策略，需所有收件人同时具备SM2或RSA加密证书: "
+                + capabilitySummary(recipientOptions));
+    }
+
+    private EncryptionPlan planForSuite(List<RecipientCertificateOptions> recipientOptions,
+                                        SMIMEEncryptionSuite suite,
+                                        String missingPrefix) {
+        List<String> missingRecipients = recipientOptions.stream()
+                .filter(option -> option.certificateFor(suite) == null)
+                .map(option -> option.recipient().getValue())
+                .toList();
+        if (!missingRecipients.isEmpty()) {
+            return EncryptionPlan.failure(missingPrefix + String.join(", ", missingRecipients));
+        }
+
+        Map<EmailAddress, String> certs = new LinkedHashMap<>();
+        Map<EmailAddress, String> thumbprints = new LinkedHashMap<>();
+        for (RecipientCertificateOptions option : recipientOptions) {
+            Certificate certificate = option.certificateFor(suite);
+            certs.put(option.recipient(), certificate.getPemContent());
+            thumbprints.put(option.recipient(), certificate.getId().getThumbprint());
+        }
+        return EncryptionPlan.success(suite, certs, thumbprints);
+    }
+
+    private Certificate selectGmCertificate(List<Certificate> certificates) {
+        if (certificates == null) {
+            return null;
         }
         return certificates.stream()
-                .filter(certificate -> isGmAlgorithm(certificateAlgorithm(certificate)))
+                .filter(this::isSm2Certificate)
                 .findFirst()
-                .or(() -> certificates.stream()
-                        .filter(certificate -> isRsaAlgorithm(certificateAlgorithm(certificate)))
-                        .findFirst())
-                .orElse(certificates.getFirst());
+                .orElse(null);
+    }
+
+    private Certificate selectStandardCertificate(List<Certificate> certificates) {
+        if (certificates == null) {
+            return null;
+        }
+        return certificates.stream()
+                .filter(this::isRsaCertificate)
+                .findFirst()
+                .orElse(null);
+    }
+
+    private boolean isRsaCertificate(Certificate certificate) {
+        String algorithm = certificateAlgorithm(certificate);
+        return "RSA".equals(algorithm);
+    }
+
+    private boolean isSm2Certificate(Certificate certificate) {
+        String curveOid = certificateCurveOid(certificate);
+        if (curveOid != null) {
+            return "1.2.156.10197.1.301".equals(curveOid);
+        }
+        return "SM2".equals(certificateAlgorithm(certificate));
     }
 
     private String certificateAlgorithm(Certificate certificate) {
@@ -250,12 +211,16 @@ public class EncryptStep implements MailPipelineStep {
         }
     }
 
-    private boolean isGmAlgorithm(String algorithm) {
-        return "EC".equals(algorithm) || "ECDSA".equals(algorithm) || "SM2".equals(algorithm);
-    }
-
-    private boolean isRsaAlgorithm(String algorithm) {
-        return "RSA".equals(algorithm);
+    private String certificateCurveOid(Certificate certificate) {
+        try {
+            java.security.cert.X509Certificate x509 = PemUtils.parseCertificate(certificate.getPemContent());
+            org.bouncycastle.cert.X509CertificateHolder holder =
+                    new org.bouncycastle.cert.X509CertificateHolder(x509.getEncoded());
+            Object parameters = holder.getSubjectPublicKeyInfo().getAlgorithm().getParameters();
+            return parameters != null ? parameters.toString() : null;
+        } catch (Exception e) {
+            return null;
+        }
     }
 
     private List<MailEncrypted> encryptedEvents(MailEnvelope envelope,
@@ -277,21 +242,55 @@ public class EncryptStep implements MailPipelineStep {
         return events;
     }
 
-    private List<String> missingRecipients(MailEnvelope envelope, Map<EmailAddress, String> recipientCerts) {
-        return envelope.getRecipients().stream()
-                .filter(recipient -> !recipientCerts.containsKey(recipient))
-                .map(EmailAddress::getValue)
-                .distinct()
-                .toList();
+    private String capabilitySummary(List<RecipientCertificateOptions> recipientOptions) {
+        return recipientOptions.stream()
+                .map(option -> option.recipient().getValue() + "=" + option.capabilityLabel())
+                .reduce((left, right) -> left + ", " + right)
+                .orElse("");
     }
 
-    private MailRecordDisposition mustEncryptFailureDisposition() {
-        return dlpProperties.isQuarantineEncryptionFailures()
-                ? MailRecordDisposition.DLP_QUARANTINE
-                : MailRecordDisposition.EXCEPTION;
+    private record RecipientCertificateOptions(EmailAddress recipient,
+                                               Certificate gmCertificate,
+                                               Certificate standardCertificate) {
+        boolean supportsGm() {
+            return gmCertificate != null;
+        }
+
+        boolean supportsStandard() {
+            return standardCertificate != null;
+        }
+
+        Certificate certificateFor(SMIMEEncryptionSuite suite) {
+            return suite == SMIMEEncryptionSuite.GM ? gmCertificate : standardCertificate;
+        }
+
+        String capabilityLabel() {
+            if (supportsGm() && supportsStandard()) {
+                return "GM,STANDARD";
+            }
+            if (supportsGm()) {
+                return "GM";
+            }
+            if (supportsStandard()) {
+                return "STANDARD";
+            }
+            return "NONE";
+        }
     }
 
-    private record RecipientCertificateSelection(Map<EmailAddress, String> certificates,
-                                                 Map<EmailAddress, String> thumbprints) {
+    private record EncryptionPlan(boolean success,
+                                  SMIMEEncryptionSuite suite,
+                                  Map<EmailAddress, String> certificates,
+                                  Map<EmailAddress, String> thumbprints,
+                                  String failureDetail) {
+        static EncryptionPlan success(SMIMEEncryptionSuite suite,
+                                      Map<EmailAddress, String> certificates,
+                                      Map<EmailAddress, String> thumbprints) {
+            return new EncryptionPlan(true, suite, certificates, thumbprints, null);
+        }
+
+        static EncryptionPlan failure(String detail) {
+            return new EncryptionPlan(false, null, Map.of(), Map.of(), detail);
+        }
     }
 }

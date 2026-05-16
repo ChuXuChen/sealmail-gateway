@@ -3,6 +3,7 @@ package com.sealmail.infra.mail.pipeline;
 import com.sealmail.domain.certificate.Certificate;
 import com.sealmail.domain.certificate.CertificateId;
 import com.sealmail.domain.certificate.CertificateRepository;
+import com.sealmail.domain.certificate.CertificateSelector;
 import com.sealmail.domain.certificate.KeyUsage;
 import com.sealmail.domain.certificate.ValidityPeriod;
 import com.sealmail.domain.mailsecurity.MailDirection;
@@ -166,6 +167,48 @@ class RoutingServiceTest {
                 .build());
 
         assertEquals(PreferredAlgorithm.STANDARD_ONLY.name(), routed.getHeaders().get("preferredAlgorithm"));
+    }
+
+    @Test
+    void routeOutboundDoesNotEnableEncryptionWhenOnlySomeRecipientsHaveCertificates() {
+        MailRouter mailRouter = new MailRouter(new CertificateSelector());
+        DomainConfigRepository domainConfigRepository = mock(DomainConfigRepository.class);
+        CertificateRepository certificateRepository = mock(CertificateRepository.class);
+        MailProcessingRepository mailProcessingRepository = mock(MailProcessingRepository.class);
+        RoutingService routingService = new RoutingService(
+                mailRouter,
+                domainConfigRepository,
+                certificateRepository,
+                mailProcessingRepository,
+                postfixProperties()
+        );
+
+        EmailAddress sender = new EmailAddress("alice@example.com");
+        EmailAddress certified = new EmailAddress("2416507029@qq.com");
+        EmailAddress missing = new EmailAddress("1261017453@qq.com");
+        MailEnvelope envelope = new MailEnvelope(
+                "msg-" + UUID.randomUUID() + "@example.com",
+                sender,
+                List.of(certified, missing),
+                "127.0.0.1",
+                "helo",
+                Instant.now(),
+                "body".getBytes()
+        );
+        DomainConfig config = DomainConfig.create("domain-1", "example.com", true);
+        Certificate recipientCert = certificate(certified, EnumSet.of(KeyUsage.ENCRYPTION), true, false, "RSA");
+
+        when(domainConfigRepository.findByDomain("example.com")).thenReturn(Optional.of(config));
+        when(certificateRepository.findTrustedForEncryption(certified)).thenReturn(List.of(recipientCert));
+        when(certificateRepository.findTrustedForEncryption(missing)).thenReturn(List.of());
+        when(mailProcessingRepository.save(any(MailProcessing.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        Message<byte[]> routed = routingService.routeOutbound(MessageBuilder.withPayload("hello".getBytes())
+                .setHeader("mailEnvelope", envelope)
+                .build());
+
+        assertEquals(null, routed.getHeaders().get("encryptionEnabled"));
+        assertEquals(null, routed.getHeaders().get("recipientCertificates"));
     }
 
     @Test

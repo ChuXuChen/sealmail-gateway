@@ -77,11 +77,6 @@ public class MailPipelineFlow {
                                                                         innerMapping -> innerMapping
                                                                                 .subFlowMapping(true, innerSf -> innerSf
                                                                                         .<PipelineResult, byte[]>transform(PipelineResult::payload)
-                                                                                        .handle((p, h) -> {
-                                                                                            String processingId = (String) h.get("processingId");
-                                                                                            stepTracker.completeProcessing(processingId, ProcessingResult.SUCCESS);
-                                                                                            return p;
-                                                                                        })
                                                                                         .channel(relayChannel))
                                                                                 .subFlowMapping(false, innerSf -> innerSf
                                                                                         .handle((p, h) -> {
@@ -140,11 +135,6 @@ public class MailPipelineFlow {
                                                                                                         .copyHeaders(h).build(),
                                                                                                 dkimSignStep))
                                                                                         .<PipelineResult, byte[]>transform(PipelineResult::payload)
-                                                                                        .handle((p, h) -> {
-                                                                                            String processingId = (String) h.get("processingId");
-                                                                                            stepTracker.completeProcessing(processingId, ProcessingResult.SUCCESS);
-                                                                                            return p;
-                                                                                        })
                                                                                         .channel(relayChannel))
                                                                                 .subFlowMapping(false, innerSf -> innerSf
                                                                                         .handle((p, h) -> {
@@ -272,7 +262,8 @@ public class MailPipelineFlow {
         if (result.headers() != null && !result.headers().isEmpty()) {
             builder.copyHeaders(result.headers());
         }
-        if (result.headerName() != null && result.headerValue() != null) {
+        if ((result.headers() == null || result.headers().isEmpty())
+                && result.headerName() != null && result.headerValue() != null) {
             builder.setHeader(result.headerName(), result.headerValue());
         }
         if (preservePipelineHeaders && headers.containsKey("mustEncrypt")) {
@@ -284,7 +275,36 @@ public class MailPipelineFlow {
         return builder.build();
     }
 
+    public IntegrationFlow relayFlow(MessageChannel relayChannel, MessageChannel quarantineChannel) {
+        return IntegrationFlow.from(relayChannel)
+                .handle((payload, headers) -> stepTracker.executeWithTracking(
+                        org.springframework.messaging.support.MessageBuilder.withPayload((byte[]) payload)
+                                .copyHeaders(headers).build(),
+                        relayStep))
+                .<PipelineResult, Boolean>route(PipelineResult::success,
+                        mapping -> mapping
+                                .subFlowMapping(true, sf -> sf
+                                        .handle((p, h) -> {
+                                            String processingId = (String) h.get("processingId");
+                                            stepTracker.completeProcessing(processingId, ProcessingResult.SUCCESS);
+                                            return p;
+                                        })
+                                        .nullChannel())
+                                .subFlowMapping(false, sf -> sf
+                                        .handle((p, h) -> {
+                                            String processingId = (String) h.get("processingId");
+                                            stepTracker.completeProcessing(processingId, ProcessingResult.FAILED);
+                                            return p;
+                                        })
+                                        .channel(quarantineChannel)))
+                .get();
+    }
+
     public IntegrationFlow relayFlow(MessageChannel relayChannel) {
+        return nullQuarantineRelayFlow(relayChannel);
+    }
+
+    private IntegrationFlow nullQuarantineRelayFlow(MessageChannel relayChannel) {
         return IntegrationFlow.from(relayChannel)
                 .handle((payload, headers) -> stepTracker.executeWithTracking(
                         org.springframework.messaging.support.MessageBuilder.withPayload((byte[]) payload)

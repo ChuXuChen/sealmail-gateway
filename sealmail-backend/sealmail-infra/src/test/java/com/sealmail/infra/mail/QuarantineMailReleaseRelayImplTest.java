@@ -10,6 +10,7 @@ import com.sealmail.infra.mail.pipeline.PipelineStepTracker;
 import com.sealmail.infra.mail.pipeline.RoutingService;
 import com.sealmail.infra.mail.pipeline.step.DkimSignStep;
 import com.sealmail.infra.mail.pipeline.step.EncryptStep;
+import com.sealmail.infra.mail.pipeline.step.QuarantineStep;
 import com.sealmail.infra.mail.pipeline.step.RelayStep;
 import com.sealmail.infra.mail.pipeline.step.SignStep;
 import org.junit.jupiter.api.Test;
@@ -39,6 +40,7 @@ class QuarantineMailReleaseRelayImplTest {
         EncryptStep encryptStep = mock(EncryptStep.class);
         DkimSignStep dkimSignStep = mock(DkimSignStep.class);
         RelayStep relayStep = mock(RelayStep.class);
+        QuarantineStep quarantineStep = mock(QuarantineStep.class);
         QuarantineMailReleaseRelayImpl releaseRelay =
                 new QuarantineMailReleaseRelayImpl(
                         routingService,
@@ -46,7 +48,8 @@ class QuarantineMailReleaseRelayImplTest {
                         signStep,
                         encryptStep,
                         dkimSignStep,
-                        relayStep);
+                        relayStep,
+                        quarantineStep);
 
         QuarantinedMail mail = mail(MailDirection.OUTBOUND);
         when(routingService.routeOutbound(any())).thenReturn(routedMessage(mail, "raw".getBytes()));
@@ -79,6 +82,7 @@ class QuarantineMailReleaseRelayImplTest {
         EncryptStep encryptStep = mock(EncryptStep.class);
         DkimSignStep dkimSignStep = mock(DkimSignStep.class);
         RelayStep relayStep = mock(RelayStep.class);
+        QuarantineStep quarantineStep = mock(QuarantineStep.class);
         QuarantineMailReleaseRelayImpl releaseRelay =
                 new QuarantineMailReleaseRelayImpl(
                         routingService,
@@ -86,7 +90,8 @@ class QuarantineMailReleaseRelayImplTest {
                         signStep,
                         encryptStep,
                         dkimSignStep,
-                        relayStep);
+                        relayStep,
+                        quarantineStep);
 
         QuarantinedMail mail = mail(MailDirection.OUTBOUND);
         when(routingService.routeOutbound(any())).thenReturn(routedMessage(mail, "raw".getBytes()));
@@ -115,6 +120,7 @@ class QuarantineMailReleaseRelayImplTest {
         EncryptStep encryptStep = mock(EncryptStep.class);
         DkimSignStep dkimSignStep = mock(DkimSignStep.class);
         RelayStep relayStep = mock(RelayStep.class);
+        QuarantineStep quarantineStep = mock(QuarantineStep.class);
         QuarantineMailReleaseRelayImpl releaseRelay =
                 new QuarantineMailReleaseRelayImpl(
                         routingService,
@@ -122,7 +128,8 @@ class QuarantineMailReleaseRelayImplTest {
                         signStep,
                         encryptStep,
                         dkimSignStep,
-                        relayStep);
+                        relayStep,
+                        quarantineStep);
 
         QuarantinedMail mail = mail(MailDirection.INBOUND);
         when(routingService.routeInbound(any())).thenReturn(routedMessage(mail, "raw".getBytes()));
@@ -146,6 +153,7 @@ class QuarantineMailReleaseRelayImplTest {
         EncryptStep encryptStep = mock(EncryptStep.class);
         DkimSignStep dkimSignStep = mock(DkimSignStep.class);
         RelayStep relayStep = mock(RelayStep.class);
+        QuarantineStep quarantineStep = mock(QuarantineStep.class);
         QuarantineMailReleaseRelayImpl releaseRelay =
                 new QuarantineMailReleaseRelayImpl(
                         routingService,
@@ -153,7 +161,8 @@ class QuarantineMailReleaseRelayImplTest {
                         signStep,
                         encryptStep,
                         dkimSignStep,
-                        relayStep);
+                        relayStep,
+                        quarantineStep);
 
         QuarantinedMail mail = mail(MailDirection.INBOUND);
         when(routingService.routeInbound(any())).thenReturn(routedMessage(mail, "raw".getBytes()));
@@ -182,6 +191,7 @@ class QuarantineMailReleaseRelayImplTest {
         EncryptStep encryptStep = mock(EncryptStep.class);
         DkimSignStep dkimSignStep = mock(DkimSignStep.class);
         RelayStep relayStep = mock(RelayStep.class);
+        QuarantineStep quarantineStep = mock(QuarantineStep.class);
         QuarantineMailReleaseRelayImpl releaseRelay =
                 new QuarantineMailReleaseRelayImpl(
                         routingService,
@@ -189,7 +199,8 @@ class QuarantineMailReleaseRelayImplTest {
                         signStep,
                         encryptStep,
                         dkimSignStep,
-                        relayStep);
+                        relayStep,
+                        quarantineStep);
 
         QuarantinedMail mail = mail(MailDirection.OUTBOUND);
         Message<byte[]> routed = MessageBuilder.withPayload("raw".getBytes())
@@ -200,7 +211,8 @@ class QuarantineMailReleaseRelayImplTest {
         when(routingService.routeOutbound(any())).thenReturn(routed);
 
         assertThrows(QuarantineReleaseRelayException.class, () -> releaseRelay.relay(mail, false));
-        verify(stepTracker, never()).executeWithTracking(any(), any());
+        verify(stepTracker).executeWithTracking(any(), eq(quarantineStep));
+        verify(stepTracker, never()).executeWithTracking(any(), eq(signStep));
     }
 
     @Test
@@ -211,6 +223,7 @@ class QuarantineMailReleaseRelayImplTest {
         EncryptStep encryptStep = mock(EncryptStep.class);
         DkimSignStep dkimSignStep = mock(DkimSignStep.class);
         RelayStep relayStep = mock(RelayStep.class);
+        QuarantineStep quarantineStep = mock(QuarantineStep.class);
         QuarantineMailReleaseRelayImpl releaseRelay =
                 new QuarantineMailReleaseRelayImpl(
                         routingService,
@@ -218,7 +231,8 @@ class QuarantineMailReleaseRelayImplTest {
                         signStep,
                         encryptStep,
                         dkimSignStep,
-                        relayStep);
+                        relayStep,
+                        quarantineStep);
 
         QuarantinedMail mail = mail(MailDirection.OUTBOUND);
         when(routingService.routeOutbound(any())).thenReturn(routedMessage(mail, "raw".getBytes()));
@@ -229,6 +243,7 @@ class QuarantineMailReleaseRelayImplTest {
 
         assertThrows(QuarantineReleaseRelayException.class, () -> releaseRelay.relay(mail, true));
         verify(stepTracker, never()).executeWithTracking(any(), eq(relayStep));
+        verify(stepTracker).executeWithTracking(any(), eq(quarantineStep));
     }
 
     private static QuarantinedMail mail(MailDirection direction) {

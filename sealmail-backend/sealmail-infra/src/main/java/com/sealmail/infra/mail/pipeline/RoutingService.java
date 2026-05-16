@@ -386,11 +386,26 @@ public class RoutingService {
     }
 
     private boolean isGmCert(Certificate cert) {
-        String alg = getCertAlgorithm(cert);
-        return "EC".equals(alg) || "ECDSA".equals(alg) || "SM2".equals(alg);
+        String curveOid = getCertCurveOid(cert);
+        if (curveOid != null) {
+            return "1.2.156.10197.1.301".equals(curveOid);
+        }
+        return "SM2".equals(getCertAlgorithm(cert));
     }
 
     private boolean isRsaCert(Certificate cert) {
         return "RSA".equals(getCertAlgorithm(cert));
+    }
+
+    private String getCertCurveOid(Certificate cert) {
+        try {
+            java.security.cert.X509Certificate x509 = PemUtils.parseCertificate(cert.getPemContent());
+            org.bouncycastle.cert.X509CertificateHolder holder =
+                    new org.bouncycastle.cert.X509CertificateHolder(x509.getEncoded());
+            Object parameters = holder.getSubjectPublicKeyInfo().getAlgorithm().getParameters();
+            return parameters != null ? parameters.toString() : null;
+        } catch (Exception e) {
+            return null;
+        }
     }
 }

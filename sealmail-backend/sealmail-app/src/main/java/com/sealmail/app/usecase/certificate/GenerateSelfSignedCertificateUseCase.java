@@ -8,6 +8,7 @@ import com.sealmail.app.security.UserContext;
 import com.sealmail.domain.certificate.Certificate;
 import com.sealmail.domain.certificate.CertificateId;
 import com.sealmail.domain.certificate.CertificateRepository;
+import com.sealmail.domain.certificate.spi.CertificateCryptoPort;
 import com.sealmail.domain.shared.model.EmailAddress;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
@@ -15,8 +16,6 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.security.KeyPair;
-import java.security.cert.X509Certificate;
 import java.util.Set;
 
 /**
@@ -34,15 +33,14 @@ public class GenerateSelfSignedCertificateUseCase {
     private final CertificateRepository certificateRepository;
     private final CertificateDtoMapper mapper;
     private final PermissionChecker permissionChecker;
-    private final CertificateCryptoService cryptoService;
+    private final CertificateCryptoPort certificateCryptoPort;
+    private final CertificateMaterialAssembler certificateMaterialAssembler;
 
     public CertificateResponse execute(GenerateCertificateRequest request, UserContext user) {
         EmailAddress owner = new EmailAddress(request.getOwnerEmail());
         permissionChecker.checkCanManageCertificates(user, owner.getDomain());
 
         try {
-            KeyPair keyPair = cryptoService.generateKeyPair(request.getAlgorithm());
-
             String subjectDn = request.getSubjectDn();
             if (subjectDn == null || subjectDn.isBlank()) {
                 subjectDn = "CN=" + request.getOwnerEmail() + ", O=SealMail, C=CN";
@@ -50,26 +48,24 @@ public class GenerateSelfSignedCertificateUseCase {
 
             int validity = request.getValidityDays() != null ? request.getValidityDays() : 365;
 
-            X509Certificate x509 = cryptoService.issue(CertificateCryptoService.CertSpec.builder()
-                    .subjectPubKey(keyPair.getPublic())
-                    .subjectDn(subjectDn)
-                    .subjectAlgorithm(request.getAlgorithm())
-                    .issuerDn(subjectDn)
-                    .issuerPrivKey(keyPair.getPrivate())
-                    .issuerPubKey(keyPair.getPublic())
-                    .validityDays(validity)
-                    .ca(false)
-                    .ekus(Set.of(CertificateCryptoService.EKU_EMAIL_PROTECTION))
-                    .build());
+            CertificateCryptoPort.CertificateMaterial material =
+                    certificateCryptoPort.issueSelfSigned(new CertificateCryptoPort.IssueSelfSignedCommand(
+                            subjectDn,
+                            request.getAlgorithm(),
+                            validity,
+                            false,
+                            0,
+                            Set.of(CertificateCryptoPort.EKU_EMAIL_PROTECTION),
+                            null));
 
-            String thumbprint = cryptoService.computeThumbprint(x509);
+            String thumbprint = material.certificate().thumbprint();
             CertificateId certId = new CertificateId(thumbprint);
             if (certificateRepository.findById(certId).isPresent()) {
                 throw new IllegalArgumentException("Certificate already exists with thumbprint: " + thumbprint);
             }
 
-            Certificate cert = cryptoService.toIssuedDomainCertificate(certId, owner, x509, request.getAlgorithm());
-            cert.setPrivateKeyData(cryptoService.privateKeyToPem(keyPair.getPrivate()));
+            Certificate cert = certificateMaterialAssembler.issued(material.certificate(), owner);
+            cert.setPrivateKeyData(material.privateKeyPem());
             if (request.getAlias() != null && !request.getAlias().isBlank()) {
                 cert.assignAlias(request.getAlias());
             }

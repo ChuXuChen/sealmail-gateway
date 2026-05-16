@@ -3,6 +3,7 @@ server:
   shutdown: graceful
 
 jwt:
+  secret: ${SEALMAIL_JWT_SECRET:change-this-local-development-secret-32}
   token-validity-in-seconds: 86400
 
 spring:
@@ -13,9 +14,9 @@ spring:
     active: postgres
 
   datasource:
-    url: jdbc:postgresql://localhost:5432/sealmail
-    username: sealmail
-    password: sealmail
+    url: ${SEALMAIL_DB_URL:jdbc:postgresql://localhost:5432/sealmail}
+    username: ${SEALMAIL_DB_USERNAME:sealmail}
+    password: ${SEALMAIL_DB_PASSWORD:sealmail}
     driver-class-name: org.postgresql.Driver
     hikari:
       maximum-pool-size: 20
@@ -80,17 +81,17 @@ sealmail:
     host: 127.0.0.1
     after-filter-port: 10026
     outbound-port: 10027
-    envelope-from: cxc1234567892022@163.com
+    envelope-from: ${SEALMAIL_POSTFIX_ENVELOPE_FROM:}
     use-tls: false
     timeout: 10000
 
   # Direct downstream relay fallback when Postfix integration is disabled
   relay:
-    host: smtp.163.com
-    port: 465
-    use-tls: true
-    username: cxc1234567892022@163.com
-    password: VJwin35dA5ftGHwB
+    host: ${SEALMAIL_RELAY_HOST:}
+    port: ${SEALMAIL_RELAY_PORT:25}
+    use-tls: ${SEALMAIL_RELAY_USE_TLS:false}
+    username: ${SEALMAIL_RELAY_USERNAME:}
+    password: ${SEALMAIL_RELAY_PASSWORD:}
     timeout: 10000
 
   # Pipeline Configuration
@@ -104,34 +105,7 @@ sealmail:
       encrypt-enabled: true
 
   auth:
-    users:
-      - user-id: super-admin
-        username: superadmin
-        email: superadmin@sealmail.local
-        password: super123
-        roles:
-          - SUPER_ADMIN
-      - user-id: pki-admin
-        username: pkiadmin
-        email: pkiadmin@sealmail.local
-        password: admin123
-        roles:
-          - PKI_ADMIN
-      - user-id: domain-admin
-        username: domainadmin
-        email: domainadmin@sealmail.local
-        password: domain123
-        roles:
-          - DOMAIN_ADMIN
-        managed-domains:
-          - qq.com
-          - 163.com
-      - user-id: auditor
-        username: auditor
-        email: auditor@sealmail.local
-        password: auditor123
-        roles:
-          - AUDITOR
+    users: []
 
   mail-auth:
     enabled: true
@@ -157,8 +131,24 @@ sealmail:
       enabled: true
       quarantine-reject-policy: true
 
-  dlp:
-    quarantine-encryption-failures: true
+  smime:
+    crypto:
+      standard:
+        recipient-key-algorithm-oid: 1.2.840.113549.1.1.1
+        recipient-key-cipher: RSA/ECB/PKCS1Padding
+        content-encryption-algorithm-oid: 2.16.840.1.101.3.4.1.42
+        content-cipher: AES/CBC/PKCS5Padding
+        content-key-algorithm: AES
+        content-key-size-bits: 256
+        signature-algorithm: SHA256withRSA
+      gm:
+        recipient-key-algorithm-oid: 1.2.156.10197.1.301.3.2.1
+        recipient-key-cipher: SM2WITHSM3
+        content-encryption-algorithm-oid: 1.2.156.10197.1.104.2
+        content-cipher: SM4/CBC/PKCS7Padding
+        content-key-algorithm: SM4
+        content-key-size-bits: 128
+        signature-algorithm: SM3withSM2
 
   # Quarantine Settings
   quarantine:
@@ -224,9 +214,9 @@ spring:
       on-profile: postgres
 
   datasource:
-    url: jdbc:postgresql://localhost:5432/sealmail
-    username: sealmail
-    password: sealmail
+    url: ${SEALMAIL_DB_URL:jdbc:postgresql://localhost:5432/sealmail}
+    username: ${SEALMAIL_DB_USERNAME:sealmail}
+    password: ${SEALMAIL_DB_PASSWORD:sealmail}
     driver-class-name: org.postgresql.Driver
 
   jpa:
@@ -245,9 +235,9 @@ spring:
       on-profile: test
 
   datasource:
-    url: jdbc:postgresql://localhost:5432/sealmail
-    username: sealmail
-    password: sealmail
+    url: ${SEALMAIL_TEST_DB_URL:jdbc:postgresql://localhost:5432/sealmail}
+    username: ${SEALMAIL_TEST_DB_USERNAME:sealmail}
+    password: ${SEALMAIL_TEST_DB_PASSWORD:sealmail}
     driver-class-name: org.postgresql.Driver
 
   flyway:

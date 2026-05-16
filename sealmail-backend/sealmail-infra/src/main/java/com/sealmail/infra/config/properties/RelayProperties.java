@@ -5,11 +5,11 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 @ConfigurationProperties(prefix = "sealmail.relay")
 public class RelayProperties {
 
-    private String host = "smtp.163.com";
-    private int port = 465;
-    private String username = "cxc1234567892022@163.com";
-    private String password = "JUXKKUHYJHLGLZPB";
-    private boolean useTls = true;
+    private String host = "";
+    private int port = 25;
+    private String username = "";
+    private String password = "";
+    private boolean useTls = false;
     private int timeout = 30000;
 
     public String getHost() {

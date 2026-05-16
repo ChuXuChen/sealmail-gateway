@@ -1,6 +1,7 @@
 package com.sealmail.infra.mail;
 
 import com.sealmail.domain.mailsecurity.MailEnvelope;
+import com.sealmail.domain.mail.spi.OutboundMailSubmitter;
 import com.sealmail.domain.shared.model.EmailAddress;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -11,7 +12,7 @@ import org.springframework.stereotype.Component;
 import java.util.List;
 
 @Component
-public class OutboundMailGateway {
+public class OutboundMailGateway implements OutboundMailSubmitter {
 
     private static final Logger log = LoggerFactory.getLogger(OutboundMailGateway.class);
 
@@ -38,6 +39,32 @@ public class OutboundMailGateway {
                 .setHeader("mailEnvelope", envelope)
                 .setHeader("submissionType", "api")
                 .build());
+    }
+
+    @Override
+    public void submitPlain(PlainOutboundMailSubmission submission) {
+        submitMail(submission.mailContent(), submission.sender(), submission.recipients());
+    }
+
+    @Override
+    public void submitProtected(ProtectedOutboundMailSubmission submission) {
+        var builder = MessageBuilder
+                .withPayload(submission.mailContent())
+                .setHeader("mailEnvelope", submission.envelope())
+                .setHeader("submissionType", "api")
+                .setHeader("signingEnabled", submission.signingEnabled())
+                .setHeader("encryptionEnabled", submission.encryptionEnabled())
+                .setHeader("preferredAlgorithm", submission.preferredAlgorithm().name())
+                .setHeader("recipientCertificates", submission.recipientCertificates());
+
+        if (submission.senderCertificatePem() != null && !submission.senderCertificatePem().isBlank()) {
+            builder.setHeader("senderCertificate", submission.senderCertificatePem());
+        }
+        if (submission.senderCertificateThumbprint() != null && !submission.senderCertificateThumbprint().isBlank()) {
+            builder.setHeader("senderCertificateThumbprint", submission.senderCertificateThumbprint());
+        }
+
+        mailOutboundChannel.send(builder.build());
     }
 
     public void submitMail(byte[] mailContent, String sender, List<String> recipients) {

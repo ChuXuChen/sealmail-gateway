@@ -10,6 +10,7 @@ import com.sealmail.app.security.UserContext;
 import com.sealmail.domain.certificate.Certificate;
 import com.sealmail.domain.certificate.CertificateId;
 import com.sealmail.domain.certificate.CertificateRepository;
+import com.sealmail.domain.certificate.spi.CertificateCryptoPort;
 import com.sealmail.domain.shared.model.EmailAddress;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
@@ -17,10 +18,6 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-
-import java.security.KeyPair;
-import java.security.PrivateKey;
-import java.security.cert.X509Certificate;
 
 @Service
 @RequiredArgsConstructor
@@ -31,7 +28,8 @@ public class CreateIntermediateCaUseCase {
 
     private final CertificateRepository certificateRepository;
     private final CertificateDtoMapper mapper;
-    private final CertificateCryptoService cryptoService;
+    private final CertificateCryptoPort certificateCryptoPort;
+    private final CertificateMaterialAssembler certificateMaterialAssembler;
     private final PermissionChecker permissionChecker;
     private final CertificateChainService certificateChainService;
 
@@ -61,10 +59,6 @@ public class CreateIntermediateCaUseCase {
         }
 
         try {
-            KeyPair subjectKeyPair = cryptoService.generateKeyPair(request.getAlgorithm());
-            PrivateKey rootPrivKey = cryptoService.parsePrivateKey(rootCa.getPrivateKeyData());
-            X509Certificate rootX509 = cryptoService.parseCertificate(rootCa.getPemContent());
-
             String subjectDn = request.getSubjectDn();
             if (subjectDn == null || subjectDn.isBlank()) {
                 subjectDn = "CN=" + request.getCommonName() + ", O=SealMail, C=CN";
@@ -72,27 +66,27 @@ public class CreateIntermediateCaUseCase {
             int validity = request.getValidityDays() != null
                     ? request.getValidityDays() : defaultIntermediateValidityDays;
 
-            X509Certificate x509 = cryptoService.issue(CertificateCryptoService.CertSpec.builder()
-                    .subjectPubKey(subjectKeyPair.getPublic())
-                    .subjectDn(subjectDn)
-                    .subjectAlgorithm(request.getAlgorithm())
-                    .issuerDn(rootX509.getSubjectX500Principal().getName())
-                    .issuerPrivKey(rootPrivKey)
-                    .issuerPubKey(rootX509.getPublicKey())
-                    .validityDays(validity)
-                    .ca(true)
-                    .pathLenConstraint(0) // cannot sign further CAs
-                    .build());
+            CertificateCryptoPort.CertificateMaterial material =
+                    certificateCryptoPort.issueWithIssuer(new CertificateCryptoPort.IssueWithIssuerCommand(
+                            subjectDn,
+                            request.getAlgorithm(),
+                            rootCa.getPemContent(),
+                            rootCa.getPrivateKeyData(),
+                            validity,
+                            true,
+                            0,
+                            java.util.Set.of(),
+                            null));
 
-            String thumbprint = cryptoService.computeThumbprint(x509);
+            String thumbprint = material.certificate().thumbprint();
             CertificateId certId = new CertificateId(thumbprint);
             if (certificateRepository.findById(certId).isPresent()) {
                 throw BusinessException.conflict("证书已存在: " + thumbprint);
             }
 
             EmailAddress owner = new EmailAddress("ica-" + request.getAlgorithm().toLowerCase() + "@sealmail.local");
-            Certificate cert = cryptoService.toIssuedDomainCertificate(certId, owner, x509, request.getAlgorithm());
-            cert.setPrivateKeyData(cryptoService.privateKeyToPem(subjectKeyPair.getPrivate()));
+            Certificate cert = certificateMaterialAssembler.issued(material.certificate(), owner);
+            cert.setPrivateKeyData(material.privateKeyPem());
             cert.markAsCA(0);
             cert.setIssuerCertId(rootCa.getId().getThumbprint());
             if (request.getAlias() != null && !request.getAlias().isBlank()) {

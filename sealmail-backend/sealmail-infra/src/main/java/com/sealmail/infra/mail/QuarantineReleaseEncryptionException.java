@@ -1,8 +1,8 @@
 package com.sealmail.infra.mail;
 
-import com.sealmail.app.exception.BusinessException;
+import com.sealmail.domain.shared.exception.CodedDomainException;
 
-public class QuarantineReleaseEncryptionException extends BusinessException {
+public class QuarantineReleaseEncryptionException extends CodedDomainException {
 
     public QuarantineReleaseEncryptionException(String id, String message) {
         super("QUARANTINE_RELEASE_ENCRYPTION_FAILED",

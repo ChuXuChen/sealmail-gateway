@@ -1,10 +1,11 @@
 package com.sealmail.infra.crypto;
 
 import com.sealmail.domain.certificate.spi.SMIMEOperations;
+import com.sealmail.domain.certificate.spi.SMIMEEncryptionSuite;
 import com.sealmail.domain.certificate.spi.SignatureValidationResult;
+import com.sealmail.infra.config.properties.SmimeCryptoProperties;
 import com.sealmail.infra.crypto.util.PemUtils;
 import org.bouncycastle.asn1.ASN1ObjectIdentifier;
-import org.bouncycastle.asn1.DEROctetString;
 import org.bouncycastle.asn1.x509.AlgorithmIdentifier;
 import org.bouncycastle.asn1.gm.GMObjectIdentifiers;
 import org.bouncycastle.asn1.pkcs.PKCSObjectIdentifiers;
@@ -13,17 +14,15 @@ import org.bouncycastle.asn1.smime.SMIMECapability;
 import org.bouncycastle.asn1.smime.SMIMECapabilityVector;
 import org.bouncycastle.cert.X509CertificateHolder;
 import org.bouncycastle.cert.jcajce.JcaCertStore;
-import org.bouncycastle.cms.CMSAlgorithm;
 import org.bouncycastle.cms.CMSProcessableByteArray;
 import org.bouncycastle.cms.CMSSignedData;
 import org.bouncycastle.cms.KeyAgreeRecipientInformation;
 import org.bouncycastle.cms.KeyTransRecipientInformation;
+import org.bouncycastle.cms.RecipientInformation;
 import org.bouncycastle.cms.SignerInformation;
 import org.bouncycastle.cms.jcajce.JcaSimpleSignerInfoGeneratorBuilder;
 import org.bouncycastle.cms.jcajce.JcaSimpleSignerInfoVerifierBuilder;
-import org.bouncycastle.cms.jcajce.JceCMSContentEncryptorBuilder;
 import org.bouncycastle.cms.jcajce.JceKeyAgreeEnvelopedRecipient;
-import org.bouncycastle.cms.jcajce.JceKeyAgreeRecipientInfoGenerator;
 import org.bouncycastle.cms.jcajce.JceKeyTransEnvelopedRecipient;
 import org.bouncycastle.cms.jcajce.JceKeyTransRecipientInfoGenerator;
 import org.bouncycastle.jce.provider.BouncyCastleProvider;
@@ -36,7 +35,7 @@ import org.slf4j.LoggerFactory;
 import org.bouncycastle.mail.smime.util.SharedFileInputStream;
 import org.bouncycastle.operator.OperatorCreationException;
 import org.bouncycastle.operator.OutputEncryptor;
-import org.bouncycastle.operator.jcajce.JceGenericKey;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import jakarta.activation.CommandMap;
@@ -46,10 +45,6 @@ import jakarta.mail.MessagingException;
 import jakarta.mail.internet.InternetHeaders;
 import jakarta.mail.internet.MimeBodyPart;
 import jakarta.mail.internet.MimeMultipart;
-import javax.crypto.Cipher;
-import javax.crypto.CipherOutputStream;
-import javax.crypto.spec.IvParameterSpec;
-import javax.crypto.spec.SecretKeySpec;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -59,12 +54,12 @@ import java.security.*;
 import java.security.cert.CertificateExpiredException;
 import java.security.cert.CertificateNotYetValidException;
 import java.security.cert.X509Certificate;
-import java.security.spec.ECGenParameterSpec;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Date;
 import java.util.List;
+import java.util.Locale;
 
 /**
  * 完整的 Bouncy Castle S/MIME 加密引擎实现
@@ -80,12 +75,6 @@ public class BcSMIMEOperations implements SMIMEOperations {
     public static final ASN1ObjectIdentifier SM3_OID = GMObjectIdentifiers.sm3;
     public static final ASN1ObjectIdentifier SM4_CBC_OID = GMObjectIdentifiers.sms4_cbc;
 
-    // 算法配置
-    private static final String SM2_SIG_ALG = "SM3withSM2";        // 国密签名算法
-    private static final String RSA_SIG_ALG = "SHA256withRSA";    // RSA签名算法
-    private static final ASN1ObjectIdentifier SM4_ENC_ALG = SM4_CBC_OID;  // 国密加密算法
-    private static final ASN1ObjectIdentifier AES_ENC_ALG = CMSAlgorithm.AES256_CBC;  // AES加密算法
-
     static {
         // 注册 SM4 OID Provider（必须在 BC 之前，用于 CMS/SMIME 解密时解析 SM4 OID）
         if (Security.getProvider("SM4OID") == null) {
@@ -97,7 +86,7 @@ public class BcSMIMEOperations implements SMIMEOperations {
             bc = new BouncyCastleProvider();
             Security.addProvider(bc);
         }
-        // 为 AES KeyWrap OID 注册 SecretKeyFactory 别名，使 SM2 KeyAgreement 解密时可派生 AES wrap key
+        // 兼容旧存量邮件：旧 GM 实现使用 ECDH + AES wrap 封装内容密钥。
         bc.put("Alg.Alias.SecretKeyFactory.2.16.840.1.101.3.4.1.45", "AES");
         bc.put("Alg.Alias.SecretKeyFactory.2.16.840.1.101.3.4.1.25", "AES");
         bc.put("Alg.Alias.SecretKeyFactory.2.16.840.1.101.3.4.1.5",  "AES");
@@ -106,6 +95,23 @@ public class BcSMIMEOperations implements SMIMEOperations {
         bc.put("Alg.Alias.AlgorithmParameters.1.2.156.10197.1.104.2", "SM4");
         // 配置 JavaMail 支持 S/MIME
         setupMailcap();
+    }
+
+    private final SmimeAlgorithmSuites algorithmSuites;
+    private final SecureRandom secureRandom;
+
+    @Autowired
+    public BcSMIMEOperations(SmimeCryptoProperties cryptoProperties) {
+        this(new SmimeAlgorithmSuites(cryptoProperties), new SecureRandom());
+    }
+
+    BcSMIMEOperations(SmimeAlgorithmSuites algorithmSuites, SecureRandom secureRandom) {
+        this.algorithmSuites = algorithmSuites;
+        this.secureRandom = secureRandom;
+    }
+
+    BcSMIMEOperations() {
+        this(SmimeAlgorithmSuites.defaults(), new SecureRandom());
     }
 
     private static void setupMailcap() {
@@ -125,71 +131,40 @@ public class BcSMIMEOperations implements SMIMEOperations {
 
     @Override
     public byte[] encryptMultiple(byte[] mimeMessage, List<String> recipientPemCerts) {
+        SMIMEEncryptionSuite suite = inferEncryptionSuite(recipientPemCerts);
+        return encryptMultiple(mimeMessage, recipientPemCerts, suite);
+    }
+
+    @Override
+    public byte[] encryptMultiple(byte[] mimeMessage,
+                                  List<String> recipientPemCerts,
+                                  SMIMEEncryptionSuite suite) {
         try {
+            SmimeAlgorithmSuite algorithmSuite = algorithmSuites.get(suite);
             RawMimeSections originalMessage = splitMessage(mimeMessage);
             MimeBodyPart msg = extractMimeEntity(mimeMessage);
             SMIMEEnvelopedGenerator gen = new SMIMEEnvelopedGenerator();
-
-            List<X509Certificate> rsaCerts = new ArrayList<>();
-            List<X509Certificate> sm2Certs = new ArrayList<>();
+            List<X509Certificate> certificates = new ArrayList<>();
 
             for (String pemCert : recipientPemCerts) {
                 X509Certificate cert = PemUtils.parseCertificate(pemCert);
-                String keyAlg = cert.getPublicKey().getAlgorithm();
-                if ("EC".equals(keyAlg) || "SM2".equals(keyAlg)) {
-                    sm2Certs.add(cert);
-                } else {
-                    rsaCerts.add(cert);
-                }
+                validateCertificateSuite(cert, suite);
+                certificates.add(cert);
+            }
+            if (certificates.isEmpty()) {
+                throw new CryptoException("S/MIME 加密失败: no recipient certificates");
             }
 
-            boolean useSM4 = !sm2Certs.isEmpty();
-
-            // 添加 RSA KeyTrans recipients
-            for (X509Certificate cert : rsaCerts) {
-                gen.addRecipientInfoGenerator(new JceKeyTransRecipientInfoGenerator(cert)
-                        .setProvider(BouncyCastleProvider.PROVIDER_NAME));
+            for (X509Certificate cert : certificates) {
+                gen.addRecipientInfoGenerator(createKeyTransRecipientInfoGenerator(cert, algorithmSuite));
             }
 
-            // 添加 SM2 KeyAgree recipients
-            if (!sm2Certs.isEmpty()) {
-                // 使用第一个收件人证书的EC参数生成临时密钥对，确保domain parameters一致
-                java.security.interfaces.ECPublicKey firstRecipientPub =
-                        (java.security.interfaces.ECPublicKey) sm2Certs.get(0).getPublicKey();
-                java.security.spec.ECParameterSpec ecSpec = firstRecipientPub.getParams();
-
-                KeyPairGenerator kpg = KeyPairGenerator.getInstance("EC", BouncyCastleProvider.PROVIDER_NAME);
-                kpg.initialize(ecSpec);
-                KeyPair ephemeral = kpg.generateKeyPair();
-
-                // 使用 AES-256-WRAP 作为 key wrap 算法（BC 的 KeyAgree KDF 不支持 SM4 OID）
-                JceKeyAgreeRecipientInfoGenerator keyAgreeGen =
-                        new JceKeyAgreeRecipientInfoGenerator(
-                                CMSAlgorithm.ECDH_SHA1KDF,
-                                ephemeral.getPrivate(),
-                                ephemeral.getPublic(),
-                                CMSAlgorithm.AES256_WRAP
-                        ).setProvider(BouncyCastleProvider.PROVIDER_NAME);
-
-                for (X509Certificate cert : sm2Certs) {
-                    keyAgreeGen.addRecipient(cert);
-                }
-                gen.addRecipientInfoGenerator(keyAgreeGen);
-            }
-
-            // 选择内容加密算法
-            OutputEncryptor encryptor;
-            if (useSM4) {
-                encryptor = createSM4OutputEncryptor();
-                log.info("使用 SM2 KeyAgreement + SM4 加密邮件，RSA收件人: {}, SM2收件人: {}",
-                        rsaCerts.size(), sm2Certs.size());
-            } else {
-                encryptor = new JceCMSContentEncryptorBuilder(CMSAlgorithm.AES256_CBC)
-                        .setProvider(BouncyCastleProvider.PROVIDER_NAME)
-                        .build();
-                log.info("使用 RSA KeyTransport + AES-256 加密邮件，收件人: {}", rsaCerts.size());
-            }
-
+            OutputEncryptor encryptor = new ConfigurableContentOutputEncryptor(algorithmSuite, secureRandom);
+            log.info("使用 {} suite 加密邮件，收件人: {}, keyAlg={}, contentAlg={}",
+                    suite,
+                    certificates.size(),
+                    algorithmSuite.recipientKeyAlgorithm().getId(),
+                    algorithmSuite.contentEncryptionAlgorithm().getId());
             MimeBodyPart encrypted = gen.generate(msg, encryptor);
             return rebuildMessagePreservingOuterHeaders(originalMessage.outerHeaders(), encrypted);
         } catch (Exception e) {
@@ -198,41 +173,75 @@ public class BcSMIMEOperations implements SMIMEOperations {
         }
     }
 
-    /**
-     * 创建 SM4/CBC/PKCS7Padding OutputEncryptor，绕过 BC 的 JceCMSContentEncryptorBuilder
-     * 对 SM4 OID 解析的缺陷。
-     */
-    private OutputEncryptor createSM4OutputEncryptor() throws Exception {
-        SecureRandom random = new SecureRandom();
+    private JceKeyTransRecipientInfoGenerator createKeyTransRecipientInfoGenerator(
+            X509Certificate cert,
+            SmimeAlgorithmSuite suite) throws Exception {
+        JceKeyTransRecipientInfoGenerator generator = new JceKeyTransRecipientInfoGenerator(
+                cert,
+                new AlgorithmIdentifier(suite.recipientKeyAlgorithm()));
+        generator.setProvider(BouncyCastleProvider.PROVIDER_NAME);
+        generator.setAlgorithmMapping(suite.recipientKeyAlgorithm(), suite.recipientKeyCipher());
+        return generator;
+    }
 
-        byte[] keyBytes = new byte[16]; // SM4 128-bit key
-        random.nextBytes(keyBytes);
-        SecretKeySpec key = new SecretKeySpec(keyBytes, "SM4");
-
-        byte[] iv = new byte[16]; // SM4 CBC 128-bit IV
-        random.nextBytes(iv);
-
-        Cipher cipher = Cipher.getInstance("SM4/CBC/PKCS7Padding", BouncyCastleProvider.PROVIDER_NAME);
-        cipher.init(Cipher.ENCRYPT_MODE, key, new IvParameterSpec(iv));
-
-        AlgorithmIdentifier algId = new AlgorithmIdentifier(SM4_CBC_OID, new DEROctetString(iv));
-
-        return new OutputEncryptor() {
-            @Override
-            public org.bouncycastle.asn1.x509.AlgorithmIdentifier getAlgorithmIdentifier() {
-                return algId;
+    private SMIMEEncryptionSuite inferEncryptionSuite(List<String> recipientPemCerts) {
+        if (recipientPemCerts == null || recipientPemCerts.isEmpty()) {
+            return SMIMEEncryptionSuite.STANDARD;
+        }
+        try {
+            boolean allGm = true;
+            boolean allStandard = true;
+            for (String recipientPemCert : recipientPemCerts) {
+                X509Certificate cert = PemUtils.parseCertificate(recipientPemCert);
+                boolean gm = isSm2Certificate(cert);
+                boolean standard = "RSA".equals(cert.getPublicKey().getAlgorithm());
+                allGm &= gm;
+                allStandard &= standard;
             }
-
-            @Override
-            public OutputStream getOutputStream(OutputStream out) {
-                return new CipherOutputStream(out, cipher);
+            if (allGm) {
+                return SMIMEEncryptionSuite.GM;
             }
-
-            @Override
-            public org.bouncycastle.operator.GenericKey getKey() {
-                return new JceGenericKey(algId, key);
+            if (allStandard) {
+                return SMIMEEncryptionSuite.STANDARD;
             }
-        };
+            throw new CryptoException("recipient certificates do not share one S/MIME encryption suite");
+        } catch (CryptoException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new CryptoException("failed to infer S/MIME encryption suite: " + e.getMessage(), e);
+        }
+    }
+
+    private void validateCertificateSuite(X509Certificate cert, SMIMEEncryptionSuite suite) {
+        if (suite == SMIMEEncryptionSuite.STANDARD && !"RSA".equals(cert.getPublicKey().getAlgorithm())) {
+            throw new CryptoException("STANDARD suite requires RSA recipient certificates");
+        }
+        if (suite == SMIMEEncryptionSuite.GM && !isSm2Certificate(cert)) {
+            throw new CryptoException("GM suite requires SM2 recipient certificates");
+        }
+    }
+
+    private boolean isSm2Certificate(X509Certificate cert) {
+        if ("SM2".equalsIgnoreCase(cert.getPublicKey().getAlgorithm())) {
+            return true;
+        }
+        try {
+            X509CertificateHolder holder = new X509CertificateHolder(cert.getEncoded());
+            String algorithmOid = holder.getSubjectPublicKeyInfo()
+                    .getAlgorithm()
+                    .getAlgorithm()
+                    .getId();
+            String parameters = holder.getSubjectPublicKeyInfo()
+                    .getAlgorithm()
+                    .getParameters() != null
+                    ? holder.getSubjectPublicKeyInfo().getAlgorithm().getParameters().toString()
+                    : "";
+            return SM2_OID.getId().equals(algorithmOid)
+                    || SM2_OID.getId().equals(parameters)
+                    || parameters.toLowerCase(Locale.ROOT).contains("sm2p256v1");
+        } catch (Exception e) {
+            return false;
+        }
     }
 
     @Override
@@ -251,8 +260,7 @@ public class BcSMIMEOperations implements SMIMEOperations {
                     byte[] decryptedBytes;
                     if (recipientInfo instanceof KeyTransRecipientInformation) {
                         decryptedBytes = (byte[]) recipientInfo.getContent(
-                                new JceKeyTransEnvelopedRecipient(privateKey)
-                                        .setProvider(BouncyCastleProvider.PROVIDER_NAME));
+                                keyTransRecipient(privateKey, recipientInfo));
                     } else if (recipientInfo instanceof KeyAgreeRecipientInformation) {
                         // KeyAgreement 用 BC，content cipher 用全局 provider 查找（以便 SM4OIDProvider 生效）
                         decryptedBytes = (byte[]) recipientInfo.getContent(
@@ -278,6 +286,35 @@ public class BcSMIMEOperations implements SMIMEOperations {
         }
     }
 
+    private JceKeyTransEnvelopedRecipient keyTransRecipient(PrivateKey privateKey,
+                                                           RecipientInformation recipientInfo) {
+        JceKeyTransEnvelopedRecipient recipient = new JceKeyTransEnvelopedRecipient(privateKey);
+        recipient.setProvider(BouncyCastleProvider.PROVIDER_NAME);
+        recipient.setContentProvider((Provider) null);
+        for (SMIMEEncryptionSuite suite : SMIMEEncryptionSuite.values()) {
+            SmimeAlgorithmSuite algorithmSuite = algorithmSuites.get(suite);
+            recipient.setAlgorithmMapping(
+                    algorithmSuite.recipientKeyAlgorithm(),
+                    algorithmSuite.recipientKeyCipher());
+        }
+        ASN1ObjectIdentifier keyAlg = recipientInfo.getKeyEncryptionAlgorithm().getAlgorithm();
+        SmimeAlgorithmSuite matchingSuite = algorithmSuiteForRecipientKeyAlgorithm(keyAlg);
+        if (matchingSuite != null) {
+            recipient.setAlgorithmMapping(keyAlg, matchingSuite.recipientKeyCipher());
+        }
+        return recipient;
+    }
+
+    private SmimeAlgorithmSuite algorithmSuiteForRecipientKeyAlgorithm(ASN1ObjectIdentifier keyAlgorithm) {
+        for (SMIMEEncryptionSuite suite : SMIMEEncryptionSuite.values()) {
+            SmimeAlgorithmSuite algorithmSuite = algorithmSuites.get(suite);
+            if (algorithmSuite.recipientKeyAlgorithm().equals(keyAlgorithm)) {
+                return algorithmSuite;
+            }
+        }
+        return null;
+    }
+
     @Override
     public byte[] sign(byte[] mimeMessage, String privateKeyPem, String certPem) {
         try {
@@ -290,15 +327,16 @@ public class BcSMIMEOperations implements SMIMEOperations {
 
             // 添加签名能力声明 - 国密算法优先
             SMIMECapabilityVector capabilities = new SMIMECapabilityVector();
-            capabilities.addCapability(SM4_CBC_OID);      // SM4加密
+            capabilities.addCapability(algorithmSuites.get(SMIMEEncryptionSuite.GM).contentEncryptionAlgorithm());
             capabilities.addCapability(SM3_OID);            // SM3哈希
-            capabilities.addCapability(SMIMECapability.aES256_CBC);
+            capabilities.addCapability(algorithmSuites.get(SMIMEEncryptionSuite.STANDARD).contentEncryptionAlgorithm());
             capabilities.addCapability(SMIMECapability.aES128_CBC);
 
-            // 智能选择算法：根据密钥类型自动选择
-            String keyAlg = privateKey.getAlgorithm();
-            String sigAlg = ("EC".equals(keyAlg) || "ECDSA".equals(keyAlg)) ? SM2_SIG_ALG : RSA_SIG_ALG;
-            log.info("使用签名算法: {}, 密钥类型: {}", sigAlg, keyAlg);
+            SMIMEEncryptionSuite signingSuite = isSm2Certificate(cert)
+                    ? SMIMEEncryptionSuite.GM
+                    : SMIMEEncryptionSuite.STANDARD;
+            String sigAlg = algorithmSuites.get(signingSuite).signatureAlgorithm();
+            log.info("使用签名算法: {}, suite: {}, 密钥类型: {}", sigAlg, signingSuite, privateKey.getAlgorithm());
 
             gen.addSignerInfoGenerator(
                     new JcaSimpleSignerInfoGeneratorBuilder()

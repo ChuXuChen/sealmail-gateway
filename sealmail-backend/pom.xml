@@ -27,6 +27,7 @@
         <module>sealmail-infra</module>
         <module>sealmail-app</module>
         <module>sealmail-web</module>
+        <module>sealmail-boot</module>
     </modules>
 
     <properties>
@@ -52,6 +53,11 @@
             <dependency>
                 <groupId>com.sealmail</groupId>
                 <artifactId>sealmail-app</artifactId>
+                <version>${sealmail.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.sealmail</groupId>
+                <artifactId>sealmail-web</artifactId>
                 <version>${sealmail.version}</version>
             </dependency>
             <!-- MapStruct for DTO mapping -->

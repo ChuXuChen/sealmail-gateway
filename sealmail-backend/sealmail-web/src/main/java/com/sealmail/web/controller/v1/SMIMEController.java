@@ -1,8 +1,8 @@
 package com.sealmail.web.controller.v1;
 
 import com.sealmail.app.security.UserContext;
-import com.sealmail.domain.certificate.spi.SMIMEOperations;
-import com.sealmail.domain.certificate.spi.SignatureValidationResult;
+import com.sealmail.app.dto.response.SmimeSignatureValidationResponse;
+import com.sealmail.app.usecase.mail.SmimeOperationUseCase;
 import com.sealmail.web.util.ApiResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -13,8 +13,6 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
-import java.nio.charset.StandardCharsets;
-import java.util.Base64;
 import java.util.List;
 import java.util.Map;
 
@@ -24,7 +22,7 @@ import java.util.Map;
 @Tag(name = "S/MIME 加密", description = "邮件加密、解密、签名、验证操作")
 public class SMIMEController {
 
-    private final SMIMEOperations smimeOperations;
+    private final SmimeOperationUseCase smimeOperationUseCase;
 
     @Data
     public static class EncryptRequest {
@@ -74,10 +72,7 @@ public class SMIMEController {
             @Valid @RequestBody EncryptRequest request,
             @AuthenticationPrincipal UserContext user) {
 
-        byte[] content = request.getContent().getBytes(StandardCharsets.UTF_8);
-        byte[] encrypted = smimeOperations.encrypt(content, request.getRecipientCert());
-        String base64 = Base64.getMimeEncoder().encodeToString(encrypted);
-        return ApiResponse.ok(base64);
+        return ApiResponse.ok(smimeOperationUseCase.encrypt(request.getContent(), request.getRecipientCert()));
     }
 
     @PostMapping("/encrypt-multiple")
@@ -86,10 +81,7 @@ public class SMIMEController {
             @Valid @RequestBody EncryptMultipleRequest request,
             @AuthenticationPrincipal UserContext user) {
 
-        byte[] content = request.getContent().getBytes(StandardCharsets.UTF_8);
-        byte[] encrypted = smimeOperations.encryptMultiple(content, request.getRecipientCerts());
-        String base64 = Base64.getMimeEncoder().encodeToString(encrypted);
-        return ApiResponse.ok(base64);
+        return ApiResponse.ok(smimeOperationUseCase.encryptMultiple(request.getContent(), request.getRecipientCerts()));
     }
 
     @PostMapping("/decrypt")
@@ -98,10 +90,10 @@ public class SMIMEController {
             @Valid @RequestBody DecryptRequest request,
             @AuthenticationPrincipal UserContext user) {
 
-        byte[] encrypted = Base64.getMimeDecoder().decode(request.getEncryptedContent());
-        byte[] decrypted = smimeOperations.decrypt(encrypted, request.getPrivateKey(), request.getCertificate());
-        String content = new String(decrypted, StandardCharsets.UTF_8);
-        return ApiResponse.ok(content);
+        return ApiResponse.ok(smimeOperationUseCase.decrypt(
+                request.getEncryptedContent(),
+                request.getPrivateKey(),
+                request.getCertificate()));
     }
 
     @PostMapping("/sign")
@@ -110,21 +102,19 @@ public class SMIMEController {
             @Valid @RequestBody SignRequest request,
             @AuthenticationPrincipal UserContext user) {
 
-        byte[] content = request.getContent().getBytes(StandardCharsets.UTF_8);
-        byte[] signed = smimeOperations.sign(content, request.getPrivateKey(), request.getCertificate());
-        String base64 = Base64.getMimeEncoder().encodeToString(signed);
-        return ApiResponse.ok(base64);
+        return ApiResponse.ok(smimeOperationUseCase.sign(
+                request.getContent(),
+                request.getPrivateKey(),
+                request.getCertificate()));
     }
 
     @PostMapping("/verify")
     @Operation(summary = "验证签名", description = "验证邮件签名的有效性")
-    public ApiResponse<SignatureValidationResult> verify(
+    public ApiResponse<SmimeSignatureValidationResponse> verify(
             @Valid @RequestBody VerifyRequest request,
             @AuthenticationPrincipal UserContext user) {
 
-        byte[] signed = Base64.getMimeDecoder().decode(request.getSignedContent());
-        SignatureValidationResult result = smimeOperations.verifySignatureDetail(signed, request.getSenderCert());
-        return ApiResponse.ok(result);
+        return ApiResponse.ok(smimeOperationUseCase.verify(request.getSignedContent(), request.getSenderCert()));
     }
 
     @PostMapping("/extract-content")
@@ -134,10 +124,7 @@ public class SMIMEController {
             @AuthenticationPrincipal UserContext user) {
 
         String signedContent = body.get("signedContent");
-        byte[] signed = Base64.getMimeDecoder().decode(signedContent);
-        byte[] extracted = smimeOperations.extractSignedContent(signed);
-        String content = new String(extracted, StandardCharsets.UTF_8);
-        return ApiResponse.ok(content);
+        return ApiResponse.ok(smimeOperationUseCase.extractSignedContent(signedContent));
     }
 
     @PostMapping("/check-encrypted")
@@ -147,9 +134,7 @@ public class SMIMEController {
             @AuthenticationPrincipal UserContext user) {
 
         String content = body.get("content");
-        byte[] bytes = Base64.getMimeDecoder().decode(content);
-        boolean result = smimeOperations.isEncrypted(bytes);
-        return ApiResponse.ok(result);
+        return ApiResponse.ok(smimeOperationUseCase.isEncrypted(content));
     }
 
     @PostMapping("/check-signed")
@@ -159,8 +144,6 @@ public class SMIMEController {
             @AuthenticationPrincipal UserContext user) {
 
         String content = body.get("content");
-        byte[] bytes = Base64.getMimeDecoder().decode(content);
-        boolean result = smimeOperations.isSigned(bytes);
-        return ApiResponse.ok(result);
+        return ApiResponse.ok(smimeOperationUseCase.isSigned(content));
     }
 }

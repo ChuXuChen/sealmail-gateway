@@ -7,6 +7,7 @@ import com.sealmail.domain.certificate.event.CertificateRevoked;
 import com.sealmail.domain.certificate.event.CertificateTrusted;
 import com.sealmail.domain.certificate.event.CertificateUntrusted;
 import com.sealmail.domain.certificate.event.KeyUsagesUpdated;
+import com.sealmail.domain.certificate.spi.SMIMEEncryptionSuite;
 import com.sealmail.domain.shared.exception.DomainException;
 import com.sealmail.domain.shared.model.AggregateRoot;
 import com.sealmail.domain.shared.model.EmailAddress;
@@ -221,6 +222,23 @@ public class Certificate extends AggregateRoot<CertificateId> {
 
     public String getAlgorithm() {
         return algorithm;
+    }
+
+    public boolean supportsEncryptionSuite(SMIMEEncryptionSuite suite) {
+        if (suite == SMIMEEncryptionSuite.GM) {
+            return isGmAlgorithmFamily();
+        }
+        return isStandardAlgorithmFamily();
+    }
+
+    public boolean isGmAlgorithmFamily() {
+        return "EC".equalsIgnoreCase(algorithm)
+                || "ECDSA".equalsIgnoreCase(algorithm)
+                || "SM2".equalsIgnoreCase(algorithm);
+    }
+
+    public boolean isStandardAlgorithmFamily() {
+        return "RSA".equalsIgnoreCase(algorithm);
     }
 
     public void setAlgorithm(String algorithm) {

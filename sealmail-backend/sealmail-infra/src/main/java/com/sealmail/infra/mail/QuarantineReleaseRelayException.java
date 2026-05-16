@@ -1,8 +1,8 @@
 package com.sealmail.infra.mail;
 
-import com.sealmail.app.exception.BusinessException;
+import com.sealmail.domain.shared.exception.CodedDomainException;
 
-public class QuarantineReleaseRelayException extends BusinessException {
+public class QuarantineReleaseRelayException extends CodedDomainException {
 
     public QuarantineReleaseRelayException(String id, String message) {
         super("QUARANTINE_RELEASE_RELAY_FAILED",

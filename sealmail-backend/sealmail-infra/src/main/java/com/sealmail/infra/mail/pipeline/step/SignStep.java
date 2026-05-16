@@ -112,7 +112,7 @@ public class SignStep implements MailPipelineStep {
                 return PipelineResult.success(message.getPayload());
             }
 
-            // 根据证书算法加载对应私钥：优先证书关联私钥 → KeyStore → 硬编码文件(仅开发环境)
+            // 根据证书算法加载对应私钥：优先证书关联私钥，其次 KeyStore。
             if (privateKey == null) {
                 if (thumbprint != null && !thumbprint.isBlank()) {
                     var certOpt = certificateRepository.findById(
@@ -128,27 +128,6 @@ public class SignStep implements MailPipelineStep {
                 privateKey = keyStoreService.getPrivateKeyPem(envelope.getSender());
                 if (privateKey != null) {
                     log.info("从 KeyStore 加载私钥进行签名: sender={}", envelope.getSender());
-                }
-            }
-
-            if (privateKey == null) {
-                // 开发环境 fallback：硬编码文件路径
-                String keyFile = "certs/sender_sm2_private.pem";
-                try {
-                    String certAlg = resolveAlgorithm(senderCert);
-                    if ("RSA".equals(certAlg)) {
-                        keyFile = "certs/sender_private.pem";
-                    }
-                } catch (Exception e) {
-                    // ignore
-                }
-                try (java.io.InputStream is = getClass().getClassLoader().getResourceAsStream(keyFile)) {
-                    if (is != null) {
-                        privateKey = new String(is.readAllBytes());
-                        log.info("开发环境 fallback 加载私钥: {}", keyFile);
-                    }
-                } catch (Exception e) {
-                    log.warn("无法加载私钥文件: {}", keyFile);
                 }
             }
 

@@ -1,6 +1,6 @@
 package com.sealmail.infra.security;
 
-import com.sealmail.app.security.PasswordEncoder;
+import com.sealmail.domain.security.PasswordEncoder;
 import org.springframework.security.crypto.bcrypt.BCrypt;
 import org.springframework.stereotype.Component;
 

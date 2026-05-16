@@ -20,6 +20,15 @@ public interface SMIMEOperations {
     byte[] encryptMultiple(byte[] mimeMessage, List<String> recipientPemCerts);
 
     /**
+     * 使用明确算法族加密邮件（多收件人）。
+     */
+    default byte[] encryptMultiple(byte[] mimeMessage,
+                                   List<String> recipientPemCerts,
+                                   SMIMEEncryptionSuite suite) {
+        return encryptMultiple(mimeMessage, recipientPemCerts);
+    }
+
+    /**
      * 解密邮件
      */
     byte[] decrypt(byte[] encryptedMessage, String privateKeyPem, String certPem);

@@ -11,13 +11,10 @@ import com.sealmail.app.security.UserContext;
 import com.sealmail.domain.certificate.Certificate;
 import com.sealmail.domain.certificate.CertificateId;
 import com.sealmail.domain.certificate.CertificateRepository;
+import com.sealmail.domain.certificate.spi.CertificateCryptoPort;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-
-import java.security.cert.X509CRL;
-import java.security.cert.X509Certificate;
-import java.util.Base64;
 
 @Service
 @RequiredArgsConstructor
@@ -25,7 +22,7 @@ import java.util.Base64;
 public class ImportCrlUseCase {
 
     private final CertificateRepository certificateRepository;
-    private final CertificateCryptoService cryptoService;
+    private final CertificateCryptoPort certificateCryptoPort;
     private final CertificateDtoMapper mapper;
     private final PermissionChecker permissionChecker;
 
@@ -40,31 +37,19 @@ public class ImportCrlUseCase {
         }
 
         try {
-            X509Certificate caX509 = cryptoService.parseCertificate(caCert.getPemContent());
-            X509CRL crl = parseRequestCrl(request);
-
-            if (!crl.getIssuerX500Principal().equals(caX509.getSubjectX500Principal())) {
-                throw CertificateException.invalidCertificate("CRL issuer 与所选 CA subject 不一致");
-            }
-            crl.verify(caX509.getPublicKey(), "BC");
-
-            caCert.setImportedCrlPem(cryptoService.toPem(crl));
+            CertificateCryptoPort.CrlContent crl = certificateCryptoPort.normalizeAndValidateCrl(
+                    caCert.getPemContent(),
+                    request.getCrlPem(),
+                    request.getCrlDerBase64());
+            caCert.setImportedCrlPem(crl.pem());
             certificateRepository.save(caCert);
             return mapper.toResponse(caCert);
+        } catch (IllegalArgumentException e) {
+            throw CertificateException.invalidCertificate(e.getMessage());
         } catch (CertificateException e) {
             throw e;
         } catch (Exception e) {
             throw CertificateException.invalidCertificate("CRL 导入失败: " + e.getMessage());
         }
-    }
-
-    private X509CRL parseRequestCrl(ImportCrlRequest request) throws Exception {
-        if (request.getCrlPem() != null && !request.getCrlPem().isBlank()) {
-            return cryptoService.parseCrl(request.getCrlPem());
-        }
-        if (request.getCrlDerBase64() != null && !request.getCrlDerBase64().isBlank()) {
-            return cryptoService.parseCrl(Base64.getDecoder().decode(request.getCrlDerBase64()));
-        }
-        throw CertificateException.invalidCertificate("请提供 PEM CRL 或 DER .crl 文件内容");
     }
 }

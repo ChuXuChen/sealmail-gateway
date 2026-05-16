@@ -10,7 +10,6 @@ import com.sealmail.app.security.UserContext;
 import com.sealmail.app.usecase.quarantine.QueryQuarantineUseCase;
 import com.sealmail.app.usecase.quarantine.RejectQuarantineUseCase;
 import com.sealmail.app.usecase.quarantine.ReleaseQuarantineUseCase;
-import com.sealmail.domain.quarantine.QuarantineReason;
 import com.sealmail.web.util.ApiResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -67,12 +66,7 @@ public class DlpQuarantineController {
                 .size(size)
                 .build();
 
-        QuarantineReason parsedReason = null;
-        if (reason != null && !reason.isBlank()) {
-            parsedReason = QuarantineReason.valueOf(reason);
-        }
-
-        return ApiResponse.ok(queryQuarantineUseCase.findAll(pageRequest, parsedReason, user));
+        return ApiResponse.ok(queryQuarantineUseCase.findAll(pageRequest, reason, user));
     }
 
     @PostMapping("/{id}/release")

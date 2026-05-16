@@ -10,6 +10,7 @@ import com.sealmail.app.security.UserContext;
 import com.sealmail.domain.quarantine.QuarantineRepository;
 import com.sealmail.domain.quarantine.QuarantineStatus;
 import com.sealmail.domain.quarantine.QuarantinedMail;
+import com.sealmail.domain.quarantine.spi.QuarantineMailReleaseRelay;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

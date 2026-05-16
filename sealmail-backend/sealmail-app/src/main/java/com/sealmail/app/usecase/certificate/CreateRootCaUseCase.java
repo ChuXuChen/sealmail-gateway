@@ -9,6 +9,7 @@ import com.sealmail.app.security.UserContext;
 import com.sealmail.domain.certificate.Certificate;
 import com.sealmail.domain.certificate.CertificateId;
 import com.sealmail.domain.certificate.CertificateRepository;
+import com.sealmail.domain.certificate.spi.CertificateCryptoPort;
 import com.sealmail.domain.shared.model.EmailAddress;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
@@ -16,9 +17,6 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-
-import java.security.KeyPair;
-import java.security.cert.X509Certificate;
 
 @Service
 @RequiredArgsConstructor
@@ -29,7 +27,8 @@ public class CreateRootCaUseCase {
 
     private final CertificateRepository certificateRepository;
     private final CertificateDtoMapper mapper;
-    private final CertificateCryptoService cryptoService;
+    private final CertificateCryptoPort certificateCryptoPort;
+    private final CertificateMaterialAssembler certificateMaterialAssembler;
     private final PermissionChecker permissionChecker;
 
     @Value("${sealmail.ca.default-root-validity-days:3650}")
@@ -38,35 +37,31 @@ public class CreateRootCaUseCase {
     public CertificateResponse execute(CreateRootCaRequest request, UserContext user) {
         permissionChecker.checkCanManageCa(user);
         try {
-            KeyPair keyPair = cryptoService.generateKeyPair(request.getAlgorithm());
-
             String subjectDn = request.getSubjectDn();
             if (subjectDn == null || subjectDn.isBlank()) {
                 subjectDn = "CN=" + request.getCommonName() + ", O=SealMail, C=CN";
             }
             int validity = request.getValidityDays() != null ? request.getValidityDays() : defaultRootValidityDays;
 
-            X509Certificate x509 = cryptoService.issue(CertificateCryptoService.CertSpec.builder()
-                    .subjectPubKey(keyPair.getPublic())
-                    .subjectDn(subjectDn)
-                    .subjectAlgorithm(request.getAlgorithm())
-                    .issuerDn(subjectDn)
-                    .issuerPrivKey(keyPair.getPrivate())
-                    .issuerPubKey(keyPair.getPublic())
-                    .validityDays(validity)
-                    .ca(true)
-                    .pathLenConstraint(1) // root signs intermediates
-                    .build());
+            CertificateCryptoPort.CertificateMaterial material =
+                    certificateCryptoPort.issueSelfSigned(new CertificateCryptoPort.IssueSelfSignedCommand(
+                            subjectDn,
+                            request.getAlgorithm(),
+                            validity,
+                            true,
+                            1,
+                            java.util.Set.of(),
+                            null));
 
-            String thumbprint = cryptoService.computeThumbprint(x509);
+            String thumbprint = material.certificate().thumbprint();
             CertificateId certId = new CertificateId(thumbprint);
             if (certificateRepository.findById(certId).isPresent()) {
                 throw BusinessException.conflict("Root CA already exists with thumbprint: " + thumbprint);
             }
 
             EmailAddress owner = new EmailAddress("ca-" + request.getAlgorithm().toLowerCase() + "@sealmail.local");
-            Certificate cert = cryptoService.toIssuedDomainCertificate(certId, owner, x509, request.getAlgorithm());
-            cert.setPrivateKeyData(cryptoService.privateKeyToPem(keyPair.getPrivate()));
+            Certificate cert = certificateMaterialAssembler.issued(material.certificate(), owner);
+            cert.setPrivateKeyData(material.privateKeyPem());
             cert.markAsCA(1);
             cert.setIssuerCertId(null); // self-signed root
             if (request.getAlias() != null && !request.getAlias().isBlank()) {

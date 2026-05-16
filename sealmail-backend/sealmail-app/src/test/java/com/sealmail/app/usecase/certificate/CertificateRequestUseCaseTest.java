@@ -5,15 +5,9 @@ import com.sealmail.app.exception.BusinessException;
 import com.sealmail.app.security.PermissionChecker;
 import com.sealmail.domain.certificate.CertificateRequest;
 import com.sealmail.domain.certificate.CertificateRequestRepository;
-import org.bouncycastle.asn1.x500.X500Name;
-import org.bouncycastle.operator.jcajce.JcaContentSignerBuilder;
-import org.bouncycastle.pkcs.PKCS10CertificationRequest;
-import org.bouncycastle.pkcs.PKCS10CertificationRequestBuilder;
-import org.bouncycastle.pkcs.jcajce.JcaPKCS10CertificationRequestBuilder;
+import com.sealmail.domain.certificate.spi.CertificateCryptoPort;
 import org.junit.jupiter.api.Test;
 
-import java.io.StringWriter;
-import java.security.KeyPair;
 import java.util.List;
 import java.util.Optional;
 
@@ -23,21 +17,21 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class CertificateRequestUseCaseTest {
 
-    private final CertificateCryptoService cryptoService = new CertificateCryptoService();
+    private final FakeCertificateCryptoPort cryptoPort = new FakeCertificateCryptoPort();
     private final InMemoryCertificateRequestRepository repository = new InMemoryCertificateRequestRepository();
     private final CertificateRequestUseCase useCase = new CertificateRequestUseCase(
             repository,
             null,
-            cryptoService,
+            cryptoPort,
             new PermissionChecker());
 
     @Test
-    void submitRejectsRequestedOwnerThatDiffersFromCsrSubjectEmail() throws Exception {
-        String csrPem = buildCsrPem("CN=csr-owner@example.com");
+    void submitRejectsRequestedOwnerThatDiffersFromCsrSubjectEmail() {
+        cryptoPort.ownerEmail = "csr-owner@example.com";
 
         BusinessException ex = assertThrows(BusinessException.class, () -> useCase.submit(
                 SubmitCertRequestRequest.builder()
-                        .csrPem(csrPem)
+                        .csrPem("csr-pem")
                         .requestedOwnerEmail("different@example.com")
                         .build(),
                 "127.0.0.1"));
@@ -48,12 +42,12 @@ class CertificateRequestUseCaseTest {
     }
 
     @Test
-    void submitUsesCsrSubjectEmailWhenHintIsAbsent() throws Exception {
-        String csrPem = buildCsrPem("CN=csr-owner@example.com");
+    void submitUsesCsrSubjectEmailWhenHintIsAbsent() {
+        cryptoPort.ownerEmail = "csr-owner@example.com";
 
         var response = useCase.submit(
                 SubmitCertRequestRequest.builder()
-                        .csrPem(csrPem)
+                        .csrPem("csr-pem")
                         .build(),
                 "127.0.0.1");
 
@@ -61,18 +55,68 @@ class CertificateRequestUseCaseTest {
         assertEquals("PENDING", response.getStatus());
     }
 
-    private String buildCsrPem(String subjectDn) throws Exception {
-        KeyPair keyPair = cryptoService.generateKeyPair("RSA");
-        PKCS10CertificationRequestBuilder builder =
-                new JcaPKCS10CertificationRequestBuilder(new X500Name(subjectDn), keyPair.getPublic());
-        PKCS10CertificationRequest csr = builder.build(
-                new JcaContentSignerBuilder("SHA256withRSA").setProvider("BC").build(keyPair.getPrivate()));
-        StringWriter sw = new StringWriter();
-        try (org.bouncycastle.openssl.jcajce.JcaPEMWriter writer =
-                     new org.bouncycastle.openssl.jcajce.JcaPEMWriter(sw)) {
-            writer.writeObject(csr);
+    private static final class FakeCertificateCryptoPort implements CertificateCryptoPort {
+        private String ownerEmail;
+
+        @Override
+        public CertificateMaterial issueSelfSigned(IssueSelfSignedCommand command) {
+            throw new UnsupportedOperationException();
         }
-        return sw.toString();
+
+        @Override
+        public CertificateMaterial issueWithIssuer(IssueWithIssuerCommand command) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public CertificateMaterial generateTestMaterial() {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public CryptoCapabilities cryptoCapabilities() {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public CertificateDescriptor signCsr(SignCsrCommand command) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public CsrInfo validateCsr(String csrPem) {
+            return new CsrInfo("CN=" + ownerEmail, ownerEmail, "RSA");
+        }
+
+        @Override
+        public CertificateDescriptor readCertificate(String certificatePem) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public void validateCertificateMatchesPrivateKey(String certificatePem, String privateKeyPem) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public boolean isSelfSigned(String certificatePem) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public boolean isIssuedBy(String subjectCertificatePem, String issuerCertificatePem) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public CrlContent normalizeAndValidateCrl(String caCertificatePem, String crlPem, String crlDerBase64) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public CrlContent generateCrl(GenerateCrlCommand command) {
+            throw new UnsupportedOperationException();
+        }
     }
 
     private static final class InMemoryCertificateRequestRepository implements CertificateRequestRepository {

@@ -56,7 +56,14 @@ public class QueryQuarantineUseCase {
     public PageResponse<QuarantineItemResponse> findAll(
             PageRequest pageRequest,
             UserContext user) {
-        return findAll(pageRequest, null, user);
+        return findAll(pageRequest, (QuarantineReason) null, user);
+    }
+
+    public PageResponse<QuarantineItemResponse> findAll(
+            PageRequest pageRequest,
+            String reason,
+            UserContext user) {
+        return findAll(pageRequest, parseReason(reason), user);
     }
 
     private List<QuarantinedMail> findItems(QuarantineReason reason, int offset, int size) {
@@ -97,5 +104,12 @@ public class QueryQuarantineUseCase {
                 .rejected(quarantineRepository.countByStatus(QuarantineStatus.REJECTED))
                 .byReason(byReason)
                 .build();
+    }
+
+    private QuarantineReason parseReason(String reason) {
+        if (reason == null || reason.isBlank()) {
+            return null;
+        }
+        return QuarantineReason.valueOf(reason);
     }
 }

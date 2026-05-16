@@ -1,5 +1,6 @@
 package com.sealmail.infra.mail.relay;
 
+import com.sealmail.domain.mail.spi.SmtpRelayProbe;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
@@ -28,7 +29,7 @@ import java.util.Set;
  * Minimal SMTP/SMTPS relay client that avoids Jakarta Mail runtime dependencies.
  */
 @Component
-public class SmtpRelayClient {
+public class SmtpRelayClient implements SmtpRelayProbe {
 
     private static final Logger log = LoggerFactory.getLogger(SmtpRelayClient.class);
 
@@ -64,6 +65,31 @@ public class SmtpRelayClient {
         } catch (IOException e) {
             throw new SmtpRelayException("SMTP probe I/O failed: " + e.getMessage(), e);
         }
+    }
+
+    @Override
+    public SmtpProbeResult probe(SmtpConnectionSettings settings) {
+        SmtpRelayProbeResult result;
+        try {
+            result = probe(new SmtpRelayConnectionSettings(
+                    settings.host(),
+                    settings.port(),
+                    settings.useTls(),
+                    settings.username(),
+                    settings.password(),
+                    settings.timeoutMillis()
+            ));
+        } catch (SmtpRelayException e) {
+            throw new IllegalStateException(e.getMessage(), e);
+        }
+        return new SmtpProbeResult(
+                result.host(),
+                result.port(),
+                result.implicitTls(),
+                result.startTls(),
+                result.authenticated(),
+                result.capabilities()
+        );
     }
 
     private SessionState initializeSession(SmtpSession session,

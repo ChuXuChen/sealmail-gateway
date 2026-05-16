@@ -2,6 +2,7 @@ package com.sealmail.infra.mail.pipeline;
 
 import com.sealmail.domain.certificate.spi.SMIMEOperations;
 import com.sealmail.domain.certificate.spi.SignatureValidationResult;
+import com.sealmail.domain.certificate.spi.SMIMEEncryptionSuite;
 import com.sealmail.domain.mailsecurity.MailEnvelope;
 import com.sealmail.domain.shared.model.EmailAddress;
 import com.sealmail.infra.persistence.entity.CertificateEntity;
@@ -10,7 +11,10 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
+import java.security.cert.X509Certificate;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.Optional;
 
 /**
@@ -128,22 +132,19 @@ public class SMIMEProcessor {
 
         // 2. 加密（如需要）
         if (encrypt) {
-            List<String> recipientEmails = envelope.getRecipients().stream()
-                    .map(EmailAddress::getValue)
-                    .toList();
-            List<String> recipientCerts = findRecipientCertificates(recipientEmails);
-            if (!recipientCerts.isEmpty()) {
-                try {
-                    byte[] encrypted = smimeOperations.encryptMultiple(content, recipientCerts);
+            try {
+                EncryptionPlan plan = buildEncryptionPlan(envelope);
+                if (!plan.success()) {
+                    result.addWarning("加密失败: " + plan.failureDetail());
+                } else {
+                    byte[] encrypted = smimeOperations.encryptMultiple(content, plan.certificates(), plan.suite());
                     content = encrypted;
                     result.setEncrypted(true);
-                    result.addMessage("邮件已加密，收件人数量: " + recipientCerts.size());
-                } catch (Exception e) {
-                    log.error("邮件加密失败", e);
-                    result.addWarning("加密失败: " + e.getMessage());
+                    result.addMessage("邮件已加密，收件人数量: " + plan.certificates().size());
                 }
-            } else {
-                result.addWarning("未找到收件人证书，跳过加密");
+            } catch (Exception e) {
+                log.error("邮件加密失败", e);
+                result.addWarning("加密失败: " + e.getMessage());
             }
         }
 
@@ -198,18 +199,130 @@ public class SMIMEProcessor {
         return certs.stream().findFirst();
     }
 
-    private List<String> findRecipientCertificates(List<String> recipients) {
-        return recipients.stream()
-                .map(certificateRepository::findByOwnerEmail)
-                .flatMap(List::stream)
-                .filter(c -> !c.isRevoked())
-                .map(CertificateEntity::getPemContent)
+    private EncryptionPlan buildEncryptionPlan(MailEnvelope envelope) {
+        List<RecipientCertificateOptions> recipientOptions = new ArrayList<>();
+        for (EmailAddress recipient : envelope.getRecipients()) {
+            List<CertificateEntity> certificates = certificateRepository.findByOwnerEmail(recipient.getValue())
+                    .stream()
+                    .filter(c -> c.isTrusted() && !c.isRevoked())
+                    .toList();
+            recipientOptions.add(new RecipientCertificateOptions(
+                    recipient,
+                    selectGmCertificate(certificates),
+                    selectStandardCertificate(certificates)));
+        }
+
+        List<String> recipientsWithoutCertificates = recipientOptions.stream()
+                .filter(option -> !option.supportsGm() && !option.supportsStandard())
+                .map(option -> option.recipient().getValue())
                 .toList();
+        if (!recipientsWithoutCertificates.isEmpty()) {
+            if (recipientsWithoutCertificates.size() == envelope.getRecipients().size()) {
+                return EncryptionPlan.failure("未找到收件人加密证书");
+            }
+            return EncryptionPlan.failure("以下收件人没有加密证书: "
+                    + String.join(", ", recipientsWithoutCertificates));
+        }
+
+        if (recipientOptions.stream().allMatch(RecipientCertificateOptions::supportsGm)) {
+            return EncryptionPlan.success(
+                    SMIMEEncryptionSuite.GM,
+                    recipientOptions.stream().map(RecipientCertificateOptions::gmCertificate).toList());
+        }
+        if (recipientOptions.stream().allMatch(RecipientCertificateOptions::supportsStandard)) {
+            return EncryptionPlan.success(
+                    SMIMEEncryptionSuite.STANDARD,
+                    recipientOptions.stream().map(RecipientCertificateOptions::standardCertificate).toList());
+        }
+        return EncryptionPlan.failure("多收件人无法共享同一加密策略，需所有收件人同时具备SM2或RSA加密证书: "
+                + capabilitySummary(recipientOptions));
+    }
+
+    private String selectGmCertificate(List<CertificateEntity> certificates) {
+        return certificates.stream()
+                .filter(this::isGmCertificate)
+                .map(CertificateEntity::getPemContent)
+                .findFirst()
+                .orElse(null);
+    }
+
+    private String selectStandardCertificate(List<CertificateEntity> certificates) {
+        return certificates.stream()
+                .filter(this::isRsaCertificate)
+                .map(CertificateEntity::getPemContent)
+                .findFirst()
+                .orElse(null);
+    }
+
+    private boolean isRsaCertificate(CertificateEntity certificate) {
+        return "RSA".equals(certificateAlgorithm(certificate));
+    }
+
+    private boolean isGmCertificate(CertificateEntity certificate) {
+        String algorithm = certificateAlgorithm(certificate);
+        return "SM2".equals(algorithm) || "EC".equals(algorithm) || "ECDSA".equals(algorithm);
+    }
+
+    private String certificateAlgorithm(CertificateEntity certificate) {
+        if (certificate.getAlgorithm() != null && !certificate.getAlgorithm().isBlank()) {
+            return certificate.getAlgorithm().trim().toUpperCase(Locale.ROOT);
+        }
+        try {
+            X509Certificate parsed = com.sealmail.infra.crypto.util.PemUtils.parseCertificate(certificate.getPemContent());
+            return parsed.getPublicKey().getAlgorithm().trim().toUpperCase(Locale.ROOT);
+        } catch (Exception e) {
+            return "UNKNOWN";
+        }
+    }
+
+    private String capabilitySummary(List<RecipientCertificateOptions> recipientOptions) {
+        return recipientOptions.stream()
+                .map(option -> option.recipient().getValue() + "=" + option.capabilityLabel())
+                .reduce((left, right) -> left + ", " + right)
+                .orElse("");
     }
 
     // ============ 内部类 ============
 
     private record DecryptionResult(byte[] content, String certificateId) {}
+
+    private record RecipientCertificateOptions(EmailAddress recipient,
+                                               String gmCertificate,
+                                               String standardCertificate) {
+        boolean supportsGm() {
+            return gmCertificate != null;
+        }
+
+        boolean supportsStandard() {
+            return standardCertificate != null;
+        }
+
+        String capabilityLabel() {
+            if (supportsGm() && supportsStandard()) {
+                return "GM,STANDARD";
+            }
+            if (supportsGm()) {
+                return "GM";
+            }
+            if (supportsStandard()) {
+                return "STANDARD";
+            }
+            return "NONE";
+        }
+    }
+
+    private record EncryptionPlan(boolean success,
+                                  SMIMEEncryptionSuite suite,
+                                  List<String> certificates,
+                                  String failureDetail) {
+        static EncryptionPlan success(SMIMEEncryptionSuite suite, List<String> certificates) {
+            return new EncryptionPlan(true, suite, certificates, null);
+        }
+
+        static EncryptionPlan failure(String detail) {
+            return new EncryptionPlan(false, null, List.of(), detail);
+        }
+    }
 
     public static class ProcessingResult {
         private byte[] originalContent;

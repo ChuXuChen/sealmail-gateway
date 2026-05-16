@@ -61,7 +61,8 @@ public class IntegrationConfig {
 
     @Bean
     public IntegrationFlow relayProcessingFlow(MailPipelineFlow pipelineFlow,
-                                                MessageChannel relayChannel) {
-        return pipelineFlow.relayFlow(relayChannel);
+                                                MessageChannel relayChannel,
+                                                MessageChannel quarantineChannel) {
+        return pipelineFlow.relayFlow(relayChannel, quarantineChannel);
     }
 }

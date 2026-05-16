@@ -1,11 +1,11 @@
 package com.sealmail.web.controller.v1;
 
-import com.sealmail.app.exception.BusinessException;
+import com.sealmail.app.dto.request.MailAuthConfigRequest;
+import com.sealmail.app.dto.response.DnsRecordResponse;
+import com.sealmail.app.dto.response.MailAuthConfigResponse;
+import com.sealmail.app.dto.response.MailAuthStatusResponse;
 import com.sealmail.app.security.UserContext;
-import com.sealmail.infra.mail.auth.config.DnsRecordResponse;
-import com.sealmail.infra.mail.auth.config.MailAuthConfig;
-import com.sealmail.infra.mail.auth.config.MailAuthConfigService;
-import com.sealmail.infra.mail.auth.config.MailAuthConfigUpdate;
+import com.sealmail.app.usecase.config.ManageMailAuthConfigUseCase;
 import com.sealmail.web.util.ApiResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -24,26 +24,24 @@ import java.util.List;
 @Tag(name = "邮件认证", description = "DKIM、SPF、DMARC配置")
 public class MailAuthController {
 
-    private final MailAuthConfigService configService;
+    private final ManageMailAuthConfigUseCase manageMailAuthConfigUseCase;
 
-    public MailAuthController(MailAuthConfigService configService) {
-        this.configService = configService;
+    public MailAuthController(ManageMailAuthConfigUseCase manageMailAuthConfigUseCase) {
+        this.manageMailAuthConfigUseCase = manageMailAuthConfigUseCase;
     }
 
     @GetMapping("/config")
     @Operation(summary = "查询邮件认证配置")
-    public ApiResponse<MailAuthConfig> config(@AuthenticationPrincipal UserContext user) {
-        requireAdmin(user, "只有管理员可以查看邮件认证配置");
-        return ApiResponse.ok(configService.getConfig());
+    public ApiResponse<MailAuthConfigResponse> config(@AuthenticationPrincipal UserContext user) {
+        return ApiResponse.ok(manageMailAuthConfigUseCase.getConfig(user));
     }
 
     @PutMapping("/config")
     @Operation(summary = "更新邮件认证配置")
-    public ApiResponse<MailAuthConfig> updateConfig(
-            @RequestBody MailAuthConfigUpdate request,
+    public ApiResponse<MailAuthConfigResponse> updateConfig(
+            @RequestBody MailAuthConfigRequest request,
             @AuthenticationPrincipal UserContext user) {
-        requireAdmin(user, "只有管理员可以更新邮件认证配置");
-        return ApiResponse.ok(configService.updateConfig(request));
+        return ApiResponse.ok(manageMailAuthConfigUseCase.updateConfig(request, user));
     }
 
     @GetMapping("/dns-records")
@@ -51,15 +49,13 @@ public class MailAuthController {
     public ApiResponse<List<DnsRecordResponse>> dnsRecords(
             @RequestParam String domain,
             @AuthenticationPrincipal UserContext user) {
-        requireAdmin(user, "只有管理员可以查看邮件认证DNS记录");
-        return ApiResponse.ok(configService.dnsRecords(domain));
+        return ApiResponse.ok(manageMailAuthConfigUseCase.dnsRecords(domain, user));
     }
 
     @GetMapping("/status")
     @Operation(summary = "查询邮件认证运行状态")
     public ApiResponse<MailAuthStatusResponse> status(@AuthenticationPrincipal UserContext user) {
-        requireAdmin(user, "只有管理员可以查看邮件认证状态");
-        return ApiResponse.ok(statusResponse(configService.getConfig()));
+        return ApiResponse.ok(manageMailAuthConfigUseCase.status(user));
     }
 
     @PutMapping("/status")
@@ -67,67 +63,15 @@ public class MailAuthController {
     public ApiResponse<MailAuthStatusResponse> updateStatus(
             @RequestBody UpdateMailAuthStatusRequest request,
             @AuthenticationPrincipal UserContext user) {
-        requireAdmin(user, "只有管理员可以更新邮件认证状态");
-        MailAuthConfig config = configService.updateConfig(new MailAuthConfigUpdate(
+        return ApiResponse.ok(manageMailAuthConfigUseCase.updateStatus(
+                new ManageMailAuthConfigUseCase.StatusUpdateRequest(
                 request.enabled(),
-                null,
-                request.skipPrivateRelay(),
                 request.dkimEnabled(),
-                null,
-                null,
-                null,
-                null,
-                null,
                 request.spfEnabled(),
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
                 request.dmarcEnabled(),
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                request.dmarcQuarantineRejectPolicy()
-        ));
-        return ApiResponse.ok(statusResponse(config));
-    }
-
-    private void requireAdmin(UserContext user, String message) {
-        if (user == null || !user.isAdmin()) {
-            throw BusinessException.forbidden(message);
-        }
-    }
-
-    private MailAuthStatusResponse statusResponse(MailAuthConfig config) {
-        return new MailAuthStatusResponse(
-                config.enabled(),
-                config.authservId(),
-                config.dkimEnabled(),
-                config.dkimSelector(),
-                config.spfEnabled(),
-                config.dmarcEnabled(),
-                config.dmarcQuarantineRejectPolicy(),
-                config.skipPrivateRelay()
-        );
-    }
-
-    public record MailAuthStatusResponse(
-            boolean enabled,
-            String authservId,
-            boolean dkimEnabled,
-            String dkimSelector,
-            boolean spfEnabled,
-            boolean dmarcEnabled,
-            boolean dmarcQuarantineRejectPolicy,
-            boolean skipPrivateRelay
-    ) {
+                request.dmarcQuarantineRejectPolicy(),
+                request.skipPrivateRelay()
+        ), user));
     }
 
     public record UpdateMailAuthStatusRequest(

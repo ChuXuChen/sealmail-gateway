@@ -9,12 +9,16 @@ import com.sealmail.app.security.UserContext;
 import com.sealmail.domain.certificate.Certificate;
 import com.sealmail.domain.certificate.CertificateId;
 import com.sealmail.domain.certificate.CertificateRepository;
+import com.sealmail.domain.certificate.KeyUsage;
+import com.sealmail.domain.certificate.ValidityPeriod;
+import com.sealmail.domain.certificate.spi.CertificateCryptoPort;
 import com.sealmail.domain.certificate.spi.CertificateValidator;
+import com.sealmail.domain.shared.model.EmailAddress;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-import java.security.KeyPair;
-import java.security.cert.X509Certificate;
+import java.math.BigInteger;
+import java.time.Instant;
 import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
@@ -28,7 +32,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class ImportCertificateUseCaseTest {
 
     private final InMemoryCertificateRepository repository = new InMemoryCertificateRepository();
-    private final CertificateCryptoService cryptoService = new CertificateCryptoService();
+    private final FakeCertificateCryptoPort cryptoPort = new FakeCertificateCryptoPort();
     private ImportCertificateUseCase useCase;
 
     @BeforeEach
@@ -39,30 +43,27 @@ class ImportCertificateUseCaseTest {
                 pem -> CertificateValidator.ValidationResult.ok(),
                 new CertificateDtoMapper(chainService),
                 new PermissionChecker(),
-                cryptoService
+                cryptoPort,
+                new CertificateMaterialAssembler()
         );
     }
 
     @Test
-    void importCaRestoresCaMetadataAndCrlUrl() throws Exception {
-        KeyPair caKeyPair = cryptoService.generateKeyPair("RSA");
-        X509Certificate certificate = cryptoService.issue(CertificateCryptoService.CertSpec.builder()
-                .subjectPubKey(caKeyPair.getPublic())
-                .subjectDn("CN=Imported Root, O=SealMail, C=CN")
-                .subjectAlgorithm("RSA")
-                .issuerDn("CN=Imported Root, O=SealMail, C=CN")
-                .issuerPrivKey(caKeyPair.getPrivate())
-                .issuerPubKey(caKeyPair.getPublic())
-                .validityDays(3650)
-                .ca(true)
-                .pathLenConstraint(1)
-                .crlDpUrl("http://localhost:8080/api/v1/crl/imported-root")
-                .build());
+    void importCaRestoresCaMetadataAndCrlUrl() {
+        cryptoPort.register(descriptor(
+                "ca-pem",
+                "ca-id",
+                "RSA",
+                true,
+                1,
+                "CN=Imported Root, O=SealMail, C=CN",
+                "CN=Imported Root, O=SealMail, C=CN",
+                "http://localhost:8080/api/v1/crl/imported-root"));
 
         CertificateResponse response = useCase.execute(ImportCertificateRequest.builder()
                         .ownerEmail("ca@example.com")
-                        .pemData(cryptoService.toPem(certificate))
-                        .privateKeyData(cryptoService.privateKeyToPem(caKeyPair.getPrivate()))
+                        .pemData("ca-pem")
+                        .privateKeyData("matching-key")
                         .trusted(Boolean.TRUE)
                         .build(),
                 adminUser());
@@ -78,26 +79,16 @@ class ImportCertificateUseCaseTest {
     }
 
     @Test
-    void importCertificateRejectsMismatchedPrivateKey() throws Exception {
-        KeyPair certKeyPair = cryptoService.generateKeyPair("SM2");
-        KeyPair otherKeyPair = cryptoService.generateKeyPair("SM2");
-        X509Certificate certificate = cryptoService.issue(CertificateCryptoService.CertSpec.builder()
-                .subjectPubKey(certKeyPair.getPublic())
-                .subjectDn("CN=user@example.com")
-                .subjectAlgorithm("SM2")
-                .issuerDn("CN=user@example.com")
-                .issuerPrivKey(certKeyPair.getPrivate())
-                .issuerPubKey(certKeyPair.getPublic())
-                .validityDays(365)
-                .ca(false)
-                .ekus(Set.of(CertificateCryptoService.EKU_EMAIL_PROTECTION))
-                .build());
+    void importCertificateRejectsMismatchedPrivateKey() {
+        cryptoPort.register(descriptor("leaf-pem", "leaf-id", "SM2", false, null,
+                "CN=leaf", "CN=leaf", null));
+        cryptoPort.rejectPrivateKey = true;
 
         CertificateException ex = assertThrows(CertificateException.class, () -> useCase.execute(
                 ImportCertificateRequest.builder()
                         .ownerEmail("user@example.com")
-                        .pemData(cryptoService.toPem(certificate))
-                        .privateKeyData(cryptoService.privateKeyToPem(otherKeyPair.getPrivate()))
+                        .pemData("leaf-pem")
+                        .privateKeyData("wrong-key")
                         .build(),
                 adminUser()));
 
@@ -106,53 +97,60 @@ class ImportCertificateUseCaseTest {
     }
 
     @Test
-    void importCertificateLinksToStoredIssuerCa() throws Exception {
-        KeyPair rootKeyPair = cryptoService.generateKeyPair("RSA");
-        X509Certificate rootX509 = cryptoService.issue(CertificateCryptoService.CertSpec.builder()
-                .subjectPubKey(rootKeyPair.getPublic())
-                .subjectDn("CN=Stored Root, O=SealMail, C=CN")
-                .subjectAlgorithm("RSA")
-                .issuerDn("CN=Stored Root, O=SealMail, C=CN")
-                .issuerPrivKey(rootKeyPair.getPrivate())
-                .issuerPubKey(rootKeyPair.getPublic())
-                .validityDays(3650)
-                .ca(true)
-                .pathLenConstraint(1)
-                .build());
-        CertificateId rootId = new CertificateId(cryptoService.computeThumbprint(rootX509));
-        Certificate root = cryptoService.toIssuedDomainCertificate(
-                rootId,
-                new com.sealmail.domain.shared.model.EmailAddress("ca@example.com"),
-                rootX509,
-                "RSA");
-        root.markAsCA(1);
+    void importCertificateLinksToStoredIssuerCa() {
+        CertificateCryptoPort.CertificateDescriptor rootDescriptor = descriptor(
+                "root-pem", "root-id", "RSA", true, 1,
+                "CN=Stored Root, O=SealMail, C=CN",
+                "CN=Stored Root, O=SealMail, C=CN",
+                null);
+        cryptoPort.register(rootDescriptor);
+        Certificate root = new CertificateMaterialAssembler()
+                .issued(rootDescriptor, new EmailAddress("ca@example.com"));
         root.trust();
         repository.save(root);
 
-        KeyPair leafKeyPair = cryptoService.generateKeyPair("RSA");
-        X509Certificate leafX509 = cryptoService.issue(CertificateCryptoService.CertSpec.builder()
-                .subjectPubKey(leafKeyPair.getPublic())
-                .subjectDn("CN=user@example.com")
-                .subjectAlgorithm("RSA")
-                .issuerDn(rootX509.getSubjectX500Principal().getName())
-                .issuerPrivKey(rootKeyPair.getPrivate())
-                .issuerPubKey(rootX509.getPublicKey())
-                .validityDays(365)
-                .ca(false)
-                .ekus(Set.of(CertificateCryptoService.EKU_EMAIL_PROTECTION))
-                .build());
+        cryptoPort.register(descriptor(
+                "leaf-pem", "leaf-id", "RSA", false, null,
+                "CN=Stored Root, O=SealMail, C=CN",
+                "CN=user@example.com",
+                null));
+        cryptoPort.issuerBySubject.put("leaf-pem", "root-pem");
 
         CertificateResponse response = useCase.execute(ImportCertificateRequest.builder()
                         .ownerEmail("user@example.com")
-                        .pemData(cryptoService.toPem(leafX509))
+                        .pemData("leaf-pem")
                         .trusted(Boolean.TRUE)
                         .build(),
                 adminUser());
 
-        assertEquals(rootId.getThumbprint(), response.getIssuerCertId());
+        assertEquals("root-id", response.getIssuerCertId());
         Certificate stored = repository.findById(new CertificateId(response.getId())).orElseThrow();
-        assertEquals(rootId.getThumbprint(), stored.getIssuerCertId());
+        assertEquals("root-id", stored.getIssuerCertId());
         assertTrue(response.isChainUsable());
+    }
+
+    private CertificateCryptoPort.CertificateDescriptor descriptor(String pem,
+                                                                   String thumbprint,
+                                                                   String algorithm,
+                                                                   boolean ca,
+                                                                   Integer pathLen,
+                                                                   String issuerDn,
+                                                                   String subjectDn,
+                                                                   String crlUrl) {
+        return new CertificateCryptoPort.CertificateDescriptor(
+                pem,
+                algorithm,
+                thumbprint,
+                new ValidityPeriod(Instant.now().minusSeconds(60), Instant.now().plusSeconds(3600)),
+                Set.of(KeyUsage.SIGNING, KeyUsage.ENCRYPTION),
+                issuerDn,
+                subjectDn,
+                BigInteger.valueOf(Math.abs(thumbprint.hashCode()) + 1L),
+                "ski-" + thumbprint,
+                ca,
+                pathLen,
+                Set.of(),
+                crlUrl);
     }
 
     private UserContext adminUser() {
@@ -161,6 +159,79 @@ class ImportCertificateUseCaseTest {
                 .email("admin@example.com")
                 .roles(Set.of("PKI_ADMIN"))
                 .build();
+    }
+
+    private static final class FakeCertificateCryptoPort implements CertificateCryptoPort {
+        private final java.util.Map<String, CertificateDescriptor> descriptors = new java.util.LinkedHashMap<>();
+        private final java.util.Map<String, String> issuerBySubject = new java.util.LinkedHashMap<>();
+        private boolean rejectPrivateKey;
+
+        void register(CertificateDescriptor descriptor) {
+            descriptors.put(descriptor.pemContent(), descriptor);
+        }
+
+        @Override
+        public CertificateMaterial issueSelfSigned(IssueSelfSignedCommand command) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public CertificateMaterial issueWithIssuer(IssueWithIssuerCommand command) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public CertificateMaterial generateTestMaterial() {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public CryptoCapabilities cryptoCapabilities() {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public CertificateDescriptor signCsr(SignCsrCommand command) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public CsrInfo validateCsr(String csrPem) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public CertificateDescriptor readCertificate(String certificatePem) {
+            return descriptors.get(certificatePem);
+        }
+
+        @Override
+        public void validateCertificateMatchesPrivateKey(String certificatePem, String privateKeyPem) {
+            if (rejectPrivateKey) {
+                throw new IllegalArgumentException("Private key does not match certificate public key");
+            }
+        }
+
+        @Override
+        public boolean isSelfSigned(String certificatePem) {
+            CertificateDescriptor descriptor = descriptors.get(certificatePem);
+            return descriptor != null && descriptor.issuerDn().equals(descriptor.subjectDn());
+        }
+
+        @Override
+        public boolean isIssuedBy(String subjectCertificatePem, String issuerCertificatePem) {
+            return issuerCertificatePem.equals(issuerBySubject.get(subjectCertificatePem));
+        }
+
+        @Override
+        public CrlContent normalizeAndValidateCrl(String caCertificatePem, String crlPem, String crlDerBase64) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public CrlContent generateCrl(GenerateCrlCommand command) {
+            throw new UnsupportedOperationException();
+        }
     }
 
     private static final class InMemoryCertificateRepository implements CertificateRepository {
@@ -183,7 +254,7 @@ class ImportCertificateUseCaseTest {
         }
 
         @Override
-        public List<Certificate> findByOwner(com.sealmail.domain.shared.model.EmailAddress owner) {
+        public List<Certificate> findByOwner(EmailAddress owner) {
             return store.values().stream()
                     .filter(cert -> cert.getOwner().equals(owner))
                     .toList();
@@ -207,12 +278,12 @@ class ImportCertificateUseCaseTest {
         }
 
         @Override
-        public List<Certificate> findTrustedForEncryption(com.sealmail.domain.shared.model.EmailAddress owner) {
+        public List<Certificate> findTrustedForEncryption(EmailAddress owner) {
             return Collections.emptyList();
         }
 
         @Override
-        public List<Certificate> findTrustedForSigning(com.sealmail.domain.shared.model.EmailAddress owner) {
+        public List<Certificate> findTrustedForSigning(EmailAddress owner) {
             return Collections.emptyList();
         }
 

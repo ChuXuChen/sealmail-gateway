@@ -2,6 +2,11 @@ package com.sealmail.infra.crypto;
 
 import jakarta.mail.Session;
 import jakarta.mail.internet.MimeMessage;
+import com.sealmail.domain.certificate.spi.SMIMEEncryptionSuite;
+import com.sealmail.infra.config.properties.SmimeCryptoProperties;
+import org.bouncycastle.asn1.gm.GMObjectIdentifiers;
+import org.bouncycastle.cms.CMSAlgorithm;
+import org.bouncycastle.mail.smime.SMIMEEnveloped;
 import org.bouncycastle.jce.provider.BouncyCastleProvider;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -13,6 +18,7 @@ import java.security.cert.X509Certificate;
 import javax.crypto.Cipher;
 import java.util.Base64;
 import java.util.Date;
+import java.util.List;
 import java.util.Properties;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -45,7 +51,7 @@ class BcSMIMEOperationsTest {
 
     @BeforeEach
     void setUp() {
-        smimeOperations = new BcSMIMEOperations();
+        smimeOperations = new BcSMIMEOperations(new SmimeCryptoProperties());
     }
 
     @Test
@@ -179,7 +185,7 @@ class BcSMIMEOperationsTest {
     @Test
     void testSM2EncryptAndDecrypt() throws Exception {
         // 确保 SM4OIDProvider 已注册
-        smimeOperations = new BcSMIMEOperations();
+        smimeOperations = new BcSMIMEOperations(new SmimeCryptoProperties());
         Provider sm4oid = Security.getProvider("SM4OID");
         assertNotNull(sm4oid, "SM4OIDProvider should be registered by BcSMIMEOperations");
 
@@ -219,11 +225,12 @@ class BcSMIMEOperationsTest {
                 "国密全链路测试内容";
         byte[] mimeMessage = testMail.getBytes();
 
-        // 使用 SM2 KeyAgreement + SM4 加密
+        // 使用 SM2-with-SM3 KeyTrans + SM4 加密
         byte[] encrypted = smimeOperations.encrypt(mimeMessage, sm2CertPem);
         assertNotNull(encrypted);
         assertTrue(encrypted.length > 0);
         assertTrue(smimeOperations.isEncrypted(encrypted));
+        assertSm234Envelope(encrypted);
 
         // 解密
         byte[] decrypted = smimeOperations.decrypt(encrypted, sm2PrivPem, sm2CertPem);
@@ -235,6 +242,76 @@ class BcSMIMEOperationsTest {
         byte[] signed = smimeOperations.sign(mimeMessage, sm2PrivPem, sm2CertPem);
         var result = smimeOperations.verifySignatureDetail(signed, sm2CertPem);
         assertTrue(result.isValid(), "SM2 签名应验证通过");
+    }
+
+    @Test
+    void explicitSuiteRejectsMismatchedRecipientCertificates() throws Exception {
+        KeyPairGenerator sm2Kpg = KeyPairGenerator.getInstance("EC", "BC");
+        sm2Kpg.initialize(new java.security.spec.ECGenParameterSpec("sm2p256v1"));
+        KeyPair sm2KeyPair = sm2Kpg.generateKeyPair();
+        X509Certificate sm2Cert = generateSm2SelfSignedCertificate(sm2KeyPair);
+        String sm2CertPem = convertCertToPem(sm2Cert);
+
+        String testMail = "From: sender@example.com\r\n\r\nsuite mismatch";
+
+        assertThrows(BcSMIMEOperations.CryptoException.class,
+                () -> smimeOperations.encryptMultiple(
+                        testMail.getBytes(),
+                        java.util.List.of(sm2CertPem),
+                        SMIMEEncryptionSuite.STANDARD));
+
+        assertThrows(BcSMIMEOperations.CryptoException.class,
+                () -> smimeOperations.encryptMultiple(
+                        testMail.getBytes(),
+                        java.util.List.of(certPem),
+                        SMIMEEncryptionSuite.GM));
+    }
+
+    @Test
+    void gmEnvelopeUsesPureSm234Algorithms() throws Exception {
+        KeyPairGenerator sm2Kpg = KeyPairGenerator.getInstance("EC", "BC");
+        sm2Kpg.initialize(new java.security.spec.ECGenParameterSpec("sm2p256v1"));
+        KeyPair sm2KeyPair = sm2Kpg.generateKeyPair();
+        X509Certificate sm2Cert = generateSm2SelfSignedCertificate(sm2KeyPair);
+        String sm2CertPem = convertCertToPem(sm2Cert);
+
+        byte[] encrypted = smimeOperations.encryptMultiple(
+                "From: sender@example.com\r\n\r\npure sm234".getBytes(),
+                List.of(sm2CertPem),
+                SMIMEEncryptionSuite.GM);
+
+        SMIMEEnveloped enveloped = parseEnvelope(encrypted);
+        assertEquals(
+                GMObjectIdentifiers.sms4_cbc.getId(),
+                enveloped.getContentEncryptionAlgorithm().getAlgorithm().getId());
+
+        var recipients = enveloped.getRecipientInfos().getRecipients();
+        assertEquals(1, recipients.size());
+        var recipient = recipients.iterator().next();
+        assertEquals(
+                GMObjectIdentifiers.sm2encrypt_with_sm3.getId(),
+                recipient.getKeyEncryptionAlgOID());
+        assertNotEquals(CMSAlgorithm.ECDH_SHA1KDF.getId(), recipient.getKeyEncryptionAlgOID());
+        assertNotEquals(CMSAlgorithm.AES256_WRAP.getId(), recipient.getKeyEncryptionAlgOID());
+    }
+
+    @Test
+    void standardEnvelopeUsesConfiguredRsaAesAlgorithms() throws Exception {
+        byte[] encrypted = smimeOperations.encryptMultiple(
+                "From: sender@example.com\r\n\r\nstandard".getBytes(),
+                List.of(certPem),
+                SMIMEEncryptionSuite.STANDARD);
+
+        SMIMEEnveloped enveloped = parseEnvelope(encrypted);
+        assertEquals(
+                CMSAlgorithm.AES256_CBC.getId(),
+                enveloped.getContentEncryptionAlgorithm().getAlgorithm().getId());
+
+        var recipients = enveloped.getRecipientInfos().getRecipients();
+        assertEquals(1, recipients.size());
+        assertEquals(
+                "1.2.840.113549.1.1.1",
+                recipients.iterator().next().getKeyEncryptionAlgOID());
     }
 
     // ========== 辅助方法 ==========
@@ -265,8 +342,42 @@ class BcSMIMEOperationsTest {
                 .getCertificate(certHolder);
     }
 
+    private static X509Certificate generateSm2SelfSignedCertificate(KeyPair keyPair) throws Exception {
+        org.bouncycastle.asn1.x500.X500Name dn =
+                new org.bouncycastle.asn1.x500.X500Name("CN=SM2 Test, O=SealMail, E=sm2@test.com");
+        long now = System.currentTimeMillis();
+        org.bouncycastle.cert.X509v3CertificateBuilder certBuilder =
+                new org.bouncycastle.cert.jcajce.JcaX509v3CertificateBuilder(
+                        dn, java.math.BigInteger.valueOf(now),
+                        new Date(now), new Date(now + 365 * 24 * 60 * 60 * 1000L),
+                        dn, keyPair.getPublic());
+        org.bouncycastle.operator.ContentSigner signer =
+                new org.bouncycastle.operator.jcajce.JcaContentSignerBuilder("SM3withSM2")
+                        .setProvider("BC")
+                        .build(keyPair.getPrivate());
+        org.bouncycastle.cert.X509CertificateHolder certHolder = certBuilder.build(signer);
+        return new org.bouncycastle.cert.jcajce.JcaX509CertificateConverter()
+                .setProvider("BC")
+                .getCertificate(certHolder);
+    }
+
     private static MimeMessage parseMimeMessage(byte[] data) throws Exception {
         return new MimeMessage(Session.getInstance(new Properties()), new ByteArrayInputStream(data));
+    }
+
+    private static SMIMEEnveloped parseEnvelope(byte[] data) throws Exception {
+        return new SMIMEEnveloped(parseMimeMessage(data));
+    }
+
+    private static void assertSm234Envelope(byte[] encrypted) throws Exception {
+        SMIMEEnveloped enveloped = parseEnvelope(encrypted);
+        assertEquals(
+                GMObjectIdentifiers.sms4_cbc.getId(),
+                enveloped.getContentEncryptionAlgorithm().getAlgorithm().getId());
+        var recipient = enveloped.getRecipientInfos().getRecipients().iterator().next();
+        assertEquals(
+                GMObjectIdentifiers.sm2encrypt_with_sm3.getId(),
+                recipient.getKeyEncryptionAlgOID());
     }
 
     private static String extractBodyText(byte[] data) {

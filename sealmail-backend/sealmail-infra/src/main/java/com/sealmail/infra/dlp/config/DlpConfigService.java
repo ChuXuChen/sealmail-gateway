@@ -12,6 +12,7 @@ import com.sealmail.infra.persistence.entity.DlpSelectionEntity;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.sealmail.domain.dlp.config.DlpConfigPort;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
 import org.springframework.stereotype.Service;
@@ -30,7 +31,7 @@ import java.util.regex.PatternSyntaxException;
 
 @Service
 @Transactional
-public class DlpConfigService {
+public class DlpConfigService implements DlpConfigPort {
 
     @PersistenceContext
     private EntityManager entityManager;
@@ -55,6 +56,24 @@ public class DlpConfigService {
                 .stream()
                 .map(this::toPatternConfig)
                 .toList();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<DlpPatternSettings> listPatternSettings() {
+        return listPatterns().stream()
+                .map(this::toPatternSettings)
+                .toList();
+    }
+
+    @Override
+    public DlpPatternSettings createPattern(DlpPatternSettingsUpdate update) {
+        return toPatternSettings(createPattern(toPatternUpdate(update)));
+    }
+
+    @Override
+    public DlpPatternSettings updatePattern(String id, DlpPatternSettingsUpdate update) {
+        return toPatternSettings(updatePattern(id, toPatternUpdate(update)));
     }
 
     @Transactional(readOnly = true)
@@ -128,6 +147,24 @@ public class DlpConfigService {
                 .stream()
                 .map(this::toSelectionConfig)
                 .toList();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<DlpSelectionSettings> listSelectionSettings() {
+        return listSelections().stream()
+                .map(this::toSelectionSettings)
+                .toList();
+    }
+
+    @Override
+    public DlpSelectionSettings createSelection(DlpSelectionSettingsUpdate update) {
+        return toSelectionSettings(createSelection(toSelectionUpdate(update)));
+    }
+
+    @Override
+    public DlpSelectionSettings updateSelection(String id, DlpSelectionSettingsUpdate update) {
+        return toSelectionSettings(updateSelection(id, toSelectionUpdate(update)));
     }
 
     public DlpSelectionConfig createSelection(DlpSelectionUpdate update) {
@@ -297,6 +334,33 @@ public class DlpConfigService {
         );
     }
 
+    private DlpPatternSettings toPatternSettings(DlpPatternConfig config) {
+        return new DlpPatternSettings(
+                config.id(),
+                config.name(),
+                config.description(),
+                config.regex(),
+                config.action(),
+                config.severity(),
+                config.priority(),
+                config.enabled(),
+                config.createdAt(),
+                config.updatedAt()
+        );
+    }
+
+    private DlpPatternUpdate toPatternUpdate(DlpPatternSettingsUpdate update) {
+        return new DlpPatternUpdate(
+                update.name(),
+                update.description(),
+                update.regex(),
+                update.action(),
+                update.severity(),
+                update.priority(),
+                update.enabled()
+        );
+    }
+
     private DlpSelectionConfig toSelectionConfig(DlpSelectionEntity entity) {
         return new DlpSelectionConfig(
                 entity.getId(),
@@ -306,6 +370,28 @@ public class DlpConfigService {
                 entity.isEnabled(),
                 entity.getCreatedAt(),
                 entity.getUpdatedAt()
+        );
+    }
+
+    private DlpSelectionSettings toSelectionSettings(DlpSelectionConfig config) {
+        return new DlpSelectionSettings(
+                config.id(),
+                config.scopeType(),
+                config.scopeValue(),
+                config.patternIds(),
+                config.enabled(),
+                config.createdAt(),
+                config.updatedAt()
+        );
+    }
+
+    private DlpSelectionUpdate toSelectionUpdate(DlpSelectionSettingsUpdate update) {
+        return new DlpSelectionUpdate(
+                update.scopeType(),
+                update.scopeValue(),
+                update.patternIds(),
+                update.patternMode(),
+                update.enabled()
         );
     }
 

@@ -10,6 +10,7 @@ import com.sealmail.app.security.UserContext;
 import com.sealmail.domain.certificate.Certificate;
 import com.sealmail.domain.certificate.CertificateId;
 import com.sealmail.domain.certificate.CertificateRepository;
+import com.sealmail.domain.certificate.spi.CertificateCryptoPort;
 import com.sealmail.domain.shared.model.EmailAddress;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
@@ -18,9 +19,6 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.security.KeyPair;
-import java.security.PrivateKey;
-import java.security.cert.X509Certificate;
 import java.util.Set;
 
 /**
@@ -42,7 +40,8 @@ public class IssueEndEntityUseCase {
     private final CertificateRepository certificateRepository;
     private final CertificateDtoMapper mapper;
     private final PermissionChecker permissionChecker;
-    private final CertificateCryptoService cryptoService;
+    private final CertificateCryptoPort certificateCryptoPort;
+    private final CertificateMaterialAssembler certificateMaterialAssembler;
     private final CertificateChainService certificateChainService;
 
     @Value("${sealmail.ca.crl-base-url:http://localhost:8080/api/v1/crl/}")
@@ -60,10 +59,6 @@ public class IssueEndEntityUseCase {
         validateIntermediate(intermediateCa);
 
         try {
-            KeyPair subjectKeyPair = cryptoService.generateKeyPair(request.getAlgorithm());
-            PrivateKey caPriv = cryptoService.parsePrivateKey(intermediateCa.getPrivateKeyData());
-            X509Certificate caX509 = cryptoService.parseCertificate(intermediateCa.getPemContent());
-
             String subjectDn = request.getSubjectDn();
             if (subjectDn == null || subjectDn.isBlank()) {
                 subjectDn = "CN=" + request.getOwnerEmail() + ", O=SealMail, C=CN";
@@ -72,27 +67,26 @@ public class IssueEndEntityUseCase {
                     ? request.getValidityDays() : defaultEndEntityValidityDays;
             String crlUrl = buildCrlUrl(intermediateCa.getId().getThumbprint());
 
-            X509Certificate x509 = cryptoService.issue(CertificateCryptoService.CertSpec.builder()
-                    .subjectPubKey(subjectKeyPair.getPublic())
-                    .subjectDn(subjectDn)
-                    .subjectAlgorithm(request.getAlgorithm())
-                    .issuerDn(caX509.getSubjectX500Principal().getName())
-                    .issuerPrivKey(caPriv)
-                    .issuerPubKey(caX509.getPublicKey())
-                    .validityDays(validity)
-                    .ca(false)
-                    .ekus(Set.of(CertificateCryptoService.EKU_EMAIL_PROTECTION))
-                    .crlDpUrl(crlUrl)
-                    .build());
+            CertificateCryptoPort.CertificateMaterial material =
+                    certificateCryptoPort.issueWithIssuer(new CertificateCryptoPort.IssueWithIssuerCommand(
+                            subjectDn,
+                            request.getAlgorithm(),
+                            intermediateCa.getPemContent(),
+                            intermediateCa.getPrivateKeyData(),
+                            validity,
+                            false,
+                            0,
+                            Set.of(CertificateCryptoPort.EKU_EMAIL_PROTECTION),
+                            crlUrl));
 
-            String thumbprint = cryptoService.computeThumbprint(x509);
+            String thumbprint = material.certificate().thumbprint();
             CertificateId certId = new CertificateId(thumbprint);
             if (certificateRepository.findById(certId).isPresent()) {
                 throw BusinessException.conflict("证书已存在: " + thumbprint);
             }
 
-            Certificate cert = cryptoService.toIssuedDomainCertificate(certId, owner, x509, request.getAlgorithm());
-            cert.setPrivateKeyData(cryptoService.privateKeyToPem(subjectKeyPair.getPrivate()));
+            Certificate cert = certificateMaterialAssembler.issued(material.certificate(), owner);
+            cert.setPrivateKeyData(material.privateKeyPem());
             cert.setIssuerCertId(intermediateCa.getId().getThumbprint());
             cert.setCrlDistributionPointUrl(crlUrl);
             if (request.getAlias() != null && !request.getAlias().isBlank()) {

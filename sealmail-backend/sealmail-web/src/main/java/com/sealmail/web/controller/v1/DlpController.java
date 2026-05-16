@@ -1,11 +1,13 @@
 package com.sealmail.web.controller.v1;
 
+import com.sealmail.app.dto.request.CreateDlpPatternRequest;
+import com.sealmail.app.dto.request.CreateDlpSelectionRequest;
+import com.sealmail.app.dto.request.UpdateDlpPatternRequest;
+import com.sealmail.app.dto.request.UpdateDlpSelectionRequest;
+import com.sealmail.app.dto.response.DlpPatternResponse;
+import com.sealmail.app.dto.response.DlpSelectionResponse;
 import com.sealmail.app.security.UserContext;
-import com.sealmail.infra.dlp.config.DlpConfigService;
-import com.sealmail.infra.dlp.config.DlpPatternConfig;
-import com.sealmail.infra.dlp.config.DlpPatternUpdate;
-import com.sealmail.infra.dlp.config.DlpSelectionConfig;
-import com.sealmail.infra.dlp.config.DlpSelectionUpdate;
+import com.sealmail.app.usecase.config.ManageDlpConfigUseCase;
 import com.sealmail.web.util.ApiResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -19,36 +21,33 @@ import java.util.List;
 @Tag(name = "DLP", description = "DLP 规则、范围和隔离配置")
 public class DlpController {
 
-    private final DlpConfigService configService;
+    private final ManageDlpConfigUseCase manageDlpConfigUseCase;
 
-    public DlpController(DlpConfigService configService) {
-        this.configService = configService;
+    public DlpController(ManageDlpConfigUseCase manageDlpConfigUseCase) {
+        this.manageDlpConfigUseCase = manageDlpConfigUseCase;
     }
 
     @GetMapping("/patterns")
     @Operation(summary = "查询 DLP 规则")
-    public ApiResponse<List<DlpPatternConfig>> listPatterns(@AuthenticationPrincipal UserContext user) {
-        requireAdmin(user);
-        return ApiResponse.ok(configService.listPatterns());
+    public ApiResponse<List<DlpPatternResponse>> listPatterns(@AuthenticationPrincipal UserContext user) {
+        return ApiResponse.ok(manageDlpConfigUseCase.listPatterns(user));
     }
 
     @PostMapping("/patterns")
     @Operation(summary = "创建 DLP 规则")
-    public ApiResponse<DlpPatternConfig> createPattern(
-            @RequestBody DlpPatternUpdate request,
+    public ApiResponse<DlpPatternResponse> createPattern(
+            @RequestBody CreateDlpPatternRequest request,
             @AuthenticationPrincipal UserContext user) {
-        requireAdmin(user);
-        return ApiResponse.ok(configService.createPattern(request));
+        return ApiResponse.ok(manageDlpConfigUseCase.createPattern(request, user));
     }
 
     @PutMapping("/patterns/{id}")
     @Operation(summary = "更新 DLP 规则")
-    public ApiResponse<DlpPatternConfig> updatePattern(
+    public ApiResponse<DlpPatternResponse> updatePattern(
             @PathVariable String id,
-            @RequestBody DlpPatternUpdate request,
+            @RequestBody UpdateDlpPatternRequest request,
             @AuthenticationPrincipal UserContext user) {
-        requireAdmin(user);
-        return ApiResponse.ok(configService.updatePattern(id, request));
+        return ApiResponse.ok(manageDlpConfigUseCase.updatePattern(id, request, user));
     }
 
     @DeleteMapping("/patterns/{id}")
@@ -56,35 +55,31 @@ public class DlpController {
     public ApiResponse<Void> deletePattern(
             @PathVariable String id,
             @AuthenticationPrincipal UserContext user) {
-        requireAdmin(user);
-        configService.deletePattern(id);
+        manageDlpConfigUseCase.deletePattern(id, user);
         return ApiResponse.ok();
     }
 
     @GetMapping("/selections")
     @Operation(summary = "查询 DLP 生效范围")
-    public ApiResponse<List<DlpSelectionConfig>> listSelections(@AuthenticationPrincipal UserContext user) {
-        requireAdmin(user);
-        return ApiResponse.ok(configService.listSelections());
+    public ApiResponse<List<DlpSelectionResponse>> listSelections(@AuthenticationPrincipal UserContext user) {
+        return ApiResponse.ok(manageDlpConfigUseCase.listSelections(user));
     }
 
     @PostMapping("/selections")
     @Operation(summary = "创建 DLP 生效范围")
-    public ApiResponse<DlpSelectionConfig> createSelection(
-            @RequestBody DlpSelectionUpdate request,
+    public ApiResponse<DlpSelectionResponse> createSelection(
+            @RequestBody CreateDlpSelectionRequest request,
             @AuthenticationPrincipal UserContext user) {
-        requireAdmin(user);
-        return ApiResponse.ok(configService.createSelection(request));
+        return ApiResponse.ok(manageDlpConfigUseCase.createSelection(request, user));
     }
 
     @PutMapping("/selections/{id}")
     @Operation(summary = "更新 DLP 生效范围")
-    public ApiResponse<DlpSelectionConfig> updateSelection(
+    public ApiResponse<DlpSelectionResponse> updateSelection(
             @PathVariable String id,
-            @RequestBody DlpSelectionUpdate request,
+            @RequestBody UpdateDlpSelectionRequest request,
             @AuthenticationPrincipal UserContext user) {
-        requireAdmin(user);
-        return ApiResponse.ok(configService.updateSelection(id, request));
+        return ApiResponse.ok(manageDlpConfigUseCase.updateSelection(id, request, user));
     }
 
     @DeleteMapping("/selections/{id}")
@@ -92,14 +87,7 @@ public class DlpController {
     public ApiResponse<Void> deleteSelection(
             @PathVariable String id,
             @AuthenticationPrincipal UserContext user) {
-        requireAdmin(user);
-        configService.deleteSelection(id);
+        manageDlpConfigUseCase.deleteSelection(id, user);
         return ApiResponse.ok();
-    }
-
-    private void requireAdmin(UserContext user) {
-        if (user == null || !user.isAdmin()) {
-            throw com.sealmail.app.exception.SecurityException.accessDenied("Only administrators can manage DLP");
-        }
     }
 }
