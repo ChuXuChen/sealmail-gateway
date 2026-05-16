@@ -3,6 +3,8 @@ package com.sealmail.infra.mail.pipeline.step;
 import com.sealmail.domain.certificate.spi.SMIMEOperations;
 import com.sealmail.domain.mailsecurity.MailEnvelope;
 import com.sealmail.domain.mailsecurity.MailProcessingContext;
+import com.sealmail.domain.mailsecurity.MailProcessingErrorType;
+import com.sealmail.domain.mailsecurity.MailProcessingException;
 import com.sealmail.domain.mailsecurity.event.MailVerified;
 import com.sealmail.infra.mail.pipeline.MailProcessingHeaders;
 import com.sealmail.infra.mail.pipeline.MailPipelineStep;
@@ -27,7 +29,10 @@ public class VerifyStep implements MailPipelineStep {
         MailProcessingContext context = context(message);
         MailEnvelope envelope = context != null ? context.envelope() : null;
         if (envelope == null) {
-            return PipelineResult.failure("Mail processing context not found in message headers");
+            throw new MailProcessingException(
+                    MailProcessingErrorType.VERIFICATION,
+                    "Mail processing context not found in message headers",
+                    context);
         }
 
         try {
@@ -57,10 +62,11 @@ public class VerifyStep implements MailPipelineStep {
                     true));
 
         } catch (Exception e) {
-            return PipelineResult.quarantine(
-                    message.getPayload(),
-                    "SIGNATURE_INVALID",
-                    "Signature verification failed: " + e.getMessage());
+            throw new MailProcessingException(
+                    MailProcessingErrorType.VERIFICATION,
+                    "Signature verification failed: " + e.getMessage(),
+                    context,
+                    e);
         }
     }
 

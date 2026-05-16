@@ -5,6 +5,8 @@ import com.sealmail.domain.certificate.CertificateRepository;
 import com.sealmail.domain.mailsecurity.MailEnvelope;
 import com.sealmail.domain.mailsecurity.MailDirection;
 import com.sealmail.domain.mailsecurity.MailProcessingContext;
+import com.sealmail.domain.mailsecurity.MailProcessingErrorType;
+import com.sealmail.domain.mailsecurity.MailProcessingException;
 import com.sealmail.domain.mailsecurity.MailRecordDisposition;
 import com.sealmail.domain.policy.PreferredAlgorithm;
 import com.sealmail.domain.shared.model.EmailAddress;
@@ -52,12 +54,18 @@ public class RelayStep implements MailPipelineStep {
         MailProcessingContext context = context(message);
         MailEnvelope envelope = context != null ? context.envelope() : null;
         if (envelope == null) {
-            return PipelineResult.failure("Mail processing context not found in message headers");
+            throw new MailProcessingException(
+                    MailProcessingErrorType.RELAY,
+                    "Mail processing context not found in message headers",
+                    context);
         }
 
         byte[] mailContent = message.getPayload();
         if (mailContent == null || mailContent.length == 0) {
-            return PipelineResult.failure("Mail content is empty");
+            throw new MailProcessingException(
+                    MailProcessingErrorType.RELAY,
+                    "Mail content is empty",
+                    context);
         }
 
         PipelineResult relayGuard = validateEncryptedOutboundRelay(context, envelope, mailContent);
@@ -107,7 +115,13 @@ public class RelayStep implements MailPipelineStep {
         } catch (Exception e) {
             log.error("Relay step failed: {} - host: {}, port: {}, user: {}",
                     e.getMessage(), host, port, username, e);
-            return PipelineResult.failure("Mail relay failed: " + e.getMessage());
+            throw new MailProcessingException(
+                    MailProcessingErrorType.RELAY,
+                    "Mail relay failed: " + e.getMessage(),
+                    context,
+                    MailRecordDisposition.EXCEPTION,
+                    true,
+                    e);
         }
     }
 

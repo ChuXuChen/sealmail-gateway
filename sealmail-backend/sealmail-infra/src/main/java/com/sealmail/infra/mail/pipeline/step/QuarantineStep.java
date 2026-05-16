@@ -5,6 +5,8 @@ import com.sealmail.domain.exceptionmail.ExceptionMailRepository;
 import com.sealmail.domain.mailsecurity.MailDirection;
 import com.sealmail.domain.mailsecurity.MailEnvelope;
 import com.sealmail.domain.mailsecurity.MailProcessingContext;
+import com.sealmail.domain.mailsecurity.MailProcessingErrorType;
+import com.sealmail.domain.mailsecurity.MailProcessingException;
 import com.sealmail.domain.mailsecurity.MailRecordDisposition;
 import com.sealmail.domain.quarantine.QuarantineReason;
 import com.sealmail.domain.quarantine.QuarantinedMail;
@@ -69,7 +71,8 @@ public class QuarantineStep implements MailPipelineStep {
                         remoteAddress(context),
                         quarantineReason,
                         detail(message, reason),
-                        blockComment(detail(message, reason))
+                        blockComment(detail(message, reason)),
+                        message.getPayload()
                 );
                 exceptionMailRepository.save(exceptionMail);
             }
@@ -77,7 +80,11 @@ public class QuarantineStep implements MailPipelineStep {
             return PipelineResult.success(message.getPayload());
 
         } catch (Exception e) {
-            return PipelineResult.failure("Failed to quarantine mail: " + e.getMessage());
+            throw new MailProcessingException(
+                    MailProcessingErrorType.QUARANTINE,
+                    "Failed to quarantine mail: " + e.getMessage(),
+                    context,
+                    e);
         }
     }
 

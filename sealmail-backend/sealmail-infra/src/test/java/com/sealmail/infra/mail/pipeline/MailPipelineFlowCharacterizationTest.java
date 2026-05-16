@@ -64,6 +64,9 @@ class MailPipelineFlowCharacterizationTest {
     QueueChannel quarantineChannel;
 
     @Autowired
+    QueueChannel errorChannel;
+
+    @Autowired
     RoutingService routingService;
 
     @Autowired
@@ -96,6 +99,7 @@ class MailPipelineFlowCharacterizationTest {
                 mailAuthenticationStep, decryptStep, verifyStep);
         drain(relayChannel);
         drain(quarantineChannel);
+        drain(errorChannel);
     }
 
     @Test
@@ -251,6 +255,40 @@ class MailPipelineFlowCharacterizationTest {
     }
 
     @Test
+    void outboundStepExceptionRoutesToErrorChannelAndStopsRelay() {
+        byte[] raw = "raw".getBytes();
+        Message<byte[]> outbound = outboundMessage(raw);
+        when(routingService.routeOutbound(any())).thenAnswer(invocation ->
+                withProcessingId(invocation.getArgument(0), "processing-1"));
+        when(stepTracker.executeMessageWithTracking(any(), eq(dlpStep)))
+                .thenThrow(new IllegalStateException("scanner down"));
+
+        assertTrue(mailOutboundChannel.send(outbound));
+
+        Message<?> error = errorChannel.receive(1000);
+        assertEquals("scanner down", ((Throwable) error.getPayload()).getCause().getMessage());
+        assertNull(relayChannel.receive(0));
+        assertNull(quarantineChannel.receive(0));
+        verify(stepTracker, never()).executeMessageWithTracking(any(), eq(signStep));
+        verify(stepTracker, never()).executeMessageWithTracking(any(), eq(encryptStep));
+    }
+
+    @Test
+    void inboundRoutingExceptionRoutesToErrorChannelAndStopsPipeline() {
+        byte[] raw = "raw".getBytes();
+        Message<byte[]> inbound = inboundMessage(raw);
+        when(routingService.routeInbound(any())).thenThrow(new IllegalStateException("route store down"));
+
+        assertTrue(mailInboundChannel.send(inbound));
+
+        Message<?> error = errorChannel.receive(1000);
+        assertEquals("route store down", ((Throwable) error.getPayload()).getCause().getMessage());
+        assertNull(relayChannel.receive(0));
+        assertNull(quarantineChannel.receive(0));
+        verify(stepTracker, never()).executeMessageWithTracking(any(), eq(mailAuthenticationStep));
+    }
+
+    @Test
     void flowSourceNoLongerRoutesOnPipelineResultPayload() throws Exception {
         String source = Files.readString(Path.of(
                 "src/main/java/com/sealmail/infra/mail/pipeline/MailPipelineFlow.java"));
@@ -382,19 +420,26 @@ class MailPipelineFlowCharacterizationTest {
         }
 
         @Bean
+        QueueChannel errorChannel() {
+            return new QueueChannel();
+        }
+
+        @Bean
         IntegrationFlow outboundProcessingFlow(MailPipelineFlow pipelineFlow,
                                                MessageChannel mailOutboundChannel,
                                                QueueChannel quarantineChannel,
-                                               QueueChannel relayChannel) {
-            return pipelineFlow.outboundFlow(mailOutboundChannel, quarantineChannel, relayChannel);
+                                               QueueChannel relayChannel,
+                                               QueueChannel errorChannel) {
+            return pipelineFlow.outboundFlow(mailOutboundChannel, quarantineChannel, relayChannel, errorChannel);
         }
 
         @Bean
         IntegrationFlow inboundProcessingFlow(MailPipelineFlow pipelineFlow,
                                               MessageChannel mailInboundChannel,
                                               QueueChannel quarantineChannel,
-                                              QueueChannel relayChannel) {
-            return pipelineFlow.inboundFlow(mailInboundChannel, quarantineChannel, relayChannel);
+                                              QueueChannel relayChannel,
+                                              QueueChannel errorChannel) {
+            return pipelineFlow.inboundFlow(mailInboundChannel, quarantineChannel, relayChannel, errorChannel);
         }
 
         @Bean

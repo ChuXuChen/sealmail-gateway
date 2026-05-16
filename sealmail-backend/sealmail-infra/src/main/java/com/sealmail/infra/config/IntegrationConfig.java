@@ -41,28 +41,32 @@ public class IntegrationConfig {
     public IntegrationFlow inboundProcessingFlow(MailPipelineFlow pipelineFlow,
                                                   MessageChannel mailInboundChannel,
                                                   MessageChannel quarantineChannel,
-                                                  MessageChannel relayChannel) {
-        return pipelineFlow.inboundFlow(mailInboundChannel, quarantineChannel, relayChannel);
+                                                  MessageChannel relayChannel,
+                                                  MessageChannel errorChannel) {
+        return pipelineFlow.inboundFlow(mailInboundChannel, quarantineChannel, relayChannel, errorChannel);
     }
 
     @Bean
     public IntegrationFlow outboundProcessingFlow(MailPipelineFlow pipelineFlow,
                                                    MessageChannel mailOutboundChannel,
                                                    MessageChannel quarantineChannel,
-                                                   MessageChannel relayChannel) {
-        return pipelineFlow.outboundFlow(mailOutboundChannel, quarantineChannel, relayChannel);
+                                                   MessageChannel relayChannel,
+                                                   MessageChannel errorChannel) {
+        return pipelineFlow.outboundFlow(mailOutboundChannel, quarantineChannel, relayChannel, errorChannel);
     }
 
     @Bean
     public IntegrationFlow quarantineProcessingFlow(MailPipelineFlow pipelineFlow,
-                                                     MessageChannel quarantineChannel) {
-        return pipelineFlow.quarantineFlow(quarantineChannel);
+                                                     MessageChannel quarantineChannel,
+                                                     MessageChannel errorChannel) {
+        return pipelineFlow.quarantineFlow(quarantineChannel, errorChannel);
     }
 
     @Bean
     public IntegrationFlow relayProcessingFlow(MailPipelineFlow pipelineFlow,
                                                 MessageChannel relayChannel,
-                                                MessageChannel quarantineChannel) {
-        return pipelineFlow.relayFlow(relayChannel, quarantineChannel);
+                                                MessageChannel quarantineChannel,
+                                                MessageChannel errorChannel) {
+        return pipelineFlow.relayFlow(relayChannel, quarantineChannel, errorChannel);
     }
 }

@@ -7,6 +7,8 @@ import com.sealmail.domain.mailsecurity.DlpDecision;
 import com.sealmail.domain.mailsecurity.MailEnvelope;
 import com.sealmail.domain.mailsecurity.MailProcessingContext;
 import com.sealmail.domain.mailsecurity.MailProcessingDecision;
+import com.sealmail.domain.mailsecurity.MailProcessingErrorType;
+import com.sealmail.domain.mailsecurity.MailProcessingException;
 import com.sealmail.domain.mailsecurity.MailRecordDisposition;
 import com.sealmail.domain.shared.event.AuditEvent;
 import com.sealmail.infra.dlp.DlpService;
@@ -99,11 +101,11 @@ public class DlpStep implements MailPipelineStep {
 
         } catch (Exception e) {
             log.error("DLP scan failed: {}", e.getMessage(), e);
-            return PipelineResult.quarantine(
-                    payload,
-                    "SCAN_ERROR",
+            throw new MailProcessingException(
+                    MailProcessingErrorType.DLP,
                     "DLP scan failed: " + e.getMessage(),
-                    MailRecordDisposition.EXCEPTION);
+                    context(message),
+                    e);
         }
     }
 

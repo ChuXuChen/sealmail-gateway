@@ -2,6 +2,8 @@ package com.sealmail.infra.mail.pipeline.step;
 
 import com.sealmail.domain.mailsecurity.MailEnvelope;
 import com.sealmail.domain.mailsecurity.MailProcessingContext;
+import com.sealmail.domain.mailsecurity.MailProcessingErrorType;
+import com.sealmail.domain.mailsecurity.MailProcessingException;
 import com.sealmail.infra.mail.auth.MailAuthenticationService;
 import com.sealmail.infra.mail.pipeline.MailProcessingHeaders;
 import com.sealmail.infra.mail.pipeline.MailPipelineStep;
@@ -24,7 +26,7 @@ public class MailAuthenticationStep implements MailPipelineStep {
     public PipelineResult execute(Message<byte[]> message) {
         MailProcessingContext context = context(message);
         MailEnvelope envelope = context != null ? context.envelope() : null;
-        var result = authenticationService.authenticate(message.getPayload(), envelope);
+        var result = authenticate(message, envelope, context);
         if (result.shouldQuarantine()) {
             return PipelineResult.quarantine(message.getPayload(), "EMAIL_AUTH_FAILED", result.detail());
         }
@@ -45,6 +47,20 @@ public class MailAuthenticationStep implements MailPipelineStep {
         System.arraycopy(header, 0, combined, 0, header.length);
         System.arraycopy(payload, 0, combined, header.length, payload.length);
         return combined;
+    }
+
+    private com.sealmail.infra.mail.auth.MailAuthenticationResult authenticate(Message<byte[]> message,
+                                                                               MailEnvelope envelope,
+                                                                               MailProcessingContext context) {
+        try {
+            return authenticationService.authenticate(message.getPayload(), envelope);
+        } catch (Exception e) {
+            throw new MailProcessingException(
+                    MailProcessingErrorType.AUTHENTICATION,
+                    "Mail authentication failed: " + e.getMessage(),
+                    context,
+                    e);
+        }
     }
 
     private MailProcessingContext context(Message<?> message) {

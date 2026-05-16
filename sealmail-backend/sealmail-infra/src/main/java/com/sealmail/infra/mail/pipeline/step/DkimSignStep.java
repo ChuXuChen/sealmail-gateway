@@ -2,6 +2,8 @@ package com.sealmail.infra.mail.pipeline.step;
 
 import com.sealmail.domain.mailsecurity.MailEnvelope;
 import com.sealmail.domain.mailsecurity.MailProcessingContext;
+import com.sealmail.domain.mailsecurity.MailProcessingErrorType;
+import com.sealmail.domain.mailsecurity.MailProcessingException;
 import com.sealmail.infra.mail.auth.DkimSigner;
 import com.sealmail.infra.mail.pipeline.MailProcessingHeaders;
 import com.sealmail.infra.mail.pipeline.MailPipelineStep;
@@ -28,7 +30,15 @@ public class DkimSignStep implements MailPipelineStep {
         if (envelope == null) {
             return PipelineResult.success(message.getPayload());
         }
-        return PipelineResult.success(dkimSigner.sign(message.getPayload(), envelope.getSender().getDomain()));
+        try {
+            return PipelineResult.success(dkimSigner.sign(message.getPayload(), envelope.getSender().getDomain()));
+        } catch (Exception e) {
+            throw new MailProcessingException(
+                    MailProcessingErrorType.DKIM_SIGNING,
+                    "DKIM signing failed: " + e.getMessage(),
+                    context,
+                    e);
+        }
     }
 
     @Override

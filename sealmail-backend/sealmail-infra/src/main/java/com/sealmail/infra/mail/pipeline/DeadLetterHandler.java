@@ -1,14 +1,11 @@
 package com.sealmail.infra.mail.pipeline;
 
 import com.sealmail.domain.mailsecurity.MailProcessingContext;
-import com.sealmail.domain.mailsecurity.MailProcessingDecision;
-import com.sealmail.domain.mailsecurity.MailRecordDisposition;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.integration.annotation.ServiceActivator;
 import org.springframework.messaging.Message;
 import org.springframework.messaging.MessageChannel;
-import org.springframework.messaging.support.MessageBuilder;
 import org.springframework.stereotype.Component;
 
 import java.io.ByteArrayOutputStream;
@@ -27,12 +24,15 @@ public class DeadLetterHandler {
     private static final Logger log = LoggerFactory.getLogger(DeadLetterHandler.class);
 
     private final MessageChannel quarantineChannel;
+    private final MailErrorDecisionHandler errorDecisionHandler;
     private final ConcurrentLinkedDeque<DeadLetterEntry> recentErrors = new ConcurrentLinkedDeque<>();
     private final AtomicLong totalDeadLetters = new AtomicLong(0);
     private final int maxRecentErrors = 100;
 
-    public DeadLetterHandler(MessageChannel quarantineChannel) {
+    public DeadLetterHandler(MessageChannel quarantineChannel,
+                             MailErrorDecisionHandler errorDecisionHandler) {
         this.quarantineChannel = quarantineChannel;
+        this.errorDecisionHandler = errorDecisionHandler;
     }
 
     @ServiceActivator(inputChannel = "errorChannel")
@@ -57,21 +57,15 @@ public class DeadLetterHandler {
             recentErrors.removeLast();
         }
 
-        MailProcessingContext context = context(message);
-        if (context != null && context.originalMailContent().length > 0) {
-            routeToQuarantine(context.originalMailContent(), context, errorMessage);
+        MailErrorDecisionHandler.ErrorDecision decision = errorDecisionHandler.decide(message);
+        if (decision.quarantine()) {
+            routeToQuarantine(decision.quarantineMessage());
         }
     }
 
-    private void routeToQuarantine(byte[] payload, MailProcessingContext context, String errorMessage) {
+    private void routeToQuarantine(Message<byte[]> message) {
         try {
-            MailProcessingContext quarantineContext = context
-                    .withDecision(MailProcessingDecision.none().withQuarantine("PIPELINE_ERROR", errorMessage))
-                    .withRecordDisposition(MailRecordDisposition.EXCEPTION);
-            quarantineChannel.send(MessageBuilder
-                    .withPayload(payload)
-                    .setHeader(MailProcessingHeaders.CONTEXT, quarantineContext)
-                    .build());
+            quarantineChannel.send(message);
 
             log.debug("Failed message routed to quarantine");
         } catch (Exception e) {

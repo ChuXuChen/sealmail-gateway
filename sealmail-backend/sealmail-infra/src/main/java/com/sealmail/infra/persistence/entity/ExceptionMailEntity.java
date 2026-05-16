@@ -44,6 +44,9 @@ public class ExceptionMailEntity {
     @Column(name = "block_comment", length = 1024)
     private String blockComment;
 
+    @Column(name = "raw_content", columnDefinition = "TEXT")
+    private String rawContent;
+
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
 

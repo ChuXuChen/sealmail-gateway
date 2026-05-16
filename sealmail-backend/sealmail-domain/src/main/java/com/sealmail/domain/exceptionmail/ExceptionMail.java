@@ -23,6 +23,7 @@ public class ExceptionMail extends AggregateRoot<String> {
     private final String detail;
     private final String blockedBy;
     private final String blockComment;
+    private final byte[] rawContent;
     private final Instant createdAt;
 
     private ExceptionMail(String id,
@@ -36,6 +37,7 @@ public class ExceptionMail extends AggregateRoot<String> {
                           String detail,
                           String blockedBy,
                           String blockComment,
+                          byte[] rawContent,
                           Instant createdAt) {
         super(id);
         this.messageId = messageId;
@@ -48,6 +50,7 @@ public class ExceptionMail extends AggregateRoot<String> {
         this.detail = detail;
         this.blockedBy = blockedBy;
         this.blockComment = blockComment;
+        this.rawContent = rawContent != null ? rawContent.clone() : new byte[0];
         this.createdAt = createdAt;
     }
 
@@ -61,6 +64,21 @@ public class ExceptionMail extends AggregateRoot<String> {
                                        QuarantineReason reason,
                                        String detail,
                                        String blockComment) {
+        return create(id, messageId, subject, sender, recipients, direction, remoteAddress, reason, detail,
+                blockComment, null);
+    }
+
+    public static ExceptionMail create(String id,
+                                       String messageId,
+                                       String subject,
+                                       EmailAddress sender,
+                                       List<EmailAddress> recipients,
+                                       MailDirection direction,
+                                       String remoteAddress,
+                                       QuarantineReason reason,
+                                       String detail,
+                                       String blockComment,
+                                       byte[] rawContent) {
         validateRequired(messageId, sender, recipients, reason);
         ExceptionMail mail = new ExceptionMail(
                 id,
@@ -74,6 +92,7 @@ public class ExceptionMail extends AggregateRoot<String> {
                 detail,
                 "system",
                 blockComment,
+                rawContent,
                 Instant.now()
         );
         mail.registerEvent(new ExceptionMailCreated(id, messageId, reason, detail));
@@ -92,6 +111,23 @@ public class ExceptionMail extends AggregateRoot<String> {
                                         String blockedBy,
                                         String blockComment,
                                         Instant createdAt) {
+        return restore(id, messageId, subject, sender, recipients, direction, remoteAddress, reason, detail,
+                blockedBy, blockComment, createdAt, null);
+    }
+
+    public static ExceptionMail restore(String id,
+                                        String messageId,
+                                        String subject,
+                                        EmailAddress sender,
+                                        List<EmailAddress> recipients,
+                                        MailDirection direction,
+                                        String remoteAddress,
+                                        QuarantineReason reason,
+                                        String detail,
+                                        String blockedBy,
+                                        String blockComment,
+                                        Instant createdAt,
+                                        byte[] rawContent) {
         validateRequired(messageId, sender, recipients, reason);
         if (createdAt == null) {
             throw new IllegalArgumentException("CreatedAt cannot be null");
@@ -108,6 +144,7 @@ public class ExceptionMail extends AggregateRoot<String> {
                 detail,
                 blockedBy,
                 blockComment,
+                rawContent,
                 createdAt
         );
     }
@@ -168,6 +205,14 @@ public class ExceptionMail extends AggregateRoot<String> {
 
     public String getBlockComment() {
         return blockComment;
+    }
+
+    public byte[] getRawContent() {
+        return rawContent.clone();
+    }
+
+    public boolean hasRawContent() {
+        return rawContent.length > 0;
     }
 
     public Instant getCreatedAt() {

@@ -4,6 +4,8 @@ import com.sealmail.domain.certificate.CertificateRepository;
 import com.sealmail.domain.certificate.spi.SMIMEOperations;
 import com.sealmail.domain.mailsecurity.MailEnvelope;
 import com.sealmail.domain.mailsecurity.MailProcessingContext;
+import com.sealmail.domain.mailsecurity.MailProcessingErrorType;
+import com.sealmail.domain.mailsecurity.MailProcessingException;
 import com.sealmail.domain.mailsecurity.event.MailSigned;
 import com.sealmail.domain.policy.PreferredAlgorithm;
 import com.sealmail.infra.crypto.KeyStoreService;
@@ -104,10 +106,16 @@ public class SignStep implements MailPipelineStep {
 
             if (senderCert == null) {
                 if (preference == PreferredAlgorithm.GM_ONLY) {
-                    return PipelineResult.failure("GM_ONLY策略：未找到SM2签名证书");
+                    throw new MailProcessingException(
+                            MailProcessingErrorType.SIGNING,
+                            "GM_ONLY策略：未找到SM2签名证书",
+                            context);
                 }
                 if (preference == PreferredAlgorithm.STANDARD_ONLY) {
-                    return PipelineResult.failure("STANDARD_ONLY策略：未找到RSA签名证书");
+                    throw new MailProcessingException(
+                            MailProcessingErrorType.SIGNING,
+                            "STANDARD_ONLY策略：未找到RSA签名证书",
+                            context);
                 }
                 log.info("Signing skipped: no sender certificate found");
                 return PipelineResult.success(message.getPayload());
@@ -154,8 +162,15 @@ public class SignStep implements MailPipelineStep {
             return PipelineResult.success(signed);
 
         } catch (Exception e) {
+            if (e instanceof MailProcessingException mailProcessingException) {
+                throw mailProcessingException;
+            }
             log.error("S/MIME signing failed: {}", e.getMessage(), e);
-            return PipelineResult.failure("S/MIME signing failed: " + e.getMessage());
+            throw new MailProcessingException(
+                    MailProcessingErrorType.SIGNING,
+                    "S/MIME signing failed: " + e.getMessage(),
+                    context,
+                    e);
         }
     }
 

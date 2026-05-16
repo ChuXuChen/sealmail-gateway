@@ -49,6 +49,7 @@ class QuarantineStepTest {
         assertEquals(QuarantineReason.POLICY_VIOLATION, saved.getReason());
         assertEquals("system", saved.getBlockedBy());
         assertEquals("DLP policy blocked", saved.getBlockComment());
+        assertTrue(saved.hasRawContent());
     }
 
     private org.springframework.messaging.Message<byte[]> message(String detail, MailRecordDisposition disposition) {

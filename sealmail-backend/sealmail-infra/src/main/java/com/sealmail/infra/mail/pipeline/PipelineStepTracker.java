@@ -2,6 +2,8 @@ package com.sealmail.infra.mail.pipeline;
 
 import com.sealmail.domain.mailsecurity.MailProcessing;
 import com.sealmail.domain.mailsecurity.MailProcessingContext;
+import com.sealmail.domain.mailsecurity.MailProcessingErrorType;
+import com.sealmail.domain.mailsecurity.MailProcessingException;
 import com.sealmail.domain.mailsecurity.MailProcessingRepository;
 import com.sealmail.domain.mailsecurity.ProcessingResult;
 import com.sealmail.infra.events.DomainEventPublisher;
@@ -89,12 +91,22 @@ public class PipelineStepTracker {
                 });
             }
 
-            return PipelineResult.failure(e.getMessage());
+            if (e instanceof MailProcessingException mailProcessingException) {
+                throw mailProcessingException;
+            }
+            throw new MailProcessingException(errorType(stepName), e.getMessage(), context(message), e);
         }
     }
 
     public Message<byte[]> executeMessageWithTracking(Message<byte[]> message, MailPipelineStep step) {
-        return toMessage(message, executeWithTracking(message, step));
+        PipelineResult result = executeWithTracking(message, step);
+        if (!result.success() && !result.requiresQuarantine()) {
+            throw new MailProcessingException(
+                    errorType(step.getStepName()),
+                    failureReason(result),
+                    resultContext(message, result));
+        }
+        return toMessage(message, result);
     }
 
     /**
@@ -215,6 +227,25 @@ public class PipelineStepTracker {
             return result.errorMessage();
         }
         return result.quarantineDetail();
+    }
+
+    private MailProcessingErrorType errorType(String stepName) {
+        if (stepName == null || stepName.isBlank()) {
+            return MailProcessingErrorType.UNKNOWN;
+        }
+        return switch (stepName) {
+            case "routing" -> MailProcessingErrorType.ROUTING;
+            case "mail-auth" -> MailProcessingErrorType.AUTHENTICATION;
+            case "decrypt" -> MailProcessingErrorType.DECRYPTION;
+            case "verify-signature" -> MailProcessingErrorType.VERIFICATION;
+            case "dlp" -> MailProcessingErrorType.DLP;
+            case "sign" -> MailProcessingErrorType.SIGNING;
+            case "encrypt" -> MailProcessingErrorType.ENCRYPTION;
+            case "dkim-sign" -> MailProcessingErrorType.DKIM_SIGNING;
+            case "relay" -> MailProcessingErrorType.RELAY;
+            case "quarantine" -> MailProcessingErrorType.QUARANTINE;
+            default -> MailProcessingErrorType.PIPELINE;
+        };
     }
 
     private String processingId(Message<byte[]> message) {

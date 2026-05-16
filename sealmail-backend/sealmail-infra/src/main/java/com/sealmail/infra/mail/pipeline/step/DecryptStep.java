@@ -5,6 +5,8 @@ import com.sealmail.domain.certificate.CertificateRepository;
 import com.sealmail.domain.certificate.spi.SMIMEOperations;
 import com.sealmail.domain.mailsecurity.MailEnvelope;
 import com.sealmail.domain.mailsecurity.MailProcessingContext;
+import com.sealmail.domain.mailsecurity.MailProcessingErrorType;
+import com.sealmail.domain.mailsecurity.MailProcessingException;
 import com.sealmail.domain.mailsecurity.event.MailDecrypted;
 import com.sealmail.domain.shared.model.EmailAddress;
 import com.sealmail.infra.mail.pipeline.MailProcessingHeaders;
@@ -41,7 +43,10 @@ public class DecryptStep implements MailPipelineStep {
         MailProcessingContext context = context(message);
         MailEnvelope envelope = context != null ? context.envelope() : null;
         if (envelope == null) {
-            return PipelineResult.failure("Mail processing context not found in message headers");
+            throw new MailProcessingException(
+                    MailProcessingErrorType.DECRYPTION,
+                    "Mail processing context not found in message headers",
+                    context);
         }
 
         try {
@@ -87,10 +92,11 @@ public class DecryptStep implements MailPipelineStep {
             return PipelineResult.success(decrypted);
 
         } catch (Exception e) {
-            return PipelineResult.quarantine(
-                    message.getPayload(),
-                    "DECRYPTION_FAILED",
-                    "Decryption failed: " + e.getMessage());
+            throw new MailProcessingException(
+                    MailProcessingErrorType.DECRYPTION,
+                    "Decryption failed: " + e.getMessage(),
+                    context,
+                    e);
         }
     }
 

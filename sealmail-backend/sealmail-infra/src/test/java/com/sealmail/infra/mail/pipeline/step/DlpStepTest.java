@@ -5,6 +5,8 @@ import com.sealmail.domain.dlp.DlpScanResult;
 import com.sealmail.domain.dlp.DlpViolation;
 import com.sealmail.domain.mailsecurity.MailEnvelope;
 import com.sealmail.domain.mailsecurity.MailProcessingContext;
+import com.sealmail.domain.mailsecurity.MailProcessingErrorType;
+import com.sealmail.domain.mailsecurity.MailProcessingException;
 import com.sealmail.domain.mailsecurity.MailRecordDisposition;
 import com.sealmail.domain.policy.DispositionAction;
 import com.sealmail.domain.shared.model.EmailAddress;
@@ -22,6 +24,7 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.argThat;
@@ -91,12 +94,14 @@ class DlpStepTest {
         when(service.scan(any(), any(), any(), any())).thenThrow(new IllegalStateException("scanner down"));
         DlpStep step = new DlpStep(service, new MimeContentExtractor(), domainEventPublisher);
 
-        var pipelineResult = step.execute(MessageBuilder.withPayload(payload).build());
+        MailProcessingException exception = assertThrows(MailProcessingException.class,
+                () -> step.execute(MessageBuilder.withPayload(payload)
+                        .setHeader(MailProcessingHeaders.CONTEXT, context(payload))
+                        .build()));
 
-        assertFalse(pipelineResult.success());
-        assertTrue(pipelineResult.requiresQuarantine());
-        assertEquals("SCAN_ERROR", pipelineResult.quarantineReason());
-        assertEquals(MailRecordDisposition.EXCEPTION, pipelineResult.recordDisposition());
+        assertEquals(MailProcessingErrorType.DLP, exception.errorType());
+        assertTrue(exception.getMessage().contains("scanner down"));
+        assertEquals(MailRecordDisposition.EXCEPTION, exception.recordDisposition());
     }
 
     private DlpStep stepReturning(DlpScanResult result) {

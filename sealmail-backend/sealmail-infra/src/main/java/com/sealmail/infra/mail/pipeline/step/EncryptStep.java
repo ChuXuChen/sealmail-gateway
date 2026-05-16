@@ -7,6 +7,8 @@ import com.sealmail.domain.certificate.spi.SMIMEOperations;
 import com.sealmail.domain.certificate.spi.SMIMEEncryptionSuite;
 import com.sealmail.domain.mailsecurity.MailEnvelope;
 import com.sealmail.domain.mailsecurity.MailProcessingContext;
+import com.sealmail.domain.mailsecurity.MailProcessingErrorType;
+import com.sealmail.domain.mailsecurity.MailProcessingException;
 import com.sealmail.domain.mailsecurity.MailRecordDisposition;
 import com.sealmail.domain.mailsecurity.event.MailEncrypted;
 import com.sealmail.domain.policy.PreferredAlgorithm;
@@ -47,7 +49,10 @@ public class EncryptStep implements MailPipelineStep {
         MailProcessingContext context = context(message);
         MailEnvelope envelope = context != null ? context.envelope() : null;
         if (envelope == null) {
-            return PipelineResult.failure("Mail processing context not found in message headers");
+            throw new MailProcessingException(
+                    MailProcessingErrorType.ENCRYPTION,
+                    "Mail processing context not found in message headers",
+                    context);
         }
 
         boolean encryptionEnabled = context.decision().encryptionRequired();
@@ -87,11 +92,11 @@ public class EncryptStep implements MailPipelineStep {
 
         } catch (Exception e) {
             log.error("S/MIME encryption failed: {}", e.getMessage(), e);
-            return PipelineResult.quarantine(
-                    message.getPayload(),
-                    "ENCRYPTION_FAILED",
+            throw new MailProcessingException(
+                    MailProcessingErrorType.ENCRYPTION,
                     "S/MIME encryption failed: " + e.getMessage(),
-                    MailRecordDisposition.EXCEPTION);
+                    context,
+                    e);
         }
     }
 
