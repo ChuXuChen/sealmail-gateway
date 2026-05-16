@@ -29,13 +29,15 @@ import org.springframework.messaging.MessageChannel;
 import org.springframework.messaging.support.MessageBuilder;
 import org.springframework.test.context.junit.jupiter.SpringJUnitConfig;
 
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
@@ -102,14 +104,10 @@ class MailPipelineFlowCharacterizationTest {
         Message<byte[]> outbound = outboundMessage(raw);
         when(routingService.routeOutbound(any())).thenAnswer(invocation ->
                 withProcessingId(invocation.getArgument(0), "processing-1"));
-        when(stepTracker.executeWithTracking(any(), eq(dlpStep)))
-                .thenReturn(PipelineResult.success("after-dlp".getBytes()));
-        when(stepTracker.executeWithTracking(any(), eq(signStep)))
-                .thenReturn(PipelineResult.success("signed".getBytes()));
-        when(stepTracker.executeWithTracking(any(), eq(encryptStep)))
-                .thenReturn(PipelineResult.success("encrypted".getBytes()));
-        when(stepTracker.executeWithTracking(any(), eq(dkimSignStep)))
-                .thenReturn(PipelineResult.success("dkim".getBytes()));
+        whenTracked(dlpStep, PipelineResult.success("after-dlp".getBytes()));
+        whenTracked(signStep, PipelineResult.success("signed".getBytes()));
+        whenTracked(encryptStep, PipelineResult.success("encrypted".getBytes()));
+        whenTracked(dkimSignStep, PipelineResult.success("dkim".getBytes()));
 
         assertTrue(mailOutboundChannel.send(outbound));
 
@@ -117,39 +115,38 @@ class MailPipelineFlowCharacterizationTest {
         assertArrayEquals("dkim".getBytes(), (byte[]) relayed.getPayload());
         assertNull(quarantineChannel.receive(0));
         verify(routingService).routeOutbound(any());
-        verify(stepTracker).executeWithTracking(any(), eq(dlpStep));
-        verify(stepTracker).executeWithTracking(any(), eq(signStep));
-        verify(stepTracker).executeWithTracking(any(), eq(encryptStep));
-        verify(stepTracker).executeWithTracking(any(), eq(dkimSignStep));
+        verify(stepTracker).executeMessageWithTracking(any(), eq(dlpStep));
+        verify(stepTracker).executeMessageWithTracking(any(), eq(signStep));
+        verify(stepTracker).executeMessageWithTracking(any(), eq(encryptStep));
+        verify(stepTracker).executeMessageWithTracking(any(), eq(dkimSignStep));
         verify(stepTracker, never()).completeProcessing("processing-1", ProcessingResult.FAILED);
     }
 
     @Test
-    void outboundDlpQuarantineResultCompletesFailedAndRoutesPipelineResultToQuarantineChannel() {
+    void outboundDlpQuarantineResultCompletesFailedAndRoutesContextMessageToQuarantineChannel() {
         byte[] raw = "raw".getBytes();
         Message<byte[]> outbound = outboundMessage(raw);
         when(routingService.routeOutbound(any())).thenAnswer(invocation ->
                 withProcessingId(invocation.getArgument(0), "processing-1"));
-        when(stepTracker.executeWithTracking(any(), eq(dlpStep)))
-                .thenReturn(PipelineResult.quarantine(
-                        raw,
-                        "POLICY_VIOLATION",
-                        "DLP QUARANTINE",
-                        MailRecordDisposition.DLP_QUARANTINE));
+        whenTracked(dlpStep, PipelineResult.quarantine(
+                raw,
+                "POLICY_VIOLATION",
+                "DLP QUARANTINE",
+                MailRecordDisposition.DLP_QUARANTINE));
 
         assertTrue(mailOutboundChannel.send(outbound));
 
         Message<?> quarantined = quarantineChannel.receive(1000);
-        PipelineResult result = assertInstanceOf(PipelineResult.class, quarantined.getPayload());
-        assertEquals(false, result.success());
-        assertEquals("POLICY_VIOLATION", result.quarantineReason());
-        assertEquals("DLP QUARANTINE", result.quarantineDetail());
-        assertEquals(MailRecordDisposition.DLP_QUARANTINE, result.recordDisposition());
+        assertArrayEquals(raw, (byte[]) quarantined.getPayload());
+        MailProcessingContext context = context(quarantined);
+        assertEquals("POLICY_VIOLATION", context.decision().quarantine().reason());
+        assertEquals("DLP QUARANTINE", context.decision().quarantine().detail());
+        assertEquals(MailRecordDisposition.DLP_QUARANTINE, context.recordDisposition());
         assertNull(relayChannel.receive(0));
         verify(stepTracker).completeProcessing("processing-1", ProcessingResult.FAILED);
-        verify(stepTracker, never()).executeWithTracking(any(), eq(signStep));
-        verify(stepTracker, never()).executeWithTracking(any(), eq(encryptStep));
-        verify(stepTracker, never()).executeWithTracking(any(), eq(dkimSignStep));
+        verify(stepTracker, never()).executeMessageWithTracking(any(), eq(signStep));
+        verify(stepTracker, never()).executeMessageWithTracking(any(), eq(encryptStep));
+        verify(stepTracker, never()).executeMessageWithTracking(any(), eq(dkimSignStep));
     }
 
     @Test
@@ -167,15 +164,14 @@ class MailPipelineFlowCharacterizationTest {
 
         Message<?> quarantined = quarantineChannel.receive(1000);
         assertArrayEquals(raw, (byte[]) quarantined.getPayload());
-        MailProcessingContext context = (MailProcessingContext) quarantined.getHeaders()
-                .get(MailProcessingHeaders.CONTEXT);
+        MailProcessingContext context = context(quarantined);
         assertEquals("DOMAIN_NOT_CONFIGURED", context.decision().quarantine().reason());
         assertEquals("domain disabled", context.decision().quarantine().detail());
         assertEquals(MailRecordDisposition.EXCEPTION, context.recordDisposition());
         assertNull(relayChannel.receive(0));
         verify(stepTracker).completeProcessing("processing-1", ProcessingResult.FAILED);
-        verify(stepTracker, never()).executeWithTracking(any(), eq(dlpStep));
-        verify(stepTracker, never()).executeWithTracking(any(), eq(signStep));
+        verify(stepTracker, never()).executeMessageWithTracking(any(), eq(dlpStep));
+        verify(stepTracker, never()).executeMessageWithTracking(any(), eq(signStep));
     }
 
     @Test
@@ -184,14 +180,10 @@ class MailPipelineFlowCharacterizationTest {
         Message<byte[]> inbound = inboundMessage(raw);
         when(routingService.routeInbound(any())).thenAnswer(invocation ->
                 withProcessingId(invocation.getArgument(0), "processing-1"));
-        when(stepTracker.executeWithTracking(any(), eq(mailAuthenticationStep)))
-                .thenReturn(PipelineResult.success("authenticated".getBytes()));
-        when(stepTracker.executeWithTracking(any(), eq(decryptStep)))
-                .thenReturn(PipelineResult.success("decrypted".getBytes()));
-        when(stepTracker.executeWithTracking(any(), eq(verifyStep)))
-                .thenReturn(PipelineResult.success("verified".getBytes()));
-        when(stepTracker.executeWithTracking(any(), eq(dlpStep)))
-                .thenReturn(PipelineResult.success("after-dlp".getBytes()));
+        whenTracked(mailAuthenticationStep, PipelineResult.success("authenticated".getBytes()));
+        whenTracked(decryptStep, PipelineResult.success("decrypted".getBytes()));
+        whenTracked(verifyStep, PipelineResult.success("verified".getBytes()));
+        whenTracked(dlpStep, PipelineResult.success("after-dlp".getBytes()));
 
         assertTrue(mailInboundChannel.send(inbound));
 
@@ -199,10 +191,10 @@ class MailPipelineFlowCharacterizationTest {
         assertArrayEquals("after-dlp".getBytes(), (byte[]) relayed.getPayload());
         assertNull(quarantineChannel.receive(0));
         verify(routingService).routeInbound(any());
-        verify(stepTracker).executeWithTracking(any(), eq(mailAuthenticationStep));
-        verify(stepTracker).executeWithTracking(any(), eq(decryptStep));
-        verify(stepTracker).executeWithTracking(any(), eq(verifyStep));
-        verify(stepTracker).executeWithTracking(any(), eq(dlpStep));
+        verify(stepTracker).executeMessageWithTracking(any(), eq(mailAuthenticationStep));
+        verify(stepTracker).executeMessageWithTracking(any(), eq(decryptStep));
+        verify(stepTracker).executeMessageWithTracking(any(), eq(verifyStep));
+        verify(stepTracker).executeMessageWithTracking(any(), eq(dlpStep));
         verify(stepTracker, never()).completeProcessing("processing-1", ProcessingResult.FAILED);
     }
 
@@ -212,25 +204,97 @@ class MailPipelineFlowCharacterizationTest {
         Message<byte[]> inbound = inboundMessage(raw);
         when(routingService.routeInbound(any())).thenAnswer(invocation ->
                 withProcessingId(invocation.getArgument(0), "processing-1"));
-        when(stepTracker.executeWithTracking(any(), eq(mailAuthenticationStep)))
-                .thenReturn(PipelineResult.quarantine(
-                        raw,
-                        "EMAIL_AUTH_FAILED",
-                        "spf=FAIL",
-                        MailRecordDisposition.EXCEPTION));
+        whenTracked(mailAuthenticationStep, PipelineResult.quarantine(
+                raw,
+                "EMAIL_AUTH_FAILED",
+                "spf=FAIL",
+                MailRecordDisposition.EXCEPTION));
 
         assertTrue(mailInboundChannel.send(inbound));
 
         Message<?> quarantined = quarantineChannel.receive(1000);
-        PipelineResult result = assertInstanceOf(PipelineResult.class, quarantined.getPayload());
-        assertEquals(false, result.success());
-        assertEquals("EMAIL_AUTH_FAILED", result.quarantineReason());
-        assertEquals("spf=FAIL", result.quarantineDetail());
+        assertArrayEquals(raw, (byte[]) quarantined.getPayload());
+        MailProcessingContext context = context(quarantined);
+        assertEquals("EMAIL_AUTH_FAILED", context.decision().quarantine().reason());
+        assertEquals("spf=FAIL", context.decision().quarantine().detail());
         assertNull(relayChannel.receive(0));
         verify(stepTracker).completeProcessing("processing-1", ProcessingResult.FAILED);
-        verify(stepTracker, never()).executeWithTracking(any(), eq(decryptStep));
-        verify(stepTracker, never()).executeWithTracking(any(), eq(verifyStep));
-        verify(stepTracker, never()).executeWithTracking(any(), eq(dlpStep));
+        verify(stepTracker, never()).executeMessageWithTracking(any(), eq(decryptStep));
+        verify(stepTracker, never()).executeMessageWithTracking(any(), eq(verifyStep));
+        verify(stepTracker, never()).executeMessageWithTracking(any(), eq(dlpStep));
+    }
+
+    @Test
+    void inboundDecryptQuarantineResultShortCircuitsVerifyAndDlp() {
+        byte[] raw = "raw".getBytes();
+        Message<byte[]> inbound = inboundMessage(raw);
+        when(routingService.routeInbound(any())).thenAnswer(invocation ->
+                withProcessingId(invocation.getArgument(0), "processing-1"));
+        whenTracked(mailAuthenticationStep, PipelineResult.success("authenticated".getBytes()));
+        whenTracked(decryptStep, PipelineResult.quarantine(
+                raw,
+                "DECRYPT_FAILED",
+                "recipient key unavailable",
+                MailRecordDisposition.EXCEPTION));
+
+        assertTrue(mailInboundChannel.send(inbound));
+
+        Message<?> quarantined = quarantineChannel.receive(1000);
+        assertArrayEquals(raw, (byte[]) quarantined.getPayload());
+        MailProcessingContext context = context(quarantined);
+        assertEquals("DECRYPT_FAILED", context.decision().quarantine().reason());
+        assertEquals("recipient key unavailable", context.decision().quarantine().detail());
+        assertNull(relayChannel.receive(0));
+        verify(stepTracker).completeProcessing("processing-1", ProcessingResult.FAILED);
+        verify(stepTracker, never()).executeMessageWithTracking(any(), eq(verifyStep));
+        verify(stepTracker, never()).executeMessageWithTracking(any(), eq(dlpStep));
+    }
+
+    @Test
+    void flowSourceNoLongerRoutesOnPipelineResultPayload() throws Exception {
+        String source = Files.readString(Path.of(
+                "src/main/java/com/sealmail/infra/mail/pipeline/MailPipelineFlow.java"));
+
+        assertFalse(source.contains("PipelineResult::success"));
+        assertFalse(source.contains("<PipelineResult"));
+    }
+
+    @SuppressWarnings("unchecked")
+    private void whenTracked(MailPipelineStep step, PipelineResult result) {
+        when(stepTracker.executeMessageWithTracking(any(), eq(step)))
+                .thenAnswer(invocation -> trackedMessage(invocation.getArgument(0), result));
+    }
+
+    private static Message<byte[]> trackedMessage(Message<byte[]> original, PipelineResult result) {
+        byte[] payload = result.payload() != null && result.payload().length > 0
+                ? result.payload()
+                : original.getPayload();
+        MessageBuilder<byte[]> builder = MessageBuilder.withPayload(payload)
+                .copyHeaders(original.getHeaders());
+        if (result.headers() != null) {
+            result.headers().forEach((name, value) -> {
+                if (name != null && value != null) {
+                    builder.setHeader(name, value);
+                }
+            });
+        }
+        if (!result.success()) {
+            MailProcessingContext context = context(builder.build());
+            if (context != null) {
+                builder.setHeader(MailProcessingHeaders.CONTEXT, context
+                        .withDecision(context.decision().withQuarantine(
+                                result.quarantineReason() != null ? result.quarantineReason() : "POLICY_VIOLATION",
+                                result.quarantineDetail() != null ? result.quarantineDetail() : result.errorMessage()))
+                        .withRecordDisposition(result.recordDisposition() != null
+                                ? result.recordDisposition()
+                                : MailRecordDisposition.EXCEPTION));
+            }
+        }
+        return builder.build();
+    }
+
+    private static MailProcessingContext context(Message<?> message) {
+        return (MailProcessingContext) message.getHeaders().get(MailProcessingHeaders.CONTEXT);
     }
 
     private static Message<byte[]> outboundMessage(byte[] payload) {

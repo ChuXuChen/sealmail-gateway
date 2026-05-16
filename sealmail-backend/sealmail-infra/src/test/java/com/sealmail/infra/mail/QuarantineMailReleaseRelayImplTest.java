@@ -11,6 +11,7 @@ import com.sealmail.domain.quarantine.QuarantineReason;
 import com.sealmail.domain.quarantine.QuarantinedMail;
 import com.sealmail.domain.shared.model.EmailAddress;
 import com.sealmail.infra.mail.pipeline.MailProcessingHeaders;
+import com.sealmail.infra.mail.pipeline.MailPipelineStep;
 import com.sealmail.infra.mail.pipeline.PipelineResult;
 import com.sealmail.infra.mail.pipeline.PipelineStepTracker;
 import com.sealmail.infra.mail.pipeline.RoutingService;
@@ -59,23 +60,19 @@ class QuarantineMailReleaseRelayImplTest {
 
         QuarantinedMail mail = mail(MailDirection.OUTBOUND);
         when(routingService.routeOutbound(any())).thenReturn(routedMessage(mail, "raw".getBytes()));
-        when(stepTracker.executeWithTracking(any(), eq(signStep)))
-                .thenReturn(PipelineResult.success("signed".getBytes()));
-        when(stepTracker.executeWithTracking(any(), eq(encryptStep)))
-                .thenReturn(PipelineResult.success("encrypted".getBytes()));
-        when(stepTracker.executeWithTracking(any(), eq(dkimSignStep)))
-                .thenReturn(PipelineResult.success("dkim".getBytes()));
-        when(stepTracker.executeWithTracking(any(), eq(relayStep)))
-                .thenReturn(PipelineResult.success("dkim".getBytes()));
+        whenTracked(stepTracker, signStep, PipelineResult.success("signed".getBytes()));
+        whenTracked(stepTracker, encryptStep, PipelineResult.success("encrypted".getBytes()));
+        whenTracked(stepTracker, dkimSignStep, PipelineResult.success("dkim".getBytes()));
+        whenTracked(stepTracker, relayStep, PipelineResult.success("dkim".getBytes()));
 
         releaseRelay.relay(mail, false);
 
         verify(routingService).routeOutbound(any());
-        verify(stepTracker).executeWithTracking(any(), eq(signStep));
-        verify(stepTracker).executeWithTracking(any(), eq(encryptStep));
-        verify(stepTracker).executeWithTracking(any(), eq(dkimSignStep));
+        verify(stepTracker).executeMessageWithTracking(any(), eq(signStep));
+        verify(stepTracker).executeMessageWithTracking(any(), eq(encryptStep));
+        verify(stepTracker).executeMessageWithTracking(any(), eq(dkimSignStep));
         ArgumentCaptor<Message<byte[]>> relayMessage = messageCaptor();
-        verify(stepTracker).executeWithTracking(relayMessage.capture(), eq(relayStep));
+        verify(stepTracker).executeMessageWithTracking(relayMessage.capture(), eq(relayStep));
         assertArrayEquals("dkim".getBytes(), relayMessage.getValue().getPayload());
         verify(stepTracker).completeProcessing("processing-1", ProcessingResult.SUCCESS);
     }
@@ -101,19 +98,15 @@ class QuarantineMailReleaseRelayImplTest {
 
         QuarantinedMail mail = mail(MailDirection.OUTBOUND);
         when(routingService.routeOutbound(any())).thenReturn(routedMessage(mail, "raw".getBytes()));
-        when(stepTracker.executeWithTracking(any(), eq(signStep)))
-                .thenReturn(PipelineResult.success("signed".getBytes()));
-        when(stepTracker.executeWithTracking(any(), eq(encryptStep)))
-                .thenReturn(PipelineResult.success("encrypted".getBytes()));
-        when(stepTracker.executeWithTracking(any(), eq(dkimSignStep)))
-                .thenReturn(PipelineResult.success("dkim".getBytes()));
-        when(stepTracker.executeWithTracking(any(), eq(relayStep)))
-                .thenReturn(PipelineResult.success("dkim".getBytes()));
+        whenTracked(stepTracker, signStep, PipelineResult.success("signed".getBytes()));
+        whenTracked(stepTracker, encryptStep, PipelineResult.success("encrypted".getBytes()));
+        whenTracked(stepTracker, dkimSignStep, PipelineResult.success("dkim".getBytes()));
+        whenTracked(stepTracker, relayStep, PipelineResult.success("dkim".getBytes()));
 
         releaseRelay.relay(mail, true);
 
         ArgumentCaptor<Message<byte[]>> encryptMessage = messageCaptor();
-        verify(stepTracker).executeWithTracking(encryptMessage.capture(), eq(encryptStep));
+        verify(stepTracker).executeMessageWithTracking(encryptMessage.capture(), eq(encryptStep));
         MailProcessingContext context = context(encryptMessage.getValue());
         assertEquals(true, context.decision().encryptionRequired());
         assertEquals(true, context.decision().mustEncrypt());
@@ -140,16 +133,15 @@ class QuarantineMailReleaseRelayImplTest {
 
         QuarantinedMail mail = mail(MailDirection.INBOUND);
         when(routingService.routeInbound(any())).thenReturn(routedMessage(mail, "raw".getBytes()));
-        when(stepTracker.executeWithTracking(any(), eq(relayStep)))
-                .thenReturn(PipelineResult.success("raw".getBytes()));
+        whenTracked(stepTracker, relayStep, PipelineResult.success("raw".getBytes()));
 
         releaseRelay.relay(mail, false);
 
         verify(routingService).routeInbound(any());
-        verify(stepTracker, never()).executeWithTracking(any(), eq(signStep));
-        verify(stepTracker, never()).executeWithTracking(any(), eq(encryptStep));
-        verify(stepTracker, never()).executeWithTracking(any(), eq(dkimSignStep));
-        verify(stepTracker).executeWithTracking(any(), eq(relayStep));
+        verify(stepTracker, never()).executeMessageWithTracking(any(), eq(signStep));
+        verify(stepTracker, never()).executeMessageWithTracking(any(), eq(encryptStep));
+        verify(stepTracker, never()).executeMessageWithTracking(any(), eq(dkimSignStep));
+        verify(stepTracker).executeMessageWithTracking(any(), eq(relayStep));
     }
 
     @Test
@@ -173,21 +165,19 @@ class QuarantineMailReleaseRelayImplTest {
 
         QuarantinedMail mail = mail(MailDirection.INBOUND);
         when(routingService.routeInbound(any())).thenReturn(routedMessage(mail, "raw".getBytes()));
-        when(stepTracker.executeWithTracking(any(), eq(encryptStep)))
-                .thenReturn(PipelineResult.success("encrypted".getBytes()));
-        when(stepTracker.executeWithTracking(any(), eq(relayStep)))
-                .thenReturn(PipelineResult.success("encrypted".getBytes()));
+        whenTracked(stepTracker, encryptStep, PipelineResult.success("encrypted".getBytes()));
+        whenTracked(stepTracker, relayStep, PipelineResult.success("encrypted".getBytes()));
 
         releaseRelay.relay(mail, true);
 
         ArgumentCaptor<Message<byte[]>> encryptMessage = messageCaptor();
-        verify(stepTracker).executeWithTracking(encryptMessage.capture(), eq(encryptStep));
+        verify(stepTracker).executeMessageWithTracking(encryptMessage.capture(), eq(encryptStep));
         MailProcessingContext context = context(encryptMessage.getValue());
         assertEquals(true, context.decision().encryptionRequired());
         assertEquals(true, context.decision().mustEncrypt());
 
         ArgumentCaptor<Message<byte[]>> relayMessage = messageCaptor();
-        verify(stepTracker).executeWithTracking(relayMessage.capture(), eq(relayStep));
+        verify(stepTracker).executeMessageWithTracking(relayMessage.capture(), eq(relayStep));
         assertArrayEquals("encrypted".getBytes(), relayMessage.getValue().getPayload());
     }
 
@@ -221,8 +211,8 @@ class QuarantineMailReleaseRelayImplTest {
         when(routingService.routeOutbound(any())).thenReturn(routed);
 
         assertThrows(QuarantineReleaseRelayException.class, () -> releaseRelay.relay(mail, false));
-        verify(stepTracker).executeWithTracking(any(), eq(quarantineStep));
-        verify(stepTracker, never()).executeWithTracking(any(), eq(signStep));
+        verify(stepTracker).executeMessageWithTracking(any(), eq(quarantineStep));
+        verify(stepTracker, never()).executeMessageWithTracking(any(), eq(signStep));
     }
 
     @Test
@@ -246,14 +236,12 @@ class QuarantineMailReleaseRelayImplTest {
 
         QuarantinedMail mail = mail(MailDirection.OUTBOUND);
         when(routingService.routeOutbound(any())).thenReturn(routedMessage(mail, "raw".getBytes()));
-        when(stepTracker.executeWithTracking(any(), eq(signStep)))
-                .thenReturn(PipelineResult.success("signed".getBytes()));
-        when(stepTracker.executeWithTracking(any(), eq(encryptStep)))
-                .thenReturn(PipelineResult.failure("encrypt failed"));
+        whenTracked(stepTracker, signStep, PipelineResult.success("signed".getBytes()));
+        whenTracked(stepTracker, encryptStep, PipelineResult.failure("encrypt failed"));
 
         assertThrows(QuarantineReleaseRelayException.class, () -> releaseRelay.relay(mail, true));
-        verify(stepTracker, never()).executeWithTracking(any(), eq(relayStep));
-        verify(stepTracker).executeWithTracking(any(), eq(quarantineStep));
+        verify(stepTracker, never()).executeMessageWithTracking(any(), eq(relayStep));
+        verify(stepTracker).executeMessageWithTracking(any(), eq(quarantineStep));
     }
 
     private static QuarantinedMail mail(MailDirection direction) {
@@ -299,6 +287,39 @@ class QuarantineMailReleaseRelayImplTest {
 
     private static MailProcessingContext context(Message<byte[]> message) {
         return (MailProcessingContext) message.getHeaders().get(MailProcessingHeaders.CONTEXT);
+    }
+
+    private static void whenTracked(PipelineStepTracker stepTracker,
+                                    MailPipelineStep step,
+                                    PipelineResult result) {
+        when(stepTracker.executeMessageWithTracking(any(), eq(step)))
+                .thenAnswer(invocation -> trackedMessage(invocation.getArgument(0), result));
+    }
+
+    private static Message<byte[]> trackedMessage(Message<byte[]> original, PipelineResult result) {
+        byte[] payload = result.payload() != null && result.payload().length > 0
+                ? result.payload()
+                : original.getPayload();
+        MessageBuilder<byte[]> builder = MessageBuilder.withPayload(payload)
+                .copyHeaders(original.getHeaders());
+        if (result.headers() != null) {
+            result.headers().forEach((name, value) -> {
+                if (name != null && value != null) {
+                    builder.setHeader(name, value);
+                }
+            });
+        }
+        if (!result.success()) {
+            MailProcessingContext context = context(original);
+            builder.setHeader(MailProcessingHeaders.CONTEXT, context
+                    .withDecision(context.decision().withQuarantine(
+                            result.quarantineReason() != null ? result.quarantineReason() : "POLICY_VIOLATION",
+                            result.quarantineDetail() != null ? result.quarantineDetail() : result.errorMessage()))
+                    .withRecordDisposition(result.recordDisposition() != null
+                            ? result.recordDisposition()
+                            : MailRecordDisposition.EXCEPTION));
+        }
+        return builder.build();
     }
 
     @SuppressWarnings("unchecked")

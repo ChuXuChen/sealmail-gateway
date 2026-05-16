@@ -1,7 +1,6 @@
 package com.sealmail.infra.mail.pipeline;
 
 import com.sealmail.domain.mailsecurity.MailProcessingContext;
-import com.sealmail.domain.mailsecurity.MailRecordDisposition;
 import com.sealmail.domain.mailsecurity.ProcessingResult;
 import com.sealmail.infra.mail.pipeline.step.DecryptStep;
 import com.sealmail.infra.mail.pipeline.step.DkimSignStep;
@@ -21,6 +20,9 @@ import org.springframework.stereotype.Component;
 
 @Component
 public class MailPipelineFlow {
+
+    private static final String RELAY_ROUTE = "relay";
+    private static final String QUARANTINE_ROUTE = "quarantine";
 
     private final DecryptStep decryptStep;
     private final VerifyStep verifyStep;
@@ -62,41 +64,31 @@ public class MailPipelineFlow {
                                        MessageChannel quarantineChannel,
                                        MessageChannel relayChannel) {
         return IntegrationFlow.from(mailInboundChannel)
-                .handle((payload, headers) -> routingService.routeInbound(byteMessage(payload, headers)))
-                .handle((payload, headers) -> quarantineIfRequired(payload, headers, quarantineChannel))
-                .handle((payload, headers) -> stepTracker.executeWithTracking(
-                        byteMessage(payload, headers),
-                        mailAuthenticationStep))
-                .<PipelineResult, Boolean>route(PipelineResult::success,
-                        authMapping -> authMapping
-                                .subFlowMapping(true, authSf -> authSf
-                                        .handle((payload, headers) -> stepTracker.executeWithTracking(
-                                                resultMessage(payload, headers),
-                                                decryptStep))
-                                        .handle((payload, headers) -> stepTracker.executeWithTracking(
-                                                resultMessage(payload, headers),
-                                                verifyStep))
-                                        .<PipelineResult, Boolean>route(PipelineResult::success,
-                                                mapping -> mapping
-                                                        .subFlowMapping(true, sf -> sf
-                                                                .handle((payload, headers) -> stepTracker.executeWithTracking(
-                                                                        resultMessage(payload, headers),
-                                                                        dlpStep))
-                                                                .<PipelineResult, Boolean>route(PipelineResult::success,
-                                                                        innerMapping -> innerMapping
-                                                                                .subFlowMapping(true, innerSf -> innerSf
-                                                                                        .handle((payload, headers) ->
-                                                                                                resultMessage(payload, headers))
-                                                                                        .channel(relayChannel))
-                                                                                .subFlowMapping(false, innerSf -> innerSf
-                                                                                        .handle((p, h) -> completeFailed(h, p))
-                                                                                        .channel(quarantineChannel))))
-                                                        .subFlowMapping(false, sf -> sf
-                                                                .handle((p, h) -> completeFailed(h, p))
-                                                                .channel(quarantineChannel))))
-                                .subFlowMapping(false, authSf -> authSf
-                                        .handle((p, h) -> completeFailed(h, p))
-                                        .channel(quarantineChannel)))
+                .handle(Message.class, (message, headers) -> routingService.routeInbound(byteMessage(message)))
+                .route(Message.class, this::deliveryRoute,
+                        mapping -> mapping
+                                .subFlowMapping(RELAY_ROUTE, sf -> sf
+                                        .handle(Message.class, (message, headers) -> runStep(message, mailAuthenticationStep))
+                                        .route(Message.class, this::deliveryRoute,
+                                                authMapping -> authMapping
+                                                        .subFlowMapping(RELAY_ROUTE, authSf -> authSf
+                                                                .handle(Message.class, (message, headers) -> runStep(message, decryptStep))
+                                                                .route(Message.class, this::deliveryRoute,
+                                                                        decryptMapping -> decryptMapping
+                                                                                .subFlowMapping(RELAY_ROUTE, decryptSf -> decryptSf
+                                                                                        .handle(Message.class, (message, headers) -> runStep(message, verifyStep))
+                                                                                        .route(Message.class, this::deliveryRoute,
+                                                                                                verifyMapping -> verifyMapping
+                                                                                                        .subFlowMapping(RELAY_ROUTE, verifySf -> verifySf
+                                                                                                                .handle(Message.class, (message, headers) -> runStep(message, dlpStep))
+                                                                                                                .route(Message.class, this::deliveryRoute,
+                                                                                                                        dlpMapping -> dlpMapping
+                                                                                                                                .channelMapping(RELAY_ROUTE, relayChannel)
+                                                                                                                                .channelMapping(QUARANTINE_ROUTE, quarantineChannel)))
+                                                                                                        .channelMapping(QUARANTINE_ROUTE, quarantineChannel)))
+                                                                                .channelMapping(QUARANTINE_ROUTE, quarantineChannel)))
+                                                        .channelMapping(QUARANTINE_ROUTE, quarantineChannel)))
+                                .channelMapping(QUARANTINE_ROUTE, quarantineChannel))
                 .get();
     }
 
@@ -104,192 +96,91 @@ public class MailPipelineFlow {
                                         MessageChannel quarantineChannel,
                                         MessageChannel relayChannel) {
         return IntegrationFlow.from(mailOutboundChannel)
-                .handle((payload, headers) -> routingService.routeOutbound(byteMessage(payload, headers)))
-                .handle((payload, headers) -> quarantineIfRequired(payload, headers, quarantineChannel))
-                .handle((payload, headers) -> stepTracker.executeWithTracking(
-                        byteMessage(payload, headers),
-                        dlpStep))
-                .<PipelineResult, Boolean>route(PipelineResult::success,
-                        dlpMapping -> dlpMapping
-                                .subFlowMapping(true, dlpSf -> dlpSf
-                                        .handle((payload, headers) -> stepTracker.executeWithTracking(
-                                                resultMessage(payload, headers),
-                                                signStep))
-                                        .<PipelineResult, Boolean>route(PipelineResult::success,
-                                                mapping -> mapping
-                                                        .subFlowMapping(true, sf -> sf
-                                                                .handle((payload, headers) -> stepTracker.executeWithTracking(
-                                                                        resultMessage(payload, headers),
-                                                                        encryptStep))
-                                                                .<PipelineResult, Boolean>route(PipelineResult::success,
-                                                                        innerMapping -> innerMapping
-                                                                                .subFlowMapping(true, innerSf -> innerSf
-                                                                                        .handle((payload, headers) ->
-                                                                                                resultMessage(payload, headers))
-                                                                                        .handle((payload, headers) -> stepTracker.executeWithTracking(
-                                                                                                byteMessage(payload, headers),
-                                                                                                dkimSignStep))
-                                                                                        .handle((payload, headers) ->
-                                                                                                resultMessage(payload, headers))
-                                                                                        .channel(relayChannel))
-                                                                                .subFlowMapping(false, innerSf -> innerSf
-                                                                                        .handle((p, h) -> completeFailed(h, p))
-                                                                                        .channel(quarantineChannel))))
-                                                        .subFlowMapping(false, sf -> sf
-                                                                .handle((p, h) -> completeFailed(h, p))
-                                                                .channel(quarantineChannel))))
-                                .subFlowMapping(false, dlpSf -> dlpSf
-                                        .handle((p, h) -> completeFailed(h, p))
-                                        .channel(quarantineChannel)))
+                .handle(Message.class, (message, headers) -> routingService.routeOutbound(byteMessage(message)))
+                .route(Message.class, this::deliveryRoute,
+                        mapping -> mapping
+                                .subFlowMapping(RELAY_ROUTE, sf -> sf
+                                        .handle(Message.class, (message, headers) -> runStep(message, dlpStep))
+                                        .route(Message.class, this::deliveryRoute,
+                                                dlpMapping -> dlpMapping
+                                                        .subFlowMapping(RELAY_ROUTE, dlpSf -> dlpSf
+                                                                .handle(Message.class, (message, headers) -> runStep(message, signStep))
+                                                                .route(Message.class, this::deliveryRoute,
+                                                                        signMapping -> signMapping
+                                                                                .subFlowMapping(RELAY_ROUTE, signSf -> signSf
+                                                                                        .handle(Message.class, (message, headers) -> runStep(message, encryptStep))
+                                                                                        .route(Message.class, this::deliveryRoute,
+                                                                                                encryptMapping -> encryptMapping
+                                                                                                        .subFlowMapping(RELAY_ROUTE, encryptSf -> encryptSf
+                                                                                                                .handle(Message.class, (message, headers) -> runStep(message, dkimSignStep))
+                                                                                                                .route(Message.class, this::deliveryRoute,
+                                                                                                                        dkimMapping -> dkimMapping
+                                                                                                                                .channelMapping(RELAY_ROUTE, relayChannel)
+                                                                                                                                .channelMapping(QUARANTINE_ROUTE, quarantineChannel)))
+                                                                                                        .channelMapping(QUARANTINE_ROUTE, quarantineChannel)))
+                                                                                .channelMapping(QUARANTINE_ROUTE, quarantineChannel)))
+                                                        .channelMapping(QUARANTINE_ROUTE, quarantineChannel)))
+                                .channelMapping(QUARANTINE_ROUTE, quarantineChannel))
                 .get();
     }
 
     public IntegrationFlow quarantineFlow(MessageChannel quarantineChannel) {
         return IntegrationFlow.from(quarantineChannel)
-                .handle((payload, headers) -> {
-                    if (payload instanceof PipelineResult result) {
-                        MailProcessingContext context = quarantineContext(result, headers);
-                        MessageBuilder<byte[]> builder = MessageBuilder.withPayload(quarantinePayload(result, headers))
-                                .copyHeaders(headers);
-                        if (context != null) {
-                            builder.setHeader(MailProcessingHeaders.CONTEXT, context);
-                        }
-                        return stepTracker.executeWithTracking(
-                                builder.build(),
-                                quarantineStep);
-                    }
-                    return stepTracker.executeWithTracking(byteMessage(payload, headers), quarantineStep);
-                })
+                .handle(Message.class, (message, headers) -> runStep(message, quarantineStep))
                 .nullChannel();
     }
 
     public IntegrationFlow relayFlow(MessageChannel relayChannel, MessageChannel quarantineChannel) {
         return IntegrationFlow.from(relayChannel)
-                .handle((payload, headers) -> stepTracker.executeWithTracking(
-                        byteMessage(payload, headers),
-                        relayStep))
-                .<PipelineResult, Boolean>route(PipelineResult::success,
+                .handle(Message.class, (message, headers) -> runStep(message, relayStep))
+                .route(Message.class, this::deliveryRoute,
                         mapping -> mapping
-                                .subFlowMapping(true, sf -> sf
-                                        .handle((p, h) -> {
-                                            String processingId = processingId(h);
-                                            stepTracker.completeProcessing(processingId, ProcessingResult.SUCCESS);
-                                            return p;
-                                        })
+                                .subFlowMapping(RELAY_ROUTE, sf -> sf
+                                        .handle(Message.class, (message, headers) -> completeSuccess(message))
                                         .nullChannel())
-                                .subFlowMapping(false, sf -> sf
-                                        .handle((p, h) -> completeFailed(h, p))
-                                        .channel(quarantineChannel)))
+                                .channelMapping(QUARANTINE_ROUTE, quarantineChannel))
                 .get();
     }
 
     public IntegrationFlow relayFlow(MessageChannel relayChannel) {
         return IntegrationFlow.from(relayChannel)
-                .handle((payload, headers) -> stepTracker.executeWithTracking(
-                        byteMessage(payload, headers),
-                        relayStep))
+                .handle(Message.class, (message, headers) -> runStep(message, relayStep))
                 .nullChannel();
     }
 
-    private Message<byte[]> byteMessage(Object payload, MessageHeaders headers) {
-        return MessageBuilder.withPayload((byte[]) payload)
-                .copyHeaders(headers)
-                .build();
+    private Message<byte[]> runStep(Object message, MailPipelineStep step) {
+        return stepTracker.executeMessageWithTracking(byteMessage(message), step);
     }
 
-    private Message<byte[]> resultMessage(Object payload, MessageHeaders headers) {
-        PipelineResult result = (PipelineResult) payload;
-        MessageBuilder<byte[]> builder = MessageBuilder.withPayload(result.payload())
-                .copyHeaders(headers);
-        if (result.headers() != null) {
-            Object context = result.headers().get(MailProcessingHeaders.CONTEXT);
-            if (context instanceof MailProcessingContext mailProcessingContext) {
-                builder.setHeader(MailProcessingHeaders.CONTEXT, mailProcessingContext);
+    private Object completeSuccess(Object message) {
+        Message<byte[]> typedMessage = byteMessage(message);
+        stepTracker.completeProcessing(processingId(typedMessage.getHeaders()), ProcessingResult.SUCCESS);
+        return typedMessage;
+    }
+
+    private Message<byte[]> byteMessage(Object message) {
+        if (message instanceof Message<?> typedMessage) {
+            Object payload = typedMessage.getPayload();
+            if (!(payload instanceof byte[] bytes)) {
+                throw new IllegalArgumentException("Mail pipeline payload must be byte[]");
             }
-        }
-        return builder.build();
-    }
-
-    private Object completeFailed(MessageHeaders headers, Object payload) {
-        String processingId = processingId(headers);
-        stepTracker.completeProcessing(processingId, ProcessingResult.FAILED);
-        return payload;
-    }
-
-    private Message<byte[]> quarantineIfRequired(Object payload,
-                                                 MessageHeaders headers,
-                                                 MessageChannel quarantineChannel) {
-        byte[] mailPayload = payload instanceof byte[] bytes ? bytes : new byte[0];
-        if (!quarantineRequired(headers)) {
-            return MessageBuilder.withPayload(mailPayload)
-                    .copyHeaders(headers)
+            return MessageBuilder.withPayload(bytes)
+                    .copyHeaders(typedMessage.getHeaders())
                     .build();
         }
-
-        String processingId = processingId(headers);
-        stepTracker.completeProcessing(processingId, ProcessingResult.FAILED);
-        quarantineChannel.send(MessageBuilder
-                .withPayload(mailPayload)
-                .copyHeaders(headers)
-                .build());
-        return null;
+        if (message instanceof byte[] bytes) {
+            return MessageBuilder.withPayload(bytes).build();
+        }
+        throw new IllegalArgumentException("Mail pipeline message must be a Spring Message<byte[]> or byte[]");
     }
 
-    private byte[] quarantinePayload(PipelineResult result, MessageHeaders headers) {
-        if (result.payload() != null && result.payload().length > 0) {
-            return result.payload();
+    private String deliveryRoute(Message<?> message) {
+        MailProcessingContext context = context(message.getHeaders());
+        if (context != null && context.decision().requiresQuarantine()) {
+            stepTracker.completeProcessing(context.processingId(), ProcessingResult.FAILED);
+            return QUARANTINE_ROUTE;
         }
-        MailProcessingContext context = context(headers);
-        if (context != null && context.originalMailContent().length > 0) {
-            return context.originalMailContent();
-        }
-        return new byte[0];
-    }
-
-    private MailProcessingContext quarantineContext(PipelineResult result, MessageHeaders headers) {
-        MailProcessingContext context = context(headers);
-        if (context == null) {
-            return null;
-        }
-        return context
-                .withDecision(context.decision().withQuarantine(
-                        quarantineReason(result, headers),
-                        quarantineDetail(result, headers)))
-                .withRecordDisposition(recordDisposition(result, headers));
-    }
-
-    private String quarantineReason(PipelineResult result, MessageHeaders headers) {
-        if (result.quarantineReason() != null && !result.quarantineReason().isBlank()) {
-            return result.quarantineReason();
-        }
-        String contextReason = quarantineReason(headers);
-        return contextReason != null && !contextReason.isBlank()
-                ? contextReason
-                : "POLICY_VIOLATION";
-    }
-
-    private String quarantineDetail(PipelineResult result, MessageHeaders headers) {
-        if (result.quarantineDetail() != null && !result.quarantineDetail().isBlank()) {
-            return result.quarantineDetail();
-        }
-        if (result.errorMessage() != null && !result.errorMessage().isBlank()) {
-            return result.errorMessage();
-        }
-        String contextDetail = quarantineDetail(headers);
-        return contextDetail != null && !contextDetail.isBlank()
-                ? contextDetail
-                : quarantineReason(result, headers);
-    }
-
-    private MailRecordDisposition recordDisposition(PipelineResult result, MessageHeaders headers) {
-        if (result.recordDisposition() != null) {
-            return result.recordDisposition();
-        }
-        MailProcessingContext context = context(headers);
-        if (context != null && context.recordDisposition() != null) {
-            return context.recordDisposition();
-        }
-        return MailRecordDisposition.EXCEPTION;
+        return RELAY_ROUTE;
     }
 
     private MailProcessingContext context(MessageHeaders headers) {
@@ -300,26 +191,5 @@ public class MailPipelineFlow {
     private String processingId(MessageHeaders headers) {
         MailProcessingContext context = context(headers);
         return context != null ? context.processingId() : null;
-    }
-
-    private boolean quarantineRequired(MessageHeaders headers) {
-        MailProcessingContext context = context(headers);
-        return context != null && context.decision().requiresQuarantine();
-    }
-
-    private String quarantineReason(MessageHeaders headers) {
-        MailProcessingContext context = context(headers);
-        if (context == null || context.decision().quarantine() == null) {
-            return null;
-        }
-        return context.decision().quarantine().reason();
-    }
-
-    private String quarantineDetail(MessageHeaders headers) {
-        MailProcessingContext context = context(headers);
-        if (context == null || context.decision().quarantine() == null) {
-            return null;
-        }
-        return context.decision().quarantine().detail();
     }
 }

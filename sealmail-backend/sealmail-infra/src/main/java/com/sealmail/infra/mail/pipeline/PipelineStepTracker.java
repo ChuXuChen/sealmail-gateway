@@ -8,10 +8,9 @@ import com.sealmail.infra.events.DomainEventPublisher;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.messaging.Message;
+import org.springframework.messaging.support.MessageBuilder;
 import org.springframework.stereotype.Component;
 
-import java.util.HashSet;
-import java.util.Set;
 import java.util.function.Function;
 
 /**
@@ -24,7 +23,6 @@ public class PipelineStepTracker {
 
     private final MailProcessingRepository mailProcessingRepository;
     private final DomainEventPublisher domainEventPublisher;
-    private static final Set<String> executedSteps = new HashSet<>();
 
     public PipelineStepTracker(MailProcessingRepository mailProcessingRepository,
                                DomainEventPublisher domainEventPublisher) {
@@ -33,7 +31,7 @@ public class PipelineStepTracker {
     }
 
     /**
-     * Execute a pipeline step with tracking. Prevents duplicate execution.
+     * Execute a pipeline step with processing-state tracking.
      * @param message The mail message
      * @param step The pipeline step to execute
      * @return The pipeline result
@@ -41,23 +39,6 @@ public class PipelineStepTracker {
     public PipelineResult executeWithTracking(Message<byte[]> message, MailPipelineStep step) {
         String processingId = processingId(message);
         String stepName = step.getStepName();
-
-        // Prevent duplicate execution for the same step and processingId
-        if (processingId != null) {
-            String stepKey = processingId + ":" + stepName;
-            synchronized (executedSteps) {
-                if (executedSteps.contains(stepKey)) {
-                    log.info("=== SKIPPING DUPLICATE STEP: {} for processing: {} ===", stepName, processingId);
-                    return PipelineResult.success(message.getPayload());
-                }
-                executedSteps.add(stepKey);
-
-                // Clean up old entries periodically
-                if (executedSteps.size() > 1000) {
-                    executedSteps.clear();
-                }
-            }
-        }
 
         log.info("=== EXECUTING STEP: {} for processing: {} ===", stepName, processingId);
 
@@ -71,7 +52,10 @@ public class PipelineStepTracker {
             }
 
             // Execute step
-            PipelineResult result = step.execute(message);
+            PipelineResult rawResult = step.execute(message);
+            PipelineResult result = rawResult != null
+                    ? rawResult
+                    : PipelineResult.failure("Pipeline step returned no result");
             if (result.events() != null && !result.events().isEmpty()) {
                 result.events().forEach(domainEventPublisher::publishEvent);
             }
@@ -80,7 +64,7 @@ public class PipelineStepTracker {
             if (processingId != null) {
                 mailProcessingRepository.findById(processingId).ifPresent(processing -> {
                     processing.completeStep(stepName, result.success(),
-                            result.success() ? null : result.quarantineReason());
+                            result.success() ? null : failureReason(result));
                     mailProcessingRepository.save(processing);
                 });
             }
@@ -109,6 +93,10 @@ public class PipelineStepTracker {
         }
     }
 
+    public Message<byte[]> executeMessageWithTracking(Message<byte[]> message, MailPipelineStep step) {
+        return toMessage(message, executeWithTracking(message, step));
+    }
+
     /**
      * Mark processing as completed with final result.
      */
@@ -131,11 +119,111 @@ public class PipelineStepTracker {
         return message -> executeWithTracking(message, step);
     }
 
-    private String processingId(Message<byte[]> message) {
-        Object value = message.getHeaders().get(MailProcessingHeaders.CONTEXT);
-        if (value instanceof MailProcessingContext context) {
-            return context.processingId();
+    public Function<Message<byte[]>, Message<byte[]>> wrapMessage(MailPipelineStep step) {
+        return message -> executeMessageWithTracking(message, step);
+    }
+
+    private Message<byte[]> toMessage(Message<byte[]> original, PipelineResult result) {
+        PipelineResult safeResult = result != null
+                ? result
+                : PipelineResult.failure("Pipeline step returned no result");
+        byte[] payload = payload(original, safeResult);
+        MessageBuilder<byte[]> builder = MessageBuilder.withPayload(payload)
+                .copyHeaders(original.getHeaders());
+        if (safeResult.headers() != null) {
+            safeResult.headers().forEach((name, value) -> {
+                if (name != null && value != null) {
+                    builder.setHeader(name, value);
+                }
+            });
         }
-        return null;
+        if (!safeResult.success()) {
+            MailProcessingContext context = resultContext(original, safeResult);
+            if (context != null) {
+                builder.setHeader(MailProcessingHeaders.CONTEXT, quarantineContext(context, safeResult));
+            }
+        }
+        return builder.build();
+    }
+
+    private byte[] payload(Message<byte[]> original, PipelineResult result) {
+        if (result.payload() != null && result.payload().length > 0) {
+            return result.payload();
+        }
+        if (!result.success()) {
+            MailProcessingContext context = resultContext(original, result);
+            if (context != null && context.originalMailContent().length > 0) {
+                return context.originalMailContent();
+            }
+        }
+        return original.getPayload();
+    }
+
+    private MailProcessingContext resultContext(Message<byte[]> original, PipelineResult result) {
+        if (result.headers() != null) {
+            Object value = result.headers().get(MailProcessingHeaders.CONTEXT);
+            if (value instanceof MailProcessingContext context) {
+                return context;
+            }
+        }
+        return context(original);
+    }
+
+    private MailProcessingContext quarantineContext(MailProcessingContext context, PipelineResult result) {
+        MailProcessingContext updated = context
+                .withDecision(context.decision().withQuarantine(
+                        quarantineReason(result),
+                        quarantineDetail(result)))
+                .withRecordDisposition(recordDisposition(context, result));
+        return updated;
+    }
+
+    private String quarantineReason(PipelineResult result) {
+        if (result.quarantineReason() != null && !result.quarantineReason().isBlank()) {
+            return result.quarantineReason();
+        }
+        return "POLICY_VIOLATION";
+    }
+
+    private String quarantineDetail(PipelineResult result) {
+        if (result.quarantineDetail() != null && !result.quarantineDetail().isBlank()) {
+            return result.quarantineDetail();
+        }
+        if (result.errorMessage() != null && !result.errorMessage().isBlank()) {
+            return result.errorMessage();
+        }
+        return quarantineReason(result);
+    }
+
+    private com.sealmail.domain.mailsecurity.MailRecordDisposition recordDisposition(
+            MailProcessingContext context,
+            PipelineResult result) {
+        if (result.recordDisposition() != null) {
+            return result.recordDisposition();
+        }
+        if (context.recordDisposition() != null) {
+            return context.recordDisposition();
+        }
+        return com.sealmail.domain.mailsecurity.MailRecordDisposition.EXCEPTION;
+    }
+
+    private String failureReason(PipelineResult result) {
+        if (result.quarantineReason() != null && !result.quarantineReason().isBlank()) {
+            return result.quarantineReason();
+        }
+        if (result.errorMessage() != null && !result.errorMessage().isBlank()) {
+            return result.errorMessage();
+        }
+        return result.quarantineDetail();
+    }
+
+    private String processingId(Message<byte[]> message) {
+        MailProcessingContext context = context(message);
+        return context != null ? context.processingId() : null;
+    }
+
+    private MailProcessingContext context(Message<?> message) {
+        Object value = message.getHeaders().get(MailProcessingHeaders.CONTEXT);
+        return value instanceof MailProcessingContext context ? context : null;
     }
 }
