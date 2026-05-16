@@ -7,6 +7,7 @@ import com.sealmail.app.exception.ResourceNotFoundException;
 import com.sealmail.app.mapper.QuarantineDtoMapper;
 import com.sealmail.app.security.PermissionChecker;
 import com.sealmail.app.security.UserContext;
+import com.sealmail.domain.config.QuarantinePolicyPort;
 import com.sealmail.domain.quarantine.QuarantineRepository;
 import com.sealmail.domain.quarantine.QuarantineStatus;
 import com.sealmail.domain.quarantine.QuarantinedMail;
@@ -28,6 +29,7 @@ public class ReleaseQuarantineUseCase {
     private final QuarantineDtoMapper mapper;
     private final PermissionChecker permissionChecker;
     private final QuarantineMailReleaseRelay releaseRelay;
+    private final QuarantinePolicyPort quarantinePolicyPort;
 
     @Transactional
     public QuarantineItemResponse execute(
@@ -63,7 +65,8 @@ public class ReleaseQuarantineUseCase {
             releasedBy = user.getUsername();
         }
 
-        boolean encryptBeforeRelease = Boolean.TRUE.equals(effectiveRequest.getEncryptBeforeRelease());
+        boolean encryptBeforeRelease = Boolean.TRUE.equals(effectiveRequest.getEncryptBeforeRelease())
+                || quarantinePolicyPort.getSettings().releaseRequiresEncryption();
         releaseRelay.relay(mail, encryptBeforeRelease);
 
         mail.release(releasedBy, releaseComment(effectiveRequest.getComment(), encryptBeforeRelease),

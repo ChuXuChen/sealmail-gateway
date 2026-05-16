@@ -7,6 +7,7 @@ public record SystemSettingsResponse(
         RuntimeResponse runtime,
         SmtpServerResponse smtpServer,
         DeliveryResponse delivery,
+        QuarantinePolicyResponse quarantinePolicy,
         CertificateValidationResponse certificateValidation,
         InternalCaResponse internalCa,
         List<CryptoCapabilityResponse> cryptoCapabilities
@@ -70,6 +71,13 @@ public record SystemSettingsResponse(
             int timeoutMs,
             boolean usernameConfigured,
             boolean passwordConfigured
+    ) {
+    }
+
+    public record QuarantinePolicyResponse(
+            int maxRetentionDays,
+            boolean notificationEnabled,
+            boolean releaseRequiresEncryption
     ) {
     }
 

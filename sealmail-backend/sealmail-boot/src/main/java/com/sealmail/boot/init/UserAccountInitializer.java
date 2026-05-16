@@ -1,6 +1,7 @@
 package com.sealmail.boot.init;
 
 import com.sealmail.app.usecase.bootstrap.SeedUserAccountUseCase;
+import com.sealmail.domain.config.SecretReferenceResolver;
 import com.sealmail.infra.config.properties.AuthProperties;
 import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
@@ -14,6 +15,7 @@ public class UserAccountInitializer {
 
     private final AuthProperties authProperties;
     private final SeedUserAccountUseCase seedUserAccountUseCase;
+    private final SecretReferenceResolver secretReferenceResolver;
 
     @PostConstruct
     public void init() {
@@ -21,15 +23,17 @@ public class UserAccountInitializer {
             if (record.getUsername() == null || record.getUsername().isBlank()) {
                 continue;
             }
-            if (record.getPassword() == null || record.getPassword().isBlank()) {
-                log.warn("Skipping seed user {} because no password is configured", record.getUsername());
+            String password = resolvePassword(record);
+            if (password == null || password.isBlank()) {
+                log.warn("Skipping seed user {} because no password secret reference is configured or resolvable",
+                        record.getUsername());
                 continue;
             }
             boolean seeded = seedUserAccountUseCase.seed(new SeedUserAccountUseCase.UserSeedCommand(
                     record.getUserId(),
                     record.getUsername(),
                     record.getEmail(),
-                    record.getPassword(),
+                    password,
                     record.getRoles(),
                     record.getManagedDomains()
             ));
@@ -37,5 +41,12 @@ public class UserAccountInitializer {
                 log.info("Seeded auth user into PostgreSQL: {}", record.getUsername());
             }
         }
+    }
+
+    private String resolvePassword(AuthProperties.UserRecord record) {
+        if (record.getPasswordSecretRef() == null || record.getPasswordSecretRef().isBlank()) {
+            return null;
+        }
+        return secretReferenceResolver.resolve(record.getPasswordSecretRef());
     }
 }

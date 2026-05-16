@@ -3,7 +3,6 @@ package com.sealmail.infra.config;
 import com.sealmail.domain.system.SystemSettingsProvider;
 import com.sealmail.infra.config.properties.CaProperties;
 import com.sealmail.infra.config.properties.PostfixProperties;
-import com.sealmail.infra.config.properties.RelayProperties;
 import com.sealmail.infra.config.properties.SecurityProperties;
 import com.sealmail.infra.config.properties.SmtpServerProperties;
 import org.springframework.core.env.Environment;
@@ -18,20 +17,23 @@ public class SystemSettingsProviderImpl implements SystemSettingsProvider {
     private final Environment environment;
     private final SmtpServerProperties smtpServerProperties;
     private final PostfixProperties postfixProperties;
-    private final RelayProperties relayProperties;
+    private final RelayPolicyService relayPolicyService;
+    private final QuarantinePolicyService quarantinePolicyService;
     private final SecurityProperties securityProperties;
     private final CaProperties caProperties;
 
     public SystemSettingsProviderImpl(Environment environment,
                                       SmtpServerProperties smtpServerProperties,
                                       PostfixProperties postfixProperties,
-                                      RelayProperties relayProperties,
+                                      RelayPolicyService relayPolicyService,
+                                      QuarantinePolicyService quarantinePolicyService,
                                       SecurityProperties securityProperties,
                                       CaProperties caProperties) {
         this.environment = environment;
         this.smtpServerProperties = smtpServerProperties;
         this.postfixProperties = postfixProperties;
-        this.relayProperties = relayProperties;
+        this.relayPolicyService = relayPolicyService;
+        this.quarantinePolicyService = quarantinePolicyService;
         this.securityProperties = securityProperties;
         this.caProperties = caProperties;
     }
@@ -42,6 +44,7 @@ public class SystemSettingsProviderImpl implements SystemSettingsProvider {
                 runtime(),
                 smtpServer(),
                 delivery(),
+                quarantinePolicy(),
                 certificateValidation(),
                 internalCa(),
                 cryptoCapabilities()
@@ -52,8 +55,8 @@ public class SystemSettingsProviderImpl implements SystemSettingsProvider {
         return new RuntimeSettings(
                 environment.getProperty("spring.application.name", "sealmail-gateway"),
                 List.of(environment.getActiveProfiles()),
-                false,
-                "application.yml / environment variables",
+                true,
+                "PostgreSQL runtime policies + application.yml deployment fallback",
                 Instant.now()
         );
     }
@@ -76,6 +79,7 @@ public class SystemSettingsProviderImpl implements SystemSettingsProvider {
     }
 
     private DeliverySettings delivery() {
+        com.sealmail.domain.config.RelayPolicyPort.RelayPolicySettings relay = relayPolicyService.getSettings();
         return new DeliverySettings(
                 postfixProperties.isEnabled() ? "POSTFIX" : "DIRECT_RELAY",
                 new PostfixSettings(
@@ -88,16 +92,25 @@ public class SystemSettingsProviderImpl implements SystemSettingsProvider {
                         emptyToNull(postfixProperties.getEnvelopeFrom())
                 ),
                 new RelaySettings(
-                        relayProperties.getHost(),
-                        relayProperties.getPort(),
-                        relayProperties.isUseTls(),
-                        relayProperties.getTimeout(),
-                        hasText(relayProperties.getUsername()),
-                        hasText(relayProperties.getPassword()),
-                        relayProperties.getUsername(),
-                        relayProperties.getPassword()
+                        relay.host(),
+                        relay.port(),
+                        relay.useTls(),
+                        relay.timeoutMs(),
+                        hasText(relay.username()),
+                        relay.passwordConfigured(),
+                        relay.username(),
+                        null
                 )
         );
+    }
+
+    private QuarantinePolicySettings quarantinePolicy() {
+        com.sealmail.domain.config.QuarantinePolicyPort.QuarantinePolicySettings settings =
+                quarantinePolicyService.getSettings();
+        return new QuarantinePolicySettings(
+                settings.maxRetentionDays(),
+                settings.notificationEnabled(),
+                settings.releaseRequiresEncryption());
     }
 
     private CertificateValidationSettings certificateValidation() {

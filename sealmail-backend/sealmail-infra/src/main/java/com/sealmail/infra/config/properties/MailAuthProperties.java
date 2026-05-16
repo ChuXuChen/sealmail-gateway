@@ -55,7 +55,7 @@ public class MailAuthProperties {
         private boolean enabled = true;
         private String selector = "sealmail";
         private String privateKeyPath;
-        private String privateKeyPem;
+        private String privateKeySecretRef;
         private List<String> signedHeaders = new ArrayList<>(
                 List.of("from", "to", "subject", "date", "message-id")
         );
@@ -84,12 +84,12 @@ public class MailAuthProperties {
             this.privateKeyPath = privateKeyPath;
         }
 
-        public String getPrivateKeyPem() {
-            return privateKeyPem;
+        public String getPrivateKeySecretRef() {
+            return privateKeySecretRef;
         }
 
-        public void setPrivateKeyPem(String privateKeyPem) {
-            this.privateKeyPem = privateKeyPem;
+        public void setPrivateKeySecretRef(String privateKeySecretRef) {
+            this.privateKeySecretRef = privateKeySecretRef;
         }
 
         public List<String> getSignedHeaders() {

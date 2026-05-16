@@ -17,6 +17,8 @@ import {
   DlpPattern,
   DlpSelection,
   SystemSettings,
+  RelayPolicy,
+  QuarantinePolicy,
   GenerateSelfSignedRequest,
   CreateRootCaRequest,
   CreateIntermediateCaRequest,
@@ -121,8 +123,7 @@ export const mailAuthApi = {
     apiClient.get<ApiResponse<MailAuthConfig>>('/api/v1/mail-auth/config'),
 
   updateConfig: (data: Partial<MailAuthConfig> & {
-    dkimPrivateKeyPem?: string;
-    clearDkimPrivateKeyPem?: boolean;
+    clearDkimPrivateKeySecretRef?: boolean;
   }) =>
     apiClient.put<ApiResponse<MailAuthConfig>>('/api/v1/mail-auth/config', data),
 
@@ -143,6 +144,20 @@ export const mailAuthApi = {
 export const systemSettingsApi = {
   get: () =>
     apiClient.get<ApiResponse<SystemSettings>>('/api/v1/system-settings'),
+};
+
+export const runtimePolicyApi = {
+  getRelay: () =>
+    apiClient.get<ApiResponse<RelayPolicy>>('/api/v1/runtime-policies/relay'),
+
+  updateRelay: (data: Partial<RelayPolicy> & { clearPasswordSecretRef?: boolean }) =>
+    apiClient.put<ApiResponse<RelayPolicy>>('/api/v1/runtime-policies/relay', data),
+
+  getQuarantine: () =>
+    apiClient.get<ApiResponse<QuarantinePolicy>>('/api/v1/runtime-policies/quarantine'),
+
+  updateQuarantine: (data: Partial<QuarantinePolicy>) =>
+    apiClient.put<ApiResponse<QuarantinePolicy>>('/api/v1/runtime-policies/quarantine', data),
 };
 
 // Certificate API (end-entity)

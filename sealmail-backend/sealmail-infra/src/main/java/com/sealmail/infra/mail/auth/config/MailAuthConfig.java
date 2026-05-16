@@ -10,6 +10,7 @@ public record MailAuthConfig(
         boolean dkimEnabled,
         String dkimSelector,
         String dkimPrivateKeyPath,
+        String dkimPrivateKeySecretRef,
         boolean dkimPrivateKeyConfigured,
         List<String> dkimSignedHeaders,
         boolean spfEnabled,

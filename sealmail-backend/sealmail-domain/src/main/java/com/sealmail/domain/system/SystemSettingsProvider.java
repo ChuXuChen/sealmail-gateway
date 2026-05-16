@@ -11,6 +11,7 @@ public interface SystemSettingsProvider {
             RuntimeSettings runtime,
             SmtpServerSettings smtpServer,
             DeliverySettings delivery,
+            QuarantinePolicySettings quarantinePolicy,
             CertificateValidationSettings certificateValidation,
             InternalCaSettings internalCa,
             List<CryptoCapability> cryptoCapabilities
@@ -81,6 +82,13 @@ public interface SystemSettingsProvider {
         public RelaySettings redacted() {
             return new RelaySettings(host, port, useTls, timeoutMs, usernameConfigured, passwordConfigured, null, null);
         }
+    }
+
+    record QuarantinePolicySettings(
+            int maxRetentionDays,
+            boolean notificationEnabled,
+            boolean releaseRequiresEncryption
+    ) {
     }
 
     record CertificateValidationSettings(

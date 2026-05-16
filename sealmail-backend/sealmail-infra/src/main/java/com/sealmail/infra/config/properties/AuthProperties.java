@@ -22,7 +22,7 @@ public class AuthProperties {
         private String userId;
         private String username;
         private String email;
-        private String password;
+        private String passwordSecretRef;
         private List<String> roles = new ArrayList<>();
         private List<String> managedDomains = new ArrayList<>();
 
@@ -50,12 +50,12 @@ public class AuthProperties {
             this.email = email;
         }
 
-        public String getPassword() {
-            return password;
+        public String getPasswordSecretRef() {
+            return passwordSecretRef;
         }
 
-        public void setPassword(String password) {
-            this.password = password;
+        public void setPasswordSecretRef(String passwordSecretRef) {
+            this.passwordSecretRef = passwordSecretRef;
         }
 
         public List<String> getRoles() {

@@ -2,6 +2,7 @@ package com.sealmail.infra.mail.auth.config;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.sealmail.domain.config.SecretReferenceResolver;
 import com.sealmail.domain.mailauth.MailAuthConfigPort;
 import com.sealmail.domain.policy.DomainName;
 import com.sealmail.domain.policy.event.MailAuthConfigChanged;
@@ -47,13 +48,16 @@ public class MailAuthConfigService implements MailAuthConfigPort {
     private final MailAuthProperties properties;
     private final ObjectMapper objectMapper;
     private final DomainEventPublisher domainEventPublisher;
+    private final SecretReferenceResolver secretReferenceResolver;
 
     public MailAuthConfigService(MailAuthProperties properties,
                                  ObjectMapper objectMapper,
-                                 DomainEventPublisher domainEventPublisher) {
+                                 DomainEventPublisher domainEventPublisher,
+                                 SecretReferenceResolver secretReferenceResolver) {
         this.properties = properties;
         this.objectMapper = objectMapper;
         this.domainEventPublisher = domainEventPublisher;
+        this.secretReferenceResolver = secretReferenceResolver;
     }
 
     @EventListener(ApplicationReadyEvent.class)
@@ -135,7 +139,7 @@ public class MailAuthConfigService implements MailAuthConfigPort {
         entity.setDkimEnabled(properties.getDkim().isEnabled());
         entity.setDkimSelector(defaultText(properties.getDkim().getSelector(), "sealmail"));
         entity.setDkimPrivateKeyPath(blankToNull(properties.getDkim().getPrivateKeyPath()));
-        entity.setDkimPrivateKeyPem(blankToNull(properties.getDkim().getPrivateKeyPem()));
+        entity.setDkimPrivateKeySecretRef(blankToNull(properties.getDkim().getPrivateKeySecretRef()));
         entity.setDkimSignedHeaders(writeList(defaultList(properties.getDkim().getSignedHeaders(), DEFAULT_SIGNED_HEADERS)));
         entity.setSpfEnabled(properties.getSpf().isEnabled());
         entity.setSpfMaxDnsLookups(properties.getSpf().getMaxDnsLookups());
@@ -185,11 +189,10 @@ public class MailAuthConfigService implements MailAuthConfigPort {
         if (update.dkimPrivateKeyPath() != null) {
             entity.setDkimPrivateKeyPath(blankToNull(update.dkimPrivateKeyPath()));
         }
-        if (Boolean.TRUE.equals(update.clearDkimPrivateKeyPem())) {
-            entity.setDkimPrivateKeyPem(null);
-        } else if (update.dkimPrivateKeyPem() != null && !update.dkimPrivateKeyPem().isBlank()) {
-            validatePrivateKey(update.dkimPrivateKeyPem());
-            entity.setDkimPrivateKeyPem(update.dkimPrivateKeyPem().trim());
+        if (Boolean.TRUE.equals(update.clearDkimPrivateKeySecretRef())) {
+            entity.setDkimPrivateKeySecretRef(null);
+        } else if (update.dkimPrivateKeySecretRef() != null) {
+            entity.setDkimPrivateKeySecretRef(blankToNull(update.dkimPrivateKeySecretRef()));
         }
         if (update.dkimSignedHeaders() != null) {
             List<String> headers = normalizeHeaders(update.dkimSignedHeaders());
@@ -267,7 +270,8 @@ public class MailAuthConfigService implements MailAuthConfigPort {
                 entity.isDkimEnabled(),
                 entity.getDkimSelector(),
                 entity.getDkimPrivateKeyPath(),
-                hasText(entity.getDkimPrivateKeyPath()) || hasText(entity.getDkimPrivateKeyPem()),
+                entity.getDkimPrivateKeySecretRef(),
+                hasText(entity.getDkimPrivateKeyPath()) || hasText(entity.getDkimPrivateKeySecretRef()),
                 readList(entity.getDkimSignedHeaders()),
                 entity.isSpfEnabled(),
                 entity.getSpfMaxDnsLookups(),
@@ -298,6 +302,7 @@ public class MailAuthConfigService implements MailAuthConfigPort {
                 config.dkimEnabled(),
                 config.dkimSelector(),
                 config.dkimPrivateKeyPath(),
+                config.dkimPrivateKeySecretRef(),
                 config.dkimPrivateKeyConfigured(),
                 config.dkimSignedHeaders(),
                 config.spfEnabled(),
@@ -329,8 +334,8 @@ public class MailAuthConfigService implements MailAuthConfigPort {
                 update.dkimEnabled(),
                 update.dkimSelector(),
                 update.dkimPrivateKeyPath(),
-                update.dkimPrivateKeyPem(),
-                update.clearDkimPrivateKeyPem(),
+                update.dkimPrivateKeySecretRef(),
+                update.clearDkimPrivateKeySecretRef(),
                 update.dkimSignedHeaders(),
                 update.spfEnabled(),
                 update.spfMaxDnsLookups(),
@@ -359,7 +364,7 @@ public class MailAuthConfigService implements MailAuthConfigPort {
         properties.getDkim().setEnabled(entity.isDkimEnabled());
         properties.getDkim().setSelector(entity.getDkimSelector());
         properties.getDkim().setPrivateKeyPath(entity.getDkimPrivateKeyPath());
-        properties.getDkim().setPrivateKeyPem(entity.getDkimPrivateKeyPem());
+        properties.getDkim().setPrivateKeySecretRef(entity.getDkimPrivateKeySecretRef());
         properties.getDkim().setSignedHeaders(readList(entity.getDkimSignedHeaders()));
         properties.getSpf().setEnabled(entity.isSpfEnabled());
         properties.getSpf().setMaxDnsLookups(entity.getSpfMaxDnsLookups());
@@ -378,8 +383,8 @@ public class MailAuthConfigService implements MailAuthConfigPort {
         if (update.dkimEnabled() != null
                 || update.dkimSelector() != null
                 || update.dkimPrivateKeyPath() != null
-                || update.dkimPrivateKeyPem() != null
-                || update.clearDkimPrivateKeyPem() != null
+                || update.dkimPrivateKeySecretRef() != null
+                || update.clearDkimPrivateKeySecretRef() != null
                 || update.dkimSignedHeaders() != null) {
             sections.add("DKIM");
         }
@@ -474,9 +479,6 @@ public class MailAuthConfigService implements MailAuthConfigPort {
     }
 
     private String resolvePrivateKeyPem(MailAuthConfigEntity entity) {
-        if (hasText(entity.getDkimPrivateKeyPem())) {
-            return entity.getDkimPrivateKeyPem();
-        }
         if (hasText(entity.getDkimPrivateKeyPath())) {
             try {
                 return Files.readString(Path.of(entity.getDkimPrivateKeyPath()));
@@ -484,15 +486,14 @@ public class MailAuthConfigService implements MailAuthConfigPort {
                 return null;
             }
         }
-        return null;
-    }
-
-    private void validatePrivateKey(String keyPem) {
-        try {
-            PemUtils.parsePrivateKey(keyPem, null);
-        } catch (Exception e) {
-            throw new IllegalArgumentException("DKIM 私钥格式无效");
+        if (hasText(entity.getDkimPrivateKeySecretRef())) {
+            try {
+                return secretReferenceResolver.resolve(entity.getDkimPrivateKeySecretRef());
+            } catch (Exception ignored) {
+                return null;
+            }
         }
+        return null;
     }
 
     private String validateAlignment(String value, String message) {

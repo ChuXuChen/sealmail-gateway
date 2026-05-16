@@ -4,6 +4,7 @@ import com.sealmail.app.dto.request.ReleaseQuarantineRequest;
 import com.sealmail.app.mapper.QuarantineDtoMapper;
 import com.sealmail.app.security.PermissionChecker;
 import com.sealmail.app.security.UserContext;
+import com.sealmail.domain.config.QuarantinePolicyPort;
 import com.sealmail.domain.quarantine.QuarantineReason;
 import com.sealmail.domain.quarantine.QuarantineRepository;
 import com.sealmail.domain.quarantine.QuarantineStatus;
@@ -28,12 +29,22 @@ class ReleaseQuarantineUseCaseTest {
 
     private final QuarantineRepository repository = mock(QuarantineRepository.class);
     private final QuarantineMailReleaseRelay releaseRelay = mock(QuarantineMailReleaseRelay.class);
+    private final QuarantinePolicyPort quarantinePolicyPort = mock(QuarantinePolicyPort.class);
     private final ReleaseQuarantineUseCase useCase = new ReleaseQuarantineUseCase(
             repository,
             new QuarantineDtoMapper(),
             new PermissionChecker(),
-            releaseRelay
+            releaseRelay,
+            quarantinePolicyPort
     );
+
+    ReleaseQuarantineUseCaseTest() {
+        when(quarantinePolicyPort.getSettings()).thenReturn(new QuarantinePolicyPort.QuarantinePolicySettings(
+                30,
+                false,
+                false,
+                java.time.Instant.now()));
+    }
 
     @Test
     void releaseAllowsNullRequestBody() {

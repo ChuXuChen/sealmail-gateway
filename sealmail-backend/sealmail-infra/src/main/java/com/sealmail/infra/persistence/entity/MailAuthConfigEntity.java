@@ -36,8 +36,8 @@ public class MailAuthConfigEntity {
     @Column(name = "dkim_private_key_path", length = 1024)
     private String dkimPrivateKeyPath;
 
-    @Column(name = "dkim_private_key_pem", columnDefinition = "TEXT")
-    private String dkimPrivateKeyPem;
+    @Column(name = "dkim_private_key_secret_ref", length = 1024)
+    private String dkimPrivateKeySecretRef;
 
     @Column(name = "dkim_signed_headers", nullable = false, columnDefinition = "TEXT")
     private String dkimSignedHeaders;

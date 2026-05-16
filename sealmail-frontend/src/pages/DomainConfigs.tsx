@@ -33,7 +33,6 @@ import { DnsRecord, DomainConfig, MailAuthConfig } from '../types';
 import { domainConfigApi, mailAuthApi } from '../api/client';
 
 const { Title } = Typography;
-const { TextArea } = Input;
 const { Option } = Select;
 
 const normalizeDomain = (value: string) =>
@@ -46,6 +45,7 @@ const emptyMailAuthConfig: MailAuthConfig = {
   dkimEnabled: false,
   dkimSelector: 'sealmail',
   dkimPrivateKeyPath: '',
+  dkimPrivateKeySecretRef: '',
   dkimPrivateKeyConfigured: false,
   dkimSignedHeaders: ['from', 'to', 'subject', 'date', 'message-id'],
   spfEnabled: false,
@@ -134,8 +134,7 @@ const DomainConfigs: React.FC = () => {
   const initialMailAuthValues = (config: MailAuthConfig | null) => ({
     ...emptyMailAuthConfig,
     ...config,
-    dkimPrivateKeyPem: '',
-    clearDkimPrivateKeyPem: false,
+    clearDkimPrivateKeySecretRef: false,
   });
 
   const handleCreate = async (values: any) => {
@@ -236,9 +235,6 @@ const DomainConfigs: React.FC = () => {
           ? values.dmarcFailureAction !== 'LOG_ONLY'
           : values.dmarcQuarantineRejectPolicy,
       };
-      if (!payload.dkimPrivateKeyPem || !payload.dkimPrivateKeyPem.trim()) {
-        delete payload.dkimPrivateKeyPem;
-      }
       const response = await mailAuthApi.updateConfig(payload);
       setMailAuthConfig(response.data.data);
       mailAuthForm.setFieldsValue(initialMailAuthValues(response.data.data));
@@ -568,10 +564,10 @@ const DomainConfigs: React.FC = () => {
                     <Form.Item name="dkimPrivateKeyPath" label="私钥路径">
                       <Input />
                     </Form.Item>
-                    <Form.Item name="dkimPrivateKeyPem" label="私钥PEM">
-                      <TextArea rows={5} />
+                    <Form.Item name="dkimPrivateKeySecretRef" label="私钥 Secret 引用">
+                      <Input placeholder="env:SEALMAIL_DKIM_PRIVATE_KEY 或 file:/run/secrets/dkim.pem" />
                     </Form.Item>
-                    <Form.Item name="clearDkimPrivateKeyPem" label="清空PEM私钥" valuePropName="checked">
+                    <Form.Item name="clearDkimPrivateKeySecretRef" label="清空 Secret 引用" valuePropName="checked">
                       <Switch />
                     </Form.Item>
                     {renderDnsRecords('DKIM')}

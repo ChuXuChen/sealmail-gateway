@@ -10,7 +10,7 @@ import com.sealmail.domain.mailsecurity.MailProcessingErrorType;
 import com.sealmail.domain.mailsecurity.MailProcessingException;
 import com.sealmail.domain.mailsecurity.RelayProfile;
 import com.sealmail.domain.shared.model.EmailAddress;
-import com.sealmail.infra.config.properties.RelayProperties;
+import com.sealmail.infra.config.RelayPolicyService;
 import com.sealmail.infra.mail.pipeline.MailProcessingHeaders;
 import com.sealmail.infra.mail.relay.SmtpRelayClient;
 import com.sealmail.infra.mail.relay.SmtpRelayRequest;
@@ -32,22 +32,18 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 class RelayStepTest {
 
     @Test
     void usesAuthenticatedRelayUserAsEnvelopeSender() throws Exception {
-        RelayProperties relayProperties = new RelayProperties();
-        relayProperties.setHost("fallback.example.com");
-        relayProperties.setPort(465);
-        relayProperties.setUsername("fallback@example.com");
-        relayProperties.setPassword("fallback-secret");
-        relayProperties.setUseTls(true);
-        relayProperties.setTimeout(30000);
+        RelayPolicyService relayPolicyService = relayPolicy(new RelayProfile(
+                "fallback.example.com", 465, true, "fallback@example.com", "fallback-secret", 30000, null));
 
         SmtpRelayClient smtpRelayClient = mock(SmtpRelayClient.class);
         doNothing().when(smtpRelayClient).send(org.mockito.ArgumentMatchers.any(SmtpRelayRequest.class));
-        RelayStep relayStep = new RelayStep(relayProperties, smtpRelayClient);
+        RelayStep relayStep = new RelayStep(relayPolicyService, smtpRelayClient);
 
         byte[] payload = "Subject: Test\r\n\r\nBody".getBytes();
         Message<byte[]> message = message(
@@ -76,17 +72,12 @@ class RelayStepTest {
 
     @Test
     void fallsBackToOriginalSenderWhenRelayAuthIsDisabled() throws Exception {
-        RelayProperties relayProperties = new RelayProperties();
-        relayProperties.setHost("smtp.example.com");
-        relayProperties.setPort(25);
-        relayProperties.setUsername("");
-        relayProperties.setPassword("");
-        relayProperties.setUseTls(false);
-        relayProperties.setTimeout(5000);
+        RelayPolicyService relayPolicyService = relayPolicy(new RelayProfile(
+                "smtp.example.com", 25, false, "", "", 5000, null));
 
         SmtpRelayClient smtpRelayClient = mock(SmtpRelayClient.class);
         doNothing().when(smtpRelayClient).send(org.mockito.ArgumentMatchers.any(SmtpRelayRequest.class));
-        RelayStep relayStep = new RelayStep(relayProperties, smtpRelayClient);
+        RelayStep relayStep = new RelayStep(relayPolicyService, smtpRelayClient);
 
         byte[] payload = "Subject: Test\r\n\r\nBody".getBytes();
         Message<byte[]> message = message(payload, "sender@example.com", List.of("recipient@example.com"),
@@ -102,17 +93,12 @@ class RelayStepTest {
 
     @Test
     void prefersExplicitRelayEnvelopeFromOverride() throws Exception {
-        RelayProperties relayProperties = new RelayProperties();
-        relayProperties.setHost("smtp.example.com");
-        relayProperties.setPort(25);
-        relayProperties.setUsername("");
-        relayProperties.setPassword("");
-        relayProperties.setUseTls(false);
-        relayProperties.setTimeout(5000);
+        RelayPolicyService relayPolicyService = relayPolicy(new RelayProfile(
+                "smtp.example.com", 25, false, "", "", 5000, null));
 
         SmtpRelayClient smtpRelayClient = mock(SmtpRelayClient.class);
         doNothing().when(smtpRelayClient).send(org.mockito.ArgumentMatchers.any(SmtpRelayRequest.class));
-        RelayStep relayStep = new RelayStep(relayProperties, smtpRelayClient);
+        RelayStep relayStep = new RelayStep(relayPolicyService, smtpRelayClient);
 
         byte[] payload = "Subject: Test\r\n\r\nBody".getBytes();
         Message<byte[]> message = message(payload, "sender@example.com", List.of("recipient@example.com"),
@@ -129,17 +115,12 @@ class RelayStepTest {
 
     @Test
     void usesRelayProfileFromContext() throws Exception {
-        RelayProperties relayProperties = new RelayProperties();
-        relayProperties.setHost("fallback.example.com");
-        relayProperties.setPort(25);
-        relayProperties.setUsername("");
-        relayProperties.setPassword("");
-        relayProperties.setUseTls(false);
-        relayProperties.setTimeout(5000);
+        RelayPolicyService relayPolicyService = relayPolicy(new RelayProfile(
+                "fallback.example.com", 25, false, "", "", 5000, null));
 
         SmtpRelayClient smtpRelayClient = mock(SmtpRelayClient.class);
         doNothing().when(smtpRelayClient).send(org.mockito.ArgumentMatchers.any(SmtpRelayRequest.class));
-        RelayStep relayStep = new RelayStep(relayProperties, smtpRelayClient);
+        RelayStep relayStep = new RelayStep(relayPolicyService, smtpRelayClient);
 
         byte[] payload = "Subject: Test\r\n\r\nBody".getBytes();
         MailEnvelope envelope = envelope("sender@example.com", List.of("recipient@example.com"), payload);
@@ -169,16 +150,11 @@ class RelayStepTest {
 
     @Test
     void refusesEncryptedOutboundRelayWhenAnyRecipientHasNoCertificate() throws Exception {
-        RelayProperties relayProperties = new RelayProperties();
-        relayProperties.setHost("smtp.example.com");
-        relayProperties.setPort(25);
-        relayProperties.setUsername("");
-        relayProperties.setPassword("");
-        relayProperties.setUseTls(false);
-        relayProperties.setTimeout(5000);
+        RelayPolicyService relayPolicyService = relayPolicy(new RelayProfile(
+                "smtp.example.com", 25, false, "", "", 5000, null));
 
         SmtpRelayClient smtpRelayClient = mock(SmtpRelayClient.class);
-        RelayStep relayStep = new RelayStep(relayProperties, smtpRelayClient);
+        RelayStep relayStep = new RelayStep(relayPolicyService, smtpRelayClient);
 
         byte[] payload = "Content-Type: application/pkcs7-mime\r\n\r\nencrypted".getBytes();
         EmailAddress missing = new EmailAddress("1261017453@qq.com");
@@ -201,16 +177,11 @@ class RelayStepTest {
 
     @Test
     void refusesSmimePayloadEvenWhenEncryptionHeadersWereLost() throws Exception {
-        RelayProperties relayProperties = new RelayProperties();
-        relayProperties.setHost("smtp.example.com");
-        relayProperties.setPort(25);
-        relayProperties.setUsername("");
-        relayProperties.setPassword("");
-        relayProperties.setUseTls(false);
-        relayProperties.setTimeout(5000);
+        RelayPolicyService relayPolicyService = relayPolicy(new RelayProfile(
+                "smtp.example.com", 25, false, "", "", 5000, null));
 
         SmtpRelayClient smtpRelayClient = mock(SmtpRelayClient.class);
-        RelayStep relayStep = new RelayStep(relayProperties, smtpRelayClient);
+        RelayStep relayStep = new RelayStep(relayPolicyService, smtpRelayClient);
 
         byte[] payload = """
                 MIME-Version: 1.0\r
@@ -246,6 +217,12 @@ class RelayStepTest {
                 Instant.now(),
                 payload
         );
+    }
+
+    private static RelayPolicyService relayPolicy(RelayProfile profile) {
+        RelayPolicyService relayPolicyService = mock(RelayPolicyService.class);
+        when(relayPolicyService.activeRelayProfile()).thenReturn(profile);
+        return relayPolicyService;
     }
 
     private static Message<byte[]> message(byte[] payload,

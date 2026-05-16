@@ -8,9 +8,10 @@ public class RelayProperties {
     private String host = "";
     private int port = 25;
     private String username = "";
-    private String password = "";
+    private String passwordSecretRef = "";
     private boolean useTls = false;
     private int timeout = 30000;
+    private String envelopeFrom = "";
 
     public String getHost() {
         return host;
@@ -36,12 +37,12 @@ public class RelayProperties {
         this.username = username;
     }
 
-    public String getPassword() {
-        return password;
+    public String getPasswordSecretRef() {
+        return passwordSecretRef;
     }
 
-    public void setPassword(String password) {
-        this.password = password;
+    public void setPasswordSecretRef(String passwordSecretRef) {
+        this.passwordSecretRef = passwordSecretRef;
     }
 
     public boolean isUseTls() {
@@ -58,5 +59,13 @@ public class RelayProperties {
 
     public void setTimeout(int timeout) {
         this.timeout = timeout;
+    }
+
+    public String getEnvelopeFrom() {
+        return envelopeFrom;
+    }
+
+    public void setEnvelopeFrom(String envelopeFrom) {
+        this.envelopeFrom = envelopeFrom;
     }
 }

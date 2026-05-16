@@ -1,5 +1,6 @@
 package com.sealmail.infra.mail.auth;
 
+import com.sealmail.domain.config.SecretReferenceResolver;
 import com.sealmail.infra.config.properties.MailAuthProperties;
 import com.sealmail.infra.crypto.util.PemUtils;
 import jakarta.mail.internet.MimeMessage;
@@ -18,9 +19,12 @@ import java.util.Locale;
 public class DkimSigner {
 
     private final MailAuthProperties properties;
+    private final SecretReferenceResolver secretReferenceResolver;
 
-    public DkimSigner(MailAuthProperties properties) {
+    public DkimSigner(MailAuthProperties properties,
+                      SecretReferenceResolver secretReferenceResolver) {
         this.properties = properties;
+        this.secretReferenceResolver = secretReferenceResolver;
     }
 
     public byte[] sign(byte[] content, String domain) {
@@ -68,12 +72,16 @@ public class DkimSigner {
     }
 
     private String resolvePrivateKeyPem() {
-        if (hasText(properties.getDkim().getPrivateKeyPem())) {
-            return properties.getDkim().getPrivateKeyPem();
-        }
         if (hasText(properties.getDkim().getPrivateKeyPath())) {
             try {
                 return Files.readString(Path.of(properties.getDkim().getPrivateKeyPath()));
+            } catch (Exception ignored) {
+                return null;
+            }
+        }
+        if (hasText(properties.getDkim().getPrivateKeySecretRef())) {
+            try {
+                return secretReferenceResolver.resolve(properties.getDkim().getPrivateKeySecretRef());
             } catch (Exception ignored) {
                 return null;
             }

@@ -3,6 +3,7 @@ package com.sealmail.app.usecase.mail;
 import com.sealmail.app.dto.request.SendMailRequest;
 import com.sealmail.app.exception.BusinessException;
 import com.sealmail.app.security.UserContext;
+import com.sealmail.domain.config.RelayPolicyPort;
 import com.sealmail.domain.certificate.Certificate;
 import com.sealmail.domain.certificate.CertificateRepository;
 import com.sealmail.domain.mail.spi.MailMessageComposer;
@@ -28,6 +29,7 @@ public class MailTestUseCase {
     private final OutboundMailSubmitter outboundMailSubmitter;
     private final CertificateRepository certificateRepository;
     private final SystemSettingsProvider systemSettingsProvider;
+    private final RelayPolicyPort relayPolicyPort;
     private final SmtpRelayProbe smtpRelayProbe;
     private final MailSampleStore mailSampleStore;
     private final MailMessageComposer mailMessageComposer;
@@ -36,6 +38,7 @@ public class MailTestUseCase {
     public MailTestUseCase(OutboundMailSubmitter outboundMailSubmitter,
                            CertificateRepository certificateRepository,
                            SystemSettingsProvider systemSettingsProvider,
+                           RelayPolicyPort relayPolicyPort,
                            SmtpRelayProbe smtpRelayProbe,
                            MailSampleStore mailSampleStore,
                            MailMessageComposer mailMessageComposer,
@@ -43,6 +46,7 @@ public class MailTestUseCase {
         this.outboundMailSubmitter = outboundMailSubmitter;
         this.certificateRepository = certificateRepository;
         this.systemSettingsProvider = systemSettingsProvider;
+        this.relayPolicyPort = relayPolicyPort;
         this.smtpRelayProbe = smtpRelayProbe;
         this.mailSampleStore = mailSampleStore;
         this.mailMessageComposer = mailMessageComposer;
@@ -155,7 +159,10 @@ public class MailTestUseCase {
                     settings.delivery().postfix().timeoutMs()
             ));
         } else {
-            SystemSettingsProvider.RelaySettings relay = settings.delivery().directRelay();
+            RelayPolicyPort.RelayProbeSettings relay = relayPolicyPort.getProbeSettings();
+            if (!relay.enabled()) {
+                return "SMTP配置测试结果:\ndirect-relay: SKIPPED: direct relay policy disabled";
+            }
             appendProbeResult(result, "direct-relay", new SmtpRelayProbe.SmtpConnectionSettings(
                     relay.host(),
                     relay.port(),

@@ -91,45 +91,14 @@ sealmail:
     port: ${SEALMAIL_RELAY_PORT:25}
     use-tls: ${SEALMAIL_RELAY_USE_TLS:false}
     username: ${SEALMAIL_RELAY_USERNAME:}
-    password: ${SEALMAIL_RELAY_PASSWORD:}
+    password-secret-ref: ${SEALMAIL_RELAY_PASSWORD_SECRET_REF:}
+    envelope-from: ${SEALMAIL_RELAY_ENVELOPE_FROM:}
     timeout: 10000
 
-  # Pipeline Configuration
-  pipeline:
-    inbound:
-      decrypt-enabled: true
-      verify-enabled: true
-      quarantine-enabled: true
-    outbound:
-      sign-enabled: true
-      encrypt-enabled: true
-
-  auth:
-    users: []
-
   mail-auth:
-    enabled: true
-    authserv-id: sealmail-gateway
-    # Content-filter deployments usually see Postfix's local IP, not the original
-    # client IP. Keep this enabled unless the gateway receives SMTP directly.
-    skip-private-relay: true
-    spf:
-      enabled: true
-      max-dns-lookups: 10
     dkim:
-      enabled: true
-      selector: sealmail
       private-key-path:
-      private-key-pem:
-      signed-headers:
-        - from
-        - to
-        - subject
-        - date
-        - message-id
-    dmarc:
-      enabled: true
-      quarantine-reject-policy: true
+      private-key-secret-ref:
 
   smime:
     crypto:
@@ -149,12 +118,6 @@ sealmail:
         content-key-algorithm: SM4
         content-key-size-bits: 128
         signature-algorithm: SM3withSM2
-
-  # Quarantine Settings
-  quarantine:
-    auto-release-after: 86400000
-    max-retention-days: 30
-    notification-enabled: false
 
   # Internal CA Settings
   ca:

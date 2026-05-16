@@ -66,6 +66,11 @@ public class QuerySystemSettingsUseCase {
                                 snapshot.delivery().directRelay().passwordConfigured()
                         )
                 ),
+                new SystemSettingsResponse.QuarantinePolicyResponse(
+                        snapshot.quarantinePolicy().maxRetentionDays(),
+                        snapshot.quarantinePolicy().notificationEnabled(),
+                        snapshot.quarantinePolicy().releaseRequiresEncryption()
+                ),
                 new SystemSettingsResponse.CertificateValidationResponse(
                         snapshot.certificateValidation().crlEnabled(),
                         snapshot.certificateValidation().ocspEnabled(),

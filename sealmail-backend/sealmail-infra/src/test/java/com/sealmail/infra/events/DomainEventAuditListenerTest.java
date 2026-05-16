@@ -13,6 +13,8 @@ import com.sealmail.domain.mailsecurity.event.MailSigned;
 import com.sealmail.domain.policy.event.DlpPatternConfigChanged;
 import com.sealmail.domain.policy.event.DlpSelectionConfigChanged;
 import com.sealmail.domain.policy.event.MailAuthConfigChanged;
+import com.sealmail.domain.policy.event.QuarantinePolicyChanged;
+import com.sealmail.domain.policy.event.RelayPolicyChanged;
 import com.sealmail.domain.quarantine.event.QuarantineReleased;
 import com.sealmail.domain.shared.model.EmailAddress;
 import org.junit.jupiter.api.Test;
@@ -128,6 +130,30 @@ class DomainEventAuditListenerTest {
         AuditLog saved = repository.single();
         assertEquals(AuditLogType.SYSTEM_CONFIG_CHANGED, saved.getType());
         assertEquals("MAIL_AUTH_CONFIG", saved.getResourceType());
+        assertEquals("default", saved.getResourceId());
+    }
+
+    @Test
+    void recordsRelayPolicyAuditLog() {
+        listener.onDomainEvent(new RelayPolicyChanged(
+                "default",
+                List.of("connection", "authentication")));
+
+        AuditLog saved = repository.single();
+        assertEquals(AuditLogType.SYSTEM_CONFIG_CHANGED, saved.getType());
+        assertEquals("RELAY_POLICY", saved.getResourceType());
+        assertEquals("default", saved.getResourceId());
+    }
+
+    @Test
+    void recordsQuarantinePolicyAuditLog() {
+        listener.onDomainEvent(new QuarantinePolicyChanged(
+                "default",
+                List.of("release")));
+
+        AuditLog saved = repository.single();
+        assertEquals(AuditLogType.SYSTEM_CONFIG_CHANGED, saved.getType());
+        assertEquals("QUARANTINE_POLICY", saved.getResourceType());
         assertEquals("default", saved.getResourceId());
     }
 

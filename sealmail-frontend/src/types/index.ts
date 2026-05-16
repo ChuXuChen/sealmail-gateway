@@ -197,6 +197,7 @@ export interface MailAuthConfig {
   dkimEnabled: boolean;
   dkimSelector: string;
   dkimPrivateKeyPath?: string;
+  dkimPrivateKeySecretRef?: string;
   dkimPrivateKeyConfigured: boolean;
   dkimSignedHeaders: string[];
   spfEnabled: boolean;
@@ -267,6 +268,11 @@ export interface SystemSettings {
       passwordConfigured: boolean;
     };
   };
+  quarantinePolicy: {
+    maxRetentionDays: number;
+    notificationEnabled: boolean;
+    releaseRequiresEncryption: boolean;
+  };
   certificateValidation: {
     crlEnabled: boolean;
     ocspEnabled: boolean;
@@ -282,6 +288,26 @@ export interface SystemSettings {
     category: string;
     algorithms: string[];
   }[];
+}
+
+export interface RelayPolicy {
+  enabled: boolean;
+  host: string;
+  port: number;
+  useTls: boolean;
+  username?: string;
+  passwordConfigured: boolean;
+  passwordSecretRef?: string;
+  timeoutMs: number;
+  envelopeFrom?: string;
+  updatedAt?: string;
+}
+
+export interface QuarantinePolicy {
+  maxRetentionDays: number;
+  notificationEnabled: boolean;
+  releaseRequiresEncryption: boolean;
+  updatedAt?: string;
 }
 
 // Certificate Issuance Types

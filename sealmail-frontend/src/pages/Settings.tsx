@@ -6,11 +6,13 @@ import {
   Descriptions,
   Form,
   Input,
+  InputNumber,
   Modal,
   Row,
   Select,
   Space,
   Spin,
+  Switch,
   Tag,
   Typography,
   message,
@@ -28,8 +30,12 @@ import {
   ThunderboltOutlined,
   ToolOutlined,
 } from '@ant-design/icons';
-import { mailTestApi, systemSettingsApi } from '../api/client';
-import type { SystemSettings as SystemSettingsSnapshot } from '../types';
+import { mailTestApi, runtimePolicyApi, systemSettingsApi } from '../api/client';
+import type {
+  QuarantinePolicy,
+  RelayPolicy,
+  SystemSettings as SystemSettingsSnapshot,
+} from '../types';
 
 const { Title, Text } = Typography;
 const { TextArea } = Input;
@@ -139,6 +145,8 @@ const descriptionStyles = {
 
 const Settings: React.FC = () => {
   const [settings, setSettings] = useState<SystemSettingsSnapshot | null>(null);
+  const [relayPolicy, setRelayPolicy] = useState<RelayPolicy | null>(null);
+  const [quarantinePolicy, setQuarantinePolicy] = useState<QuarantinePolicy | null>(null);
   const [activeSection, setActiveSection] = useState<SectionKey>('runtime');
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -148,18 +156,29 @@ const Settings: React.FC = () => {
   const [testOpen, setTestOpen] = useState(false);
   const [testLoading, setTestLoading] = useState(false);
   const [testForm] = Form.useForm<TestMailValues>();
+  const [relayForm] = Form.useForm<Partial<RelayPolicy> & { clearPasswordSecretRef?: boolean }>();
+  const [quarantineForm] = Form.useForm<Partial<QuarantinePolicy>>();
 
   useEffect(() => {
     let mounted = true;
 
     const loadInitialSettings = async () => {
       try {
-        const response = await systemSettingsApi.get();
-        if (!response.data.success) {
-          throw new Error(response.data.message);
-        }
+        const [response, relayResponse, quarantineResponse] = await Promise.all([
+          systemSettingsApi.get(),
+          runtimePolicyApi.getRelay(),
+          runtimePolicyApi.getQuarantine(),
+        ]);
+        if (!response.data.success) throw new Error(response.data.message);
         if (mounted) {
           setSettings(response.data.data);
+          setRelayPolicy(relayResponse.data.data);
+          setQuarantinePolicy(quarantineResponse.data.data);
+          relayForm.setFieldsValue({
+            ...relayResponse.data.data,
+            clearPasswordSecretRef: false,
+          });
+          quarantineForm.setFieldsValue(quarantineResponse.data.data);
         }
       } catch (error) {
         if (mounted) {
@@ -177,7 +196,7 @@ const Settings: React.FC = () => {
     return () => {
       mounted = false;
     };
-  }, []);
+  }, [quarantineForm, relayForm]);
 
   const loadSettings = async () => {
     setRefreshing(true);
@@ -187,6 +206,14 @@ const Settings: React.FC = () => {
         throw new Error(response.data.message);
       }
       setSettings(response.data.data);
+      const [relayResponse, quarantineResponse] = await Promise.all([
+        runtimePolicyApi.getRelay(),
+        runtimePolicyApi.getQuarantine(),
+      ]);
+      setRelayPolicy(relayResponse.data.data);
+      setQuarantinePolicy(quarantineResponse.data.data);
+      relayForm.setFieldsValue({ ...relayResponse.data.data, clearPasswordSecretRef: false });
+      quarantineForm.setFieldsValue(quarantineResponse.data.data);
     } catch (error) {
       message.error(getErrorMessage(error, '加载系统设置失败'));
     } finally {
@@ -242,6 +269,38 @@ const Settings: React.FC = () => {
       message.error(getErrorMessage(error, '测试邮件发送失败'));
     } finally {
       setTestLoading(false);
+    }
+  };
+
+  const handleRelayPolicySave = async (values: Partial<RelayPolicy> & { clearPasswordSecretRef?: boolean }) => {
+    try {
+      const response = await runtimePolicyApi.updateRelay(values);
+      if (!response.data.success) throw new Error(response.data.message);
+      setRelayPolicy(response.data.data);
+      relayForm.setFieldsValue({ ...response.data.data, clearPasswordSecretRef: false });
+      const settingsResponse = await systemSettingsApi.get();
+      if (settingsResponse.data.success) {
+        setSettings(settingsResponse.data.data);
+      }
+      message.success('Relay 策略已保存');
+    } catch (error) {
+      message.error(getErrorMessage(error, 'Relay 策略保存失败'));
+    }
+  };
+
+  const handleQuarantinePolicySave = async (values: Partial<QuarantinePolicy>) => {
+    try {
+      const response = await runtimePolicyApi.updateQuarantine(values);
+      if (!response.data.success) throw new Error(response.data.message);
+      setQuarantinePolicy(response.data.data);
+      quarantineForm.setFieldsValue(response.data.data);
+      const settingsResponse = await systemSettingsApi.get();
+      if (settingsResponse.data.success) {
+        setSettings(settingsResponse.data.data);
+      }
+      message.success('隔离策略已保存');
+    } catch (error) {
+      message.error(getErrorMessage(error, '隔离策略保存失败'));
     }
   };
 
@@ -336,6 +395,104 @@ const Settings: React.FC = () => {
             </>
           )}
         </Descriptions>
+      </Card>
+      <Card title="Relay 策略">
+        <Form
+          form={relayForm}
+          layout="vertical"
+          onFinish={handleRelayPolicySave}
+          initialValues={{
+            enabled: relayPolicy?.enabled ?? false,
+            host: relayPolicy?.host ?? 'localhost',
+            port: relayPolicy?.port ?? 25,
+            useTls: relayPolicy?.useTls ?? false,
+            timeoutMs: relayPolicy?.timeoutMs ?? 30000,
+          }}
+        >
+          <Row gutter={12}>
+            <Col xs={24} md={8}>
+              <Form.Item name="enabled" label="启用" valuePropName="checked">
+                <Switch />
+              </Form.Item>
+            </Col>
+            <Col xs={24} md={10}>
+              <Form.Item name="host" label="主机" rules={[{ required: true, message: '请输入主机' }]}>
+                <Input />
+              </Form.Item>
+            </Col>
+            <Col xs={24} md={6}>
+              <Form.Item name="port" label="端口">
+                <InputNumber min={1} max={65535} style={{ width: '100%' }} />
+              </Form.Item>
+            </Col>
+            <Col xs={24} md={8}>
+              <Form.Item name="useTls" label="TLS" valuePropName="checked">
+                <Switch />
+              </Form.Item>
+            </Col>
+            <Col xs={24} md={8}>
+              <Form.Item name="username" label="用户名">
+                <Input />
+              </Form.Item>
+            </Col>
+            <Col xs={24} md={8}>
+              <Form.Item name="passwordSecretRef" label="密码 Secret 引用">
+                <Input placeholder="env:SEALMAIL_RELAY_PASSWORD" />
+              </Form.Item>
+            </Col>
+            <Col xs={24} md={8}>
+              <Form.Item name="clearPasswordSecretRef" label="清空 Secret 引用" valuePropName="checked">
+                <Switch />
+              </Form.Item>
+            </Col>
+            <Col xs={24} md={8}>
+              <Form.Item name="timeoutMs" label="超时 ms">
+                <InputNumber min={1} style={{ width: '100%' }} />
+              </Form.Item>
+            </Col>
+            <Col xs={24} md={8}>
+              <Form.Item name="envelopeFrom" label="Envelope From">
+                <Input />
+              </Form.Item>
+            </Col>
+          </Row>
+          <Button type="primary" htmlType="submit">
+            保存 Relay 策略
+          </Button>
+        </Form>
+      </Card>
+      <Card title="隔离策略">
+        <Form
+          form={quarantineForm}
+          layout="vertical"
+          onFinish={handleQuarantinePolicySave}
+          initialValues={{
+            maxRetentionDays: quarantinePolicy?.maxRetentionDays ?? 30,
+            notificationEnabled: quarantinePolicy?.notificationEnabled ?? false,
+            releaseRequiresEncryption: quarantinePolicy?.releaseRequiresEncryption ?? false,
+          }}
+        >
+          <Row gutter={12}>
+            <Col xs={24} md={8}>
+              <Form.Item name="maxRetentionDays" label="保留天数">
+                <InputNumber min={1} style={{ width: '100%' }} />
+              </Form.Item>
+            </Col>
+            <Col xs={24} md={8}>
+              <Form.Item name="notificationEnabled" label="通知" valuePropName="checked">
+                <Switch />
+              </Form.Item>
+            </Col>
+            <Col xs={24} md={8}>
+              <Form.Item name="releaseRequiresEncryption" label="放行前强制加密" valuePropName="checked">
+                <Switch />
+              </Form.Item>
+            </Col>
+          </Row>
+          <Button type="primary" htmlType="submit">
+            保存隔离策略
+          </Button>
+        </Form>
       </Card>
     </Space>
   );

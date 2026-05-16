@@ -28,6 +28,8 @@ import com.sealmail.domain.policy.event.DomainConfigDeleted;
 import com.sealmail.domain.policy.event.EncryptionPolicyChanged;
 import com.sealmail.domain.policy.event.MailAuthConfigChanged;
 import com.sealmail.domain.policy.event.PreferredAlgorithmChanged;
+import com.sealmail.domain.policy.event.QuarantinePolicyChanged;
+import com.sealmail.domain.policy.event.RelayPolicyChanged;
 import com.sealmail.domain.policy.event.SigningDisabled;
 import com.sealmail.domain.policy.event.SigningEnabled;
 import com.sealmail.domain.quarantine.event.QuarantineCreated;
@@ -342,6 +344,24 @@ public class DomainEventAuditListener {
                     "MAIL_AUTH_CONFIG",
                     mailAuthChanged.getConfigId(),
                     "修改邮件认证配置: " + String.join(", ", mailAuthChanged.getChangedSections()));
+        }
+        if (event instanceof RelayPolicyChanged relayPolicyChanged) {
+            return audit(
+                    AuditLogType.SYSTEM_CONFIG_CHANGED,
+                    actor,
+                    ipAddress,
+                    "RELAY_POLICY",
+                    relayPolicyChanged.getConfigId(),
+                    "修改 Relay 策略: " + String.join(", ", relayPolicyChanged.getChangedFields()));
+        }
+        if (event instanceof QuarantinePolicyChanged quarantinePolicyChanged) {
+            return audit(
+                    AuditLogType.SYSTEM_CONFIG_CHANGED,
+                    actor,
+                    ipAddress,
+                    "QUARANTINE_POLICY",
+                    quarantinePolicyChanged.getConfigId(),
+                    "修改隔离策略: " + String.join(", ", quarantinePolicyChanged.getChangedFields()));
         }
 
         if (event instanceof AuditEvent auditEvent) {

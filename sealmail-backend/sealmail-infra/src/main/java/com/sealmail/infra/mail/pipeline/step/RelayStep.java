@@ -7,8 +7,8 @@ import com.sealmail.domain.mailsecurity.MailProcessingContext;
 import com.sealmail.domain.mailsecurity.MailProcessingErrorType;
 import com.sealmail.domain.mailsecurity.MailProcessingException;
 import com.sealmail.domain.mailsecurity.MailRecordDisposition;
-import com.sealmail.infra.config.properties.RelayProperties;
 import com.sealmail.domain.mailsecurity.RelayProfile;
+import com.sealmail.infra.config.RelayPolicyService;
 import com.sealmail.infra.mail.relay.SmtpRelayClient;
 import com.sealmail.infra.mail.relay.SmtpRelayConnectionSettings;
 import com.sealmail.infra.mail.relay.SmtpRelayRequest;
@@ -30,12 +30,12 @@ public class RelayStep {
 
     private static final Logger log = LoggerFactory.getLogger(RelayStep.class);
 
-    private final RelayProperties relayProperties;
+    private final RelayPolicyService relayPolicyService;
     private final SmtpRelayClient smtpRelayClient;
 
-    public RelayStep(RelayProperties relayProperties,
+    public RelayStep(RelayPolicyService relayPolicyService,
                      SmtpRelayClient smtpRelayClient) {
-        this.relayProperties = relayProperties;
+        this.relayPolicyService = relayPolicyService;
         this.smtpRelayClient = smtpRelayClient;
     }
 
@@ -60,16 +60,26 @@ public class RelayStep {
         validateEncryptedOutboundRelay(context, mailContent);
 
         RelayProfile relayProfile = context.relayProfile();
-        String host = relayProfile != null ? relayProfile.host() : relayProperties.getHost();
-        int port = relayProfile != null ? relayProfile.port() : relayProperties.getPort();
-        String username = relayProfile != null ? relayProfile.username() : relayProperties.getUsername();
-        String password = relayProfile != null ? relayProfile.password() : relayProperties.getPassword();
-        boolean useTls = relayProfile != null ? relayProfile.useTls() : relayProperties.isUseTls();
-        int timeout = relayProfile != null ? relayProfile.timeout() : relayProperties.getTimeout();
+        if (relayProfile == null) {
+            relayProfile = relayPolicyService.activeRelayProfile();
+        }
+        if (relayProfile == null) {
+            throw new MailProcessingException(
+                    MailProcessingErrorType.RELAY,
+                    "Direct SMTP relay policy is disabled or not configured",
+                    context,
+                    MailRecordDisposition.EXCEPTION,
+                    true,
+                    null);
+        }
+        String host = relayProfile.host();
+        int port = relayProfile.port();
+        String username = relayProfile.username();
+        String password = relayProfile.password();
+        boolean useTls = relayProfile.useTls();
+        int timeout = relayProfile.timeout();
         try {
-            String envelopeFrom = relayProfile != null
-                    ? relayProfile.envelopeFrom()
-                    : null;
+            String envelopeFrom = relayProfile.envelopeFrom();
             if (!hasText(envelopeFrom)) {
                 envelopeFrom = hasText(username) ? username : envelope.getSender().getValue();
             }
