@@ -73,10 +73,10 @@ public class OutboundMailGateway implements OutboundMailSubmitter {
                         submission.envelope(),
                         MailDirection.OUTBOUND,
                         "api",
-                        submission.mailContent(),
-                        null,
-                        submission.envelope().getRemoteHost())
-                .withPreferredAlgorithm(submission.preferredAlgorithm())
+                submission.mailContent(),
+                null,
+                submission.envelope().getRemoteHost())
+                .withCryptoProfile(submission.cryptoProfile())
                 .withDecision(decision)
                 .withCertificateSelection(certificates);
         var builder = MessageBuilder

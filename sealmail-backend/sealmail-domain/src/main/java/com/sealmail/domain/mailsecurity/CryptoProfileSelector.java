@@ -1,7 +1,6 @@
 package com.sealmail.domain.mailsecurity;
 
 import com.sealmail.domain.certificate.Certificate;
-import com.sealmail.domain.policy.PreferredAlgorithm;
 import com.sealmail.domain.shared.model.EmailAddress;
 
 import java.util.LinkedHashMap;
@@ -31,22 +30,12 @@ public class CryptoProfileSelector {
                 .findFirst();
     }
 
-    public Optional<Certificate> select(List<Certificate> certificates, PreferredAlgorithm preferredAlgorithm) {
-        return select(certificates, CryptoProfile.fromPreferredAlgorithm(preferredAlgorithm));
-    }
-
     public Optional<Certificate> selectPreferred(List<Certificate> certificates) {
         if (certificates == null || certificates.isEmpty()) {
             return Optional.empty();
         }
         Optional<Certificate> gm = select(certificates, CryptoProfile.GM);
         return gm.isPresent() ? gm : select(certificates, CryptoProfile.STANDARD);
-    }
-
-    public EncryptionProfilePlan encryptionPlan(Map<EmailAddress, List<Certificate>> certificatesByRecipient,
-                                                PreferredAlgorithm preferredAlgorithm) {
-        CryptoProfile requestedProfile = CryptoProfile.fromPreferredAlgorithm(preferredAlgorithm);
-        return encryptionPlan(certificatesByRecipient, requestedProfile);
     }
 
     public EncryptionProfilePlan encryptionPlan(Map<EmailAddress, List<Certificate>> certificatesByRecipient,

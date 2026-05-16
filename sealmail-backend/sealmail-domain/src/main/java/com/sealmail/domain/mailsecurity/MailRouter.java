@@ -1,11 +1,9 @@
 package com.sealmail.domain.mailsecurity;
 
 import com.sealmail.domain.certificate.Certificate;
-import com.sealmail.domain.certificate.CertificateSelector;
 import com.sealmail.domain.policy.DomainConfig;
 import com.sealmail.domain.policy.EncryptionPolicy;
 import com.sealmail.domain.policy.PolicyPattern;
-import com.sealmail.domain.policy.PreferredAlgorithm;
 import com.sealmail.domain.quarantine.QuarantineReason;
 import com.sealmail.domain.shared.model.EmailAddress;
 
@@ -19,20 +17,18 @@ import java.util.Optional;
  */
 public class MailRouter {
 
-    private final CertificateSelector certificateSelector;
     private final CryptoProfileSelector cryptoProfileSelector;
 
-    public MailRouter(CertificateSelector certificateSelector) {
-        this.certificateSelector = certificateSelector;
+    public MailRouter() {
         this.cryptoProfileSelector = new CryptoProfileSelector();
     }
 
     public RoutingDecision route(MailEnvelope envelope, MailDirection direction,
                                  DomainConfig domainConfig, List<Certificate> availableCertificates,
-                                 List<PolicyPattern> dlpPatterns, String mailContent) {
-
+                                 List<PolicyPattern> dlpPatterns, String mailContent,
+                                 CryptoProfile requestedProfile) {
         if (direction == MailDirection.OUTBOUND) {
-            return routeOutbound(envelope, domainConfig, availableCertificates, dlpPatterns, mailContent);
+            return routeOutbound(envelope, domainConfig, availableCertificates, dlpPatterns, mailContent, requestedProfile);
         } else {
             return routeInbound(envelope);
         }
@@ -40,7 +36,8 @@ public class MailRouter {
 
     private RoutingDecision routeOutbound(MailEnvelope envelope, DomainConfig domainConfig,
                                           List<Certificate> availableCertificates,
-                                          List<PolicyPattern> dlpPatterns, String mailContent) {
+                                          List<PolicyPattern> dlpPatterns, String mailContent,
+                                          CryptoProfile requestedProfile) {
 
         if (mailContent != null && !mailContent.isBlank()) {
             Optional<PolicyPattern> violatedPolicy = dlpPatterns.stream()
@@ -59,18 +56,19 @@ public class MailRouter {
                             "Blocked by DLP policy: " + pattern.getName()
                     );
                     case MUST_ENCRYPT -> {
-                        yield createRequiredEncryptionDecision(envelope, availableCertificates, domainConfig);
+                        yield createRequiredEncryptionDecision(envelope, availableCertificates, requestedProfile);
                     }
-                    default -> createOutboundDecision(envelope, domainConfig, availableCertificates);
+                    default -> createOutboundDecision(envelope, domainConfig, availableCertificates, requestedProfile);
                 };
             }
         }
 
-        return createOutboundDecision(envelope, domainConfig, availableCertificates);
+        return createOutboundDecision(envelope, domainConfig, availableCertificates, requestedProfile);
     }
 
     private RoutingDecision createOutboundDecision(MailEnvelope envelope, DomainConfig domainConfig,
-                                                    List<Certificate> availableCertificates) {
+                                                   List<Certificate> availableCertificates,
+                                                   CryptoProfile requestedProfile) {
         EncryptionPolicy policy = domainConfig.getEncryptionPolicy();
 
         if (policy == EncryptionPolicy.NO_ENCRYPTION) {
@@ -80,14 +78,18 @@ public class MailRouter {
             return new RoutingDecision.PassThrough();
         }
 
-        RoutingDecision encryptDecision = createOptionalEncryptionDecision(envelope, availableCertificates, domainConfig);
+        RoutingDecision encryptDecision = createOptionalEncryptionDecision(
+                envelope,
+                availableCertificates,
+                domainConfig,
+                requestedProfile);
 
         if (encryptDecision instanceof RoutingDecision.OutboundEncrypt) {
             return encryptDecision;
         }
 
         if (policy == EncryptionPolicy.MANDATORY) {
-            return createRequiredEncryptionDecision(envelope, availableCertificates, domainConfig);
+            return createRequiredEncryptionDecision(envelope, availableCertificates, requestedProfile);
         }
 
         if (domainConfig.isSigningEnabled()) {
@@ -99,8 +101,9 @@ public class MailRouter {
 
     private RoutingDecision createOptionalEncryptionDecision(MailEnvelope envelope,
                                                             List<Certificate> availableCertificates,
-                                                            DomainConfig domainConfig) {
-        EncryptionPlan plan = buildEncryptionPlan(envelope, availableCertificates, domainConfig);
+                                                            DomainConfig domainConfig,
+                                                            CryptoProfile requestedProfile) {
+        EncryptionPlan plan = buildEncryptionPlan(envelope, availableCertificates, requestedProfile);
         if (!plan.success()) {
             return new RoutingDecision.PassThrough();
         }
@@ -109,8 +112,8 @@ public class MailRouter {
 
     private RoutingDecision createRequiredEncryptionDecision(MailEnvelope envelope,
                                                             List<Certificate> availableCertificates,
-                                                            DomainConfig domainConfig) {
-        EncryptionPlan plan = buildEncryptionPlan(envelope, availableCertificates, domainConfig);
+                                                            CryptoProfile requestedProfile) {
+        EncryptionPlan plan = buildEncryptionPlan(envelope, availableCertificates, requestedProfile);
         if (plan.success()) {
             return new RoutingDecision.OutboundEncrypt(envelope.getRecipients());
         }
@@ -122,19 +125,15 @@ public class MailRouter {
 
     private EncryptionPlan buildEncryptionPlan(MailEnvelope envelope,
                                                List<Certificate> availableCertificates,
-                                               DomainConfig domainConfig) {
+                                               CryptoProfile requestedProfile) {
         Map<EmailAddress, List<Certificate>> certificatesByRecipient = new LinkedHashMap<>();
         for (EmailAddress recipient : envelope.getRecipients()) {
             certificatesByRecipient.put(recipient, certificatesForRecipient(recipient, availableCertificates));
         }
 
-        PreferredAlgorithm preference = domainConfig != null
-                ? domainConfig.getPreferredAlgorithm()
-                : PreferredAlgorithm.AUTO;
-
         CryptoProfileSelector.EncryptionProfilePlan plan = cryptoProfileSelector.encryptionPlan(
                 certificatesByRecipient,
-                preference);
+                requestedProfile);
         return plan.success()
                 ? EncryptionPlan.ok(plan.profile())
                 : EncryptionPlan.failure(plan.failureDetail());

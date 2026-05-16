@@ -2,7 +2,6 @@ package com.sealmail.domain.mailsecurity;
 
 import com.sealmail.domain.certificate.Certificate;
 import com.sealmail.domain.certificate.CertificateId;
-import com.sealmail.domain.certificate.CertificateSelector;
 import com.sealmail.domain.certificate.KeyUsage;
 import com.sealmail.domain.certificate.ValidityPeriod;
 import com.sealmail.domain.policy.DispositionAction;
@@ -24,7 +23,7 @@ import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 
 class MailRouterTest {
 
-    private final MailRouter router = new MailRouter(new CertificateSelector());
+    private final MailRouter router = new MailRouter();
 
     @Test
     void optionalEncryptionDoesNotEncryptWhenOnlySomeRecipientsHaveCertificates() {
@@ -41,7 +40,8 @@ class MailRouterTest {
                 config,
                 List.of(certificate(certified, "RSA")),
                 List.of(),
-                "hello");
+                "hello",
+                CryptoProfile.AUTO);
 
         assertInstanceOf(RoutingDecision.PassThrough.class, decision);
     }
@@ -61,7 +61,8 @@ class MailRouterTest {
                 config,
                 List.of(certificate(certified, "RSA")),
                 List.of(),
-                "hello");
+                "hello",
+                CryptoProfile.AUTO);
 
         RoutingDecision.Quarantine quarantine = assertInstanceOf(RoutingDecision.Quarantine.class, decision);
         assertEquals(QuarantineReason.CERTIFICATE_MISSING, quarantine.getReason());
@@ -82,7 +83,8 @@ class MailRouterTest {
                 config,
                 List.of(certificate(certified, "RSA")),
                 List.of(new PolicyPattern("encrypt", "secret", 1, DispositionAction.MUST_ENCRYPT)),
-                "secret");
+                "secret",
+                CryptoProfile.AUTO);
 
         RoutingDecision.Quarantine quarantine = assertInstanceOf(RoutingDecision.Quarantine.class, decision);
         assertEquals(QuarantineReason.CERTIFICATE_MISSING, quarantine.getReason());
@@ -104,7 +106,8 @@ class MailRouterTest {
                 config,
                 List.of(certificate(recipientA, "RSA"), certificate(recipientB, "RSA")),
                 List.of(),
-                "hello");
+                "hello",
+                CryptoProfile.AUTO);
 
         RoutingDecision.OutboundEncrypt encrypt = assertInstanceOf(RoutingDecision.OutboundEncrypt.class, decision);
         assertEquals(envelope.getRecipients(), encrypt.getRecipients());

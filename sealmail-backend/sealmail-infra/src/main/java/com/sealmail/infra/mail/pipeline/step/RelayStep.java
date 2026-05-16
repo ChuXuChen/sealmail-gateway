@@ -1,33 +1,25 @@
 package com.sealmail.infra.mail.pipeline.step;
 
-import com.sealmail.domain.certificate.Certificate;
-import com.sealmail.domain.certificate.CertificateRepository;
-import com.sealmail.domain.mailsecurity.CryptoProfileSelector;
+import com.sealmail.domain.mailsecurity.CryptoProfile;
 import com.sealmail.domain.mailsecurity.MailEnvelope;
 import com.sealmail.domain.mailsecurity.MailDirection;
 import com.sealmail.domain.mailsecurity.MailProcessingContext;
 import com.sealmail.domain.mailsecurity.MailProcessingErrorType;
 import com.sealmail.domain.mailsecurity.MailProcessingException;
 import com.sealmail.domain.mailsecurity.MailRecordDisposition;
-import com.sealmail.domain.policy.PreferredAlgorithm;
-import com.sealmail.domain.shared.model.EmailAddress;
 import com.sealmail.infra.config.properties.RelayProperties;
 import com.sealmail.domain.mailsecurity.RelayProfile;
 import com.sealmail.infra.mail.relay.SmtpRelayClient;
 import com.sealmail.infra.mail.relay.SmtpRelayConnectionSettings;
 import com.sealmail.infra.mail.relay.SmtpRelayRequest;
 import com.sealmail.infra.mail.pipeline.MailProcessingHeaders;
-import com.sealmail.infra.mail.pipeline.MailProcessingMessages;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.messaging.Message;
 import org.springframework.stereotype.Component;
 
 import java.nio.charset.StandardCharsets;
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.Locale;
 
 /**
@@ -40,24 +32,11 @@ public class RelayStep {
 
     private final RelayProperties relayProperties;
     private final SmtpRelayClient smtpRelayClient;
-    private final CertificateRepository certificateRepository;
-    private final CryptoProfileSelector cryptoProfileSelector;
 
     public RelayStep(RelayProperties relayProperties,
-                     SmtpRelayClient smtpRelayClient,
-                     CertificateRepository certificateRepository) {
-        this(relayProperties, smtpRelayClient, certificateRepository, new CryptoProfileSelector());
-    }
-
-    @Autowired
-    public RelayStep(RelayProperties relayProperties,
-                     SmtpRelayClient smtpRelayClient,
-                     CertificateRepository certificateRepository,
-                     CryptoProfileSelector cryptoProfileSelector) {
+                     SmtpRelayClient smtpRelayClient) {
         this.relayProperties = relayProperties;
         this.smtpRelayClient = smtpRelayClient;
-        this.certificateRepository = certificateRepository;
-        this.cryptoProfileSelector = cryptoProfileSelector;
     }
 
     public Message<byte[]> execute(Message<byte[]> message) {
@@ -78,10 +57,7 @@ public class RelayStep {
                     context);
         }
 
-        Message<byte[]> relayGuard = validateEncryptedOutboundRelay(message, context, envelope, mailContent);
-        if (relayGuard != null) {
-            return relayGuard;
-        }
+        validateEncryptedOutboundRelay(context, mailContent);
 
         RelayProfile relayProfile = context.relayProfile();
         String host = relayProfile != null ? relayProfile.host() : relayProperties.getHost();
@@ -123,6 +99,9 @@ public class RelayStep {
             return message;
 
         } catch (Exception e) {
+            if (e instanceof MailProcessingException mailProcessingException) {
+                throw mailProcessingException;
+            }
             log.error("Relay step failed: {} - host: {}, port: {}, user: {}",
                     e.getMessage(), host, port, username, e);
             throw new MailProcessingException(
@@ -139,34 +118,46 @@ public class RelayStep {
         return "relay";
     }
 
-    private Message<byte[]> validateEncryptedOutboundRelay(Message<byte[]> message,
-                                                           MailProcessingContext context,
-                                                           MailEnvelope envelope,
-                                                           byte[] mailContent) {
+    private void validateEncryptedOutboundRelay(MailProcessingContext context, byte[] mailContent) {
         if (!isOutbound(context)) {
-            return null;
+            return;
         }
         boolean encryptionRequired = context.decision().encryptionRequired()
                 || context.decision().mustEncrypt()
                 || context.smimeEncrypted()
                 || isSmimeEncryptedPayload(mailContent);
         if (!encryptionRequired) {
-            return null;
+            return;
         }
 
-        PreferredAlgorithm preference = context.preferredAlgorithm();
-        EncryptionPlan plan = buildEncryptionPlan(envelope, preference);
-        if (plan.success()) {
-            return null;
+        CryptoProfile profile = context.cryptoProfile();
+        if (profile == null || !profile.isConcrete()) {
+            throwRelayGuardException(context, "Refusing to relay encrypted outbound mail: 无法确定邮件加密Profile");
         }
 
-        String detail = "Refusing to relay encrypted outbound mail: " + plan.failureDetail();
+        if (context.certificateSelection().recipientCertificates().isEmpty()) {
+            throwRelayGuardException(context, "Refusing to relay encrypted outbound mail: 未找到收件人加密证书");
+        }
+
+        if (!context.certificateSelection().recipientCertificates().keySet().containsAll(context.envelope().getRecipients())) {
+            List<String> missingRecipients = context.envelope().getRecipients().stream()
+                    .filter(recipient -> !context.certificateSelection().recipientCertificates().containsKey(recipient))
+                    .map(com.sealmail.domain.shared.model.EmailAddress::getValue)
+                    .toList();
+            throwRelayGuardException(context, "Refusing to relay encrypted outbound mail: 以下收件人没有加密证书: "
+                    + String.join(", ", missingRecipients));
+        }
+    }
+
+    private void throwRelayGuardException(MailProcessingContext context, String detail) {
         log.error(detail);
-        return MailProcessingMessages.quarantine(
-                message,
-                "CERTIFICATE_MISSING",
+        throw new MailProcessingException(
+                MailProcessingErrorType.RELAY,
                 detail,
-                MailRecordDisposition.EXCEPTION);
+                context,
+                MailRecordDisposition.EXCEPTION,
+                false,
+                null);
     }
 
     private boolean isSmimeEncryptedPayload(byte[] mailContent) {
@@ -186,17 +177,6 @@ public class RelayStep {
         return context.direction() == MailDirection.OUTBOUND;
     }
 
-    private EncryptionPlan buildEncryptionPlan(MailEnvelope envelope, PreferredAlgorithm preference) {
-        Map<EmailAddress, List<Certificate>> certificatesByRecipient = new LinkedHashMap<>();
-        for (EmailAddress recipient : envelope.getRecipients()) {
-            certificatesByRecipient.put(recipient, certificateRepository.findTrustedForEncryption(recipient));
-        }
-        CryptoProfileSelector.EncryptionProfilePlan plan = cryptoProfileSelector.encryptionPlan(
-                certificatesByRecipient,
-                preference);
-        return plan.success() ? EncryptionPlan.ok() : EncryptionPlan.failure(plan.failureDetail());
-    }
-
     private static boolean hasText(String value) {
         return value != null && !value.isBlank();
     }
@@ -206,13 +186,4 @@ public class RelayStep {
         return value instanceof MailProcessingContext context ? context : null;
     }
 
-    private record EncryptionPlan(boolean success, String failureDetail) {
-        static EncryptionPlan ok() {
-            return new EncryptionPlan(true, null);
-        }
-
-        static EncryptionPlan failure(String detail) {
-            return new EncryptionPlan(false, detail);
-        }
-    }
 }

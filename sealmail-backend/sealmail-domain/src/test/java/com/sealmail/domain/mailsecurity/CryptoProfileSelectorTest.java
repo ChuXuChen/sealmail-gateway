@@ -4,7 +4,6 @@ import com.sealmail.domain.certificate.Certificate;
 import com.sealmail.domain.certificate.CertificateId;
 import com.sealmail.domain.certificate.KeyUsage;
 import com.sealmail.domain.certificate.ValidityPeriod;
-import com.sealmail.domain.policy.PreferredAlgorithm;
 import com.sealmail.domain.shared.model.EmailAddress;
 import org.junit.jupiter.api.Test;
 
@@ -32,7 +31,7 @@ class CryptoProfileSelectorTest {
                 Map.of(
                         recipientA, List.of(certificate(recipientA, "SM2")),
                         recipientB, List.of(certificate(recipientB, "SM2"))),
-                PreferredAlgorithm.AUTO);
+                CryptoProfile.AUTO);
 
         assertTrue(plan.success());
         assertEquals(CryptoProfile.GM, plan.profile());
@@ -48,7 +47,7 @@ class CryptoProfileSelectorTest {
                 Map.of(
                         recipientA, List.of(certificate(recipientA, "SM2"), certificate(recipientA, "RSA")),
                         recipientB, List.of(certificate(recipientB, "RSA"))),
-                PreferredAlgorithm.AUTO);
+                CryptoProfile.AUTO);
 
         assertTrue(plan.success());
         assertEquals(CryptoProfile.STANDARD, plan.profile());
@@ -63,7 +62,7 @@ class CryptoProfileSelectorTest {
                 Map.of(
                         recipientA, List.of(certificate(recipientA, "SM2")),
                         recipientB, List.of(certificate(recipientB, "RSA"))),
-                PreferredAlgorithm.AUTO);
+                CryptoProfile.AUTO);
 
         assertFalse(plan.success());
         assertTrue(plan.failureDetail().contains("无法共享同一加密Profile"));
@@ -78,7 +77,7 @@ class CryptoProfileSelectorTest {
                 Map.of(
                         recipientA, List.of(certificate(recipientA, "SM2")),
                         recipientB, List.of(certificate(recipientB, "RSA"))),
-                PreferredAlgorithm.GM_ONLY);
+                CryptoProfile.GM);
 
         assertFalse(plan.success());
         assertTrue(plan.failureDetail().contains("b@example.com"));

@@ -1,14 +1,13 @@
 package com.sealmail.infra.mail.pipeline.step;
 
-import com.sealmail.domain.certificate.Certificate;
-import com.sealmail.domain.certificate.CertificateId;
-import com.sealmail.domain.certificate.CertificateRepository;
-import com.sealmail.domain.certificate.KeyUsage;
-import com.sealmail.domain.certificate.ValidityPeriod;
+import com.sealmail.domain.mailsecurity.CertificateSelection;
+import com.sealmail.domain.mailsecurity.CryptoProfile;
 import com.sealmail.domain.mailsecurity.MailDirection;
 import com.sealmail.domain.mailsecurity.MailEnvelope;
 import com.sealmail.domain.mailsecurity.MailProcessingContext;
 import com.sealmail.domain.mailsecurity.MailProcessingDecision;
+import com.sealmail.domain.mailsecurity.MailProcessingErrorType;
+import com.sealmail.domain.mailsecurity.MailProcessingException;
 import com.sealmail.domain.mailsecurity.RelayProfile;
 import com.sealmail.domain.shared.model.EmailAddress;
 import com.sealmail.infra.config.properties.RelayProperties;
@@ -20,20 +19,19 @@ import org.mockito.ArgumentCaptor;
 import org.springframework.messaging.Message;
 import org.springframework.messaging.support.MessageBuilder;
 
-import java.math.BigInteger;
 import java.time.Instant;
 import java.util.List;
-import java.util.Set;
+import java.util.Map;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
 
 class RelayStepTest {
 
@@ -49,7 +47,7 @@ class RelayStepTest {
 
         SmtpRelayClient smtpRelayClient = mock(SmtpRelayClient.class);
         doNothing().when(smtpRelayClient).send(org.mockito.ArgumentMatchers.any(SmtpRelayRequest.class));
-        RelayStep relayStep = new RelayStep(relayProperties, smtpRelayClient, mock(CertificateRepository.class));
+        RelayStep relayStep = new RelayStep(relayProperties, smtpRelayClient);
 
         byte[] payload = "Subject: Test\r\n\r\nBody".getBytes();
         Message<byte[]> message = message(
@@ -88,7 +86,7 @@ class RelayStepTest {
 
         SmtpRelayClient smtpRelayClient = mock(SmtpRelayClient.class);
         doNothing().when(smtpRelayClient).send(org.mockito.ArgumentMatchers.any(SmtpRelayRequest.class));
-        RelayStep relayStep = new RelayStep(relayProperties, smtpRelayClient, mock(CertificateRepository.class));
+        RelayStep relayStep = new RelayStep(relayProperties, smtpRelayClient);
 
         byte[] payload = "Subject: Test\r\n\r\nBody".getBytes();
         Message<byte[]> message = message(payload, "sender@example.com", List.of("recipient@example.com"),
@@ -114,7 +112,7 @@ class RelayStepTest {
 
         SmtpRelayClient smtpRelayClient = mock(SmtpRelayClient.class);
         doNothing().when(smtpRelayClient).send(org.mockito.ArgumentMatchers.any(SmtpRelayRequest.class));
-        RelayStep relayStep = new RelayStep(relayProperties, smtpRelayClient, mock(CertificateRepository.class));
+        RelayStep relayStep = new RelayStep(relayProperties, smtpRelayClient);
 
         byte[] payload = "Subject: Test\r\n\r\nBody".getBytes();
         Message<byte[]> message = message(payload, "sender@example.com", List.of("recipient@example.com"),
@@ -141,7 +139,7 @@ class RelayStepTest {
 
         SmtpRelayClient smtpRelayClient = mock(SmtpRelayClient.class);
         doNothing().when(smtpRelayClient).send(org.mockito.ArgumentMatchers.any(SmtpRelayRequest.class));
-        RelayStep relayStep = new RelayStep(relayProperties, smtpRelayClient, mock(CertificateRepository.class));
+        RelayStep relayStep = new RelayStep(relayProperties, smtpRelayClient);
 
         byte[] payload = "Subject: Test\r\n\r\nBody".getBytes();
         MailEnvelope envelope = envelope("sender@example.com", List.of("recipient@example.com"), payload);
@@ -180,27 +178,24 @@ class RelayStepTest {
         relayProperties.setTimeout(5000);
 
         SmtpRelayClient smtpRelayClient = mock(SmtpRelayClient.class);
-        CertificateRepository certificateRepository = mock(CertificateRepository.class);
-        RelayStep relayStep = new RelayStep(relayProperties, smtpRelayClient, certificateRepository);
+        RelayStep relayStep = new RelayStep(relayProperties, smtpRelayClient);
 
         byte[] payload = "Content-Type: application/pkcs7-mime\r\n\r\nencrypted".getBytes();
-        EmailAddress certified = new EmailAddress("2416507029@qq.com");
         EmailAddress missing = new EmailAddress("1261017453@qq.com");
-        when(certificateRepository.findTrustedForEncryption(certified))
-                .thenReturn(List.of(certificate(certified, "RSA")));
-        when(certificateRepository.findTrustedForEncryption(missing)).thenReturn(List.of());
+        EmailAddress certified = new EmailAddress("2416507029@qq.com");
 
         Message<byte[]> message = message(payload, "sender@example.com",
                 List.of(certified.getValue(), missing.getValue()),
                 MailDirection.OUTBOUND,
                 MailProcessingDecision.none().withEncryptionRequired(true),
-                null);
+                null,
+                CryptoProfile.STANDARD,
+                certificates(Map.entry(certified, "cert-A")));
 
-        Message<byte[]> result = relayStep.execute(message);
+        MailProcessingException error = assertThrows(MailProcessingException.class, () -> relayStep.execute(message));
 
-        MailProcessingContext context = context(result);
-        assertTrue(context.decision().requiresQuarantine());
-        assertTrue(context.decision().quarantine().detail().contains("1261017453@qq.com"));
+        assertEquals(MailProcessingErrorType.RELAY, error.errorType());
+        assertTrue(error.getMessage().contains("1261017453@qq.com"));
         verify(smtpRelayClient, never()).send(org.mockito.ArgumentMatchers.any(SmtpRelayRequest.class));
     }
 
@@ -215,8 +210,7 @@ class RelayStepTest {
         relayProperties.setTimeout(5000);
 
         SmtpRelayClient smtpRelayClient = mock(SmtpRelayClient.class);
-        CertificateRepository certificateRepository = mock(CertificateRepository.class);
-        RelayStep relayStep = new RelayStep(relayProperties, smtpRelayClient, certificateRepository);
+        RelayStep relayStep = new RelayStep(relayProperties, smtpRelayClient);
 
         byte[] payload = """
                 MIME-Version: 1.0\r
@@ -224,24 +218,21 @@ class RelayStepTest {
                 \r
                 encrypted
                 """.getBytes();
-        EmailAddress certified = new EmailAddress("2416507029@qq.com");
         EmailAddress missing = new EmailAddress("1261017453@qq.com");
-        when(certificateRepository.findTrustedForEncryption(certified))
-                .thenReturn(List.of(certificate(certified, "RSA")));
-        when(certificateRepository.findTrustedForEncryption(missing)).thenReturn(List.of());
+        EmailAddress certified = new EmailAddress("2416507029@qq.com");
 
         Message<byte[]> message = message(payload, "sender@example.com",
                 List.of(certified.getValue(), missing.getValue()),
                 MailDirection.OUTBOUND,
                 MailProcessingDecision.none(),
-                null);
+                null,
+                CryptoProfile.STANDARD,
+                certificates(Map.entry(certified, "cert-A")));
 
-        Message<byte[]> result = relayStep.execute(message);
+        MailProcessingException error = assertThrows(MailProcessingException.class, () -> relayStep.execute(message));
 
-        MailProcessingContext context = context(result);
-        assertTrue(context.decision().requiresQuarantine());
-        assertEquals("CERTIFICATE_MISSING", context.decision().quarantine().reason());
-        assertTrue(context.decision().quarantine().detail().contains("1261017453@qq.com"));
+        assertEquals(MailProcessingErrorType.RELAY, error.errorType());
+        assertTrue(error.getMessage().contains("1261017453@qq.com"));
         verify(smtpRelayClient, never()).send(org.mockito.ArgumentMatchers.any(SmtpRelayRequest.class));
     }
 
@@ -263,33 +254,38 @@ class RelayStepTest {
                                            MailDirection direction,
                                            MailProcessingDecision decision,
                                            RelayProfile relayProfile) {
+        return message(payload, sender, recipients, direction, decision, relayProfile, CryptoProfile.AUTO,
+                CertificateSelection.empty());
+    }
+
+    private static Message<byte[]> message(byte[] payload,
+                                           String sender,
+                                           List<String> recipients,
+                                           MailDirection direction,
+                                           MailProcessingDecision decision,
+                                           RelayProfile relayProfile,
+                                           CryptoProfile cryptoProfile,
+                                           CertificateSelection certificates) {
         MailProcessingContext context = MailProcessingContext.create(envelope(sender, recipients, payload))
                 .withDirection(direction)
                 .withDecision(decision)
-                .withRelayProfile(relayProfile);
+                .withRelayProfile(relayProfile)
+                .withCryptoProfile(cryptoProfile)
+                .withCertificateSelection(certificates);
         return MessageBuilder.withPayload(payload)
                 .setHeader(MailProcessingHeaders.CONTEXT, context)
                 .build();
     }
 
-    private static Certificate certificate(EmailAddress owner, String algorithm) {
-        Certificate cert = Certificate.importCertificate(
-                new CertificateId(UUID.randomUUID().toString()),
-                owner,
-                "pem-" + UUID.randomUUID(),
-                new ValidityPeriod(Instant.now().minusSeconds(60), Instant.now().plusSeconds(3600)),
-                Set.of(KeyUsage.ENCRYPTION),
-                "CN=issuer",
-                "CN=subject",
-                BigInteger.ONE,
-                "ski-" + UUID.randomUUID()
-        );
-        cert.trust();
-        cert.setAlgorithm(algorithm);
-        return cert;
+    @SafeVarargs
+    private static CertificateSelection certificates(Map.Entry<EmailAddress, String>... entries) {
+        java.util.Map<EmailAddress, String> certificates = new java.util.LinkedHashMap<>();
+        java.util.Map<EmailAddress, String> thumbprints = new java.util.LinkedHashMap<>();
+        for (Map.Entry<EmailAddress, String> entry : entries) {
+            certificates.put(entry.getKey(), entry.getValue());
+            thumbprints.put(entry.getKey(), "thumbprint-" + entry.getKey().getValue());
+        }
+        return CertificateSelection.empty().withRecipientCertificates(certificates, thumbprints);
     }
 
-    private static MailProcessingContext context(Message<?> message) {
-        return (MailProcessingContext) message.getHeaders().get(MailProcessingHeaders.CONTEXT);
-    }
 }

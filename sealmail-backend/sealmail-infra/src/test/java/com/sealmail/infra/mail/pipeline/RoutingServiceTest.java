@@ -3,12 +3,15 @@ package com.sealmail.infra.mail.pipeline;
 import com.sealmail.domain.certificate.Certificate;
 import com.sealmail.domain.certificate.CertificateId;
 import com.sealmail.domain.certificate.CertificateRepository;
-import com.sealmail.domain.certificate.CertificateSelector;
 import com.sealmail.domain.certificate.KeyUsage;
 import com.sealmail.domain.certificate.ValidityPeriod;
 import com.sealmail.domain.mailsecurity.MailDirection;
 import com.sealmail.domain.mailsecurity.MailEnvelope;
 import com.sealmail.domain.mailsecurity.MailProcessingContext;
+import com.sealmail.domain.mailsecurity.CryptoProfile;
+import com.sealmail.domain.mailsecurity.CryptoProfileSelector;
+import com.sealmail.domain.mailsecurity.MailProcessingErrorType;
+import com.sealmail.domain.mailsecurity.MailProcessingException;
 import com.sealmail.domain.mailsecurity.MailProcessing;
 import com.sealmail.domain.mailsecurity.MailProcessingRepository;
 import com.sealmail.domain.mailsecurity.MailRecordDisposition;
@@ -16,7 +19,7 @@ import com.sealmail.domain.mailsecurity.MailRouter;
 import com.sealmail.domain.mailsecurity.RoutingDecision;
 import com.sealmail.domain.policy.DomainConfig;
 import com.sealmail.domain.policy.DomainConfigRepository;
-import com.sealmail.domain.policy.PreferredAlgorithm;
+import com.sealmail.domain.quarantine.QuarantineReason;
 import com.sealmail.domain.shared.model.EmailAddress;
 import com.sealmail.infra.config.properties.PostfixProperties;
 import org.junit.jupiter.api.Test;
@@ -33,6 +36,7 @@ import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
@@ -52,7 +56,7 @@ class RoutingServiceTest {
         RoutingService routingService = new RoutingService(
                 mailRouter,
                 domainConfigRepository,
-                certificateRepository,
+                cryptoSelectionService(certificateRepository),
                 mailProcessingRepository,
                 postfixProperties
         );
@@ -66,7 +70,7 @@ class RoutingServiceTest {
         Certificate recipientCert = certificate(recipient, EnumSet.of(KeyUsage.ENCRYPTION), true, false, "RSA");
 
         when(domainConfigRepository.findByDomain("example.com")).thenReturn(Optional.of(config));
-        when(mailRouter.route(any(), any(), any(), any(), any(), any()))
+        when(mailRouter.route(any(), any(), any(), any(), any(), any(), any()))
                 .thenReturn(new RoutingDecision.OutboundEncrypt(List.of(recipient)));
         when(certificateRepository.findTrustedForSigning(sender)).thenReturn(List.of(senderCert));
         when(certificateRepository.findTrustedForEncryption(recipient)).thenReturn(List.of(recipientCert));
@@ -82,7 +86,7 @@ class RoutingServiceTest {
         assertNotNull(context);
         assertEquals(envelope, context.envelope());
         assertEquals(MailDirection.OUTBOUND, context.direction());
-        assertEquals(PreferredAlgorithm.AUTO, context.preferredAlgorithm());
+        assertEquals(CryptoProfile.STANDARD, context.cryptoProfile());
         assertTrue(context.decision().signingRequired());
         assertTrue(context.decision().encryptionRequired());
         assertEquals(senderCert.getPemContent(), context.certificateSelection().senderCertificatePem());
@@ -105,7 +109,7 @@ class RoutingServiceTest {
         RoutingService routingService = new RoutingService(
                 mailRouter,
                 domainConfigRepository,
-                certificateRepository,
+                cryptoSelectionService(certificateRepository),
                 mailProcessingRepository,
                 postfixProperties
         );
@@ -118,7 +122,7 @@ class RoutingServiceTest {
 
         DomainConfig config = DomainConfig.create("domain-1", "example.com", true);
         when(domainConfigRepository.findByDomain("example.com")).thenReturn(Optional.of(config));
-        when(mailRouter.route(any(), any(), any(), any(), any(), any()))
+        when(mailRouter.route(any(), any(), any(), any(), any(), any(), any()))
                 .thenReturn(new RoutingDecision.PassThrough());
         when(certificateRepository.findTrustedForSigning(sender)).thenReturn(List.of(senderCert));
         when(certificateRepository.findTrustedForEncryption(recipient)).thenReturn(List.of(recipientCert));
@@ -143,7 +147,7 @@ class RoutingServiceTest {
     }
 
     @Test
-    void routeOutboundPreservesExplicitPreferredAlgorithmHeader() {
+    void routeOutboundUsesDomainPreferredAlgorithmAsCryptoProfile() {
         MailRouter mailRouter = mock(MailRouter.class);
         DomainConfigRepository domainConfigRepository = mock(DomainConfigRepository.class);
         CertificateRepository certificateRepository = mock(CertificateRepository.class);
@@ -151,7 +155,7 @@ class RoutingServiceTest {
         RoutingService routingService = new RoutingService(
                 mailRouter,
                 domainConfigRepository,
-                certificateRepository,
+                cryptoSelectionService(certificateRepository),
                 mailProcessingRepository,
                 postfixProperties()
         );
@@ -160,32 +164,31 @@ class RoutingServiceTest {
         EmailAddress recipient = new EmailAddress("bob@example.com");
         MailEnvelope envelope = envelope(sender, recipient);
         DomainConfig config = DomainConfig.create("domain-1", "example.com", true);
-        config.changePreferredAlgorithm(PreferredAlgorithm.GM_ONLY);
+        config.changePreferredAlgorithm(com.sealmail.domain.policy.PreferredAlgorithm.GM_ONLY);
 
         when(domainConfigRepository.findByDomain("example.com")).thenReturn(Optional.of(config));
-        when(mailRouter.route(any(), any(), any(), any(), any(), any()))
+        when(mailRouter.route(any(), any(), any(), any(), any(), any(), any()))
                 .thenReturn(new RoutingDecision.OutboundEncrypt(List.of(recipient)));
         when(mailProcessingRepository.save(any(MailProcessing.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
         Message<byte[]> routed = routingService.routeOutbound(MessageBuilder.withPayload("hello".getBytes())
-                .setHeader(MailProcessingHeaders.CONTEXT, MailProcessingContext.create(envelope)
-                        .withPreferredAlgorithm(PreferredAlgorithm.STANDARD_ONLY))
+                .setHeader(MailProcessingHeaders.CONTEXT, MailProcessingContext.create(envelope))
                 .build());
 
         MailProcessingContext context = (MailProcessingContext) routed.getHeaders().get(MailProcessingHeaders.CONTEXT);
-        assertEquals(PreferredAlgorithm.STANDARD_ONLY, context.preferredAlgorithm());
+        assertEquals(CryptoProfile.GM, context.cryptoProfile());
     }
 
     @Test
     void routeOutboundDoesNotEnableEncryptionWhenOnlySomeRecipientsHaveCertificates() {
-        MailRouter mailRouter = new MailRouter(new CertificateSelector());
+        MailRouter mailRouter = new MailRouter();
         DomainConfigRepository domainConfigRepository = mock(DomainConfigRepository.class);
         CertificateRepository certificateRepository = mock(CertificateRepository.class);
         MailProcessingRepository mailProcessingRepository = mock(MailProcessingRepository.class);
         RoutingService routingService = new RoutingService(
                 mailRouter,
                 domainConfigRepository,
-                certificateRepository,
+                cryptoSelectionService(certificateRepository),
                 mailProcessingRepository,
                 postfixProperties()
         );
@@ -220,6 +223,41 @@ class RoutingServiceTest {
     }
 
     @Test
+    void routeOutboundSendsCryptoProfileSelectionFailureToErrorFlow() {
+        MailRouter mailRouter = mock(MailRouter.class);
+        DomainConfigRepository domainConfigRepository = mock(DomainConfigRepository.class);
+        CertificateRepository certificateRepository = mock(CertificateRepository.class);
+        MailProcessingRepository mailProcessingRepository = mock(MailProcessingRepository.class);
+        RoutingService routingService = new RoutingService(
+                mailRouter,
+                domainConfigRepository,
+                cryptoSelectionService(certificateRepository),
+                mailProcessingRepository,
+                postfixProperties()
+        );
+
+        EmailAddress sender = new EmailAddress("alice@example.com");
+        EmailAddress recipient = new EmailAddress("bob@example.com");
+        MailEnvelope envelope = envelope(sender, recipient);
+        DomainConfig config = DomainConfig.create("domain-1", "example.com", true);
+
+        when(domainConfigRepository.findByDomain("example.com")).thenReturn(Optional.of(config));
+        when(mailRouter.route(any(), any(), any(), any(), any(), any(), any()))
+                .thenReturn(new RoutingDecision.Quarantine(
+                        QuarantineReason.CERTIFICATE_MISSING,
+                        "多收件人无法共享同一加密Profile"));
+        when(mailProcessingRepository.save(any(MailProcessing.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        MailProcessingException error = assertThrows(MailProcessingException.class, () ->
+                routingService.routeOutbound(MessageBuilder.withPayload("hello".getBytes())
+                        .setHeader(MailProcessingHeaders.CONTEXT, MailProcessingContext.create(envelope))
+                        .build()));
+
+        assertEquals(MailProcessingErrorType.ENCRYPTION, error.errorType());
+        assertTrue(error.getMessage().contains("无法共享同一加密Profile"));
+    }
+
+    @Test
     void routeOutboundQuarantinesWhenSenderDomainIsNotActiveLocalDomain() {
         MailRouter mailRouter = mock(MailRouter.class);
         DomainConfigRepository domainConfigRepository = mock(DomainConfigRepository.class);
@@ -228,7 +266,7 @@ class RoutingServiceTest {
         RoutingService routingService = new RoutingService(
                 mailRouter,
                 domainConfigRepository,
-                certificateRepository,
+                cryptoSelectionService(certificateRepository),
                 mailProcessingRepository,
                 postfixProperties()
         );
@@ -242,7 +280,7 @@ class RoutingServiceTest {
         inactive.deactivate();
 
         when(domainConfigRepository.findByDomain("example.com")).thenReturn(Optional.of(inactive));
-        when(mailRouter.route(any(), any(), any(), any(), any(), any()))
+        when(mailRouter.route(any(), any(), any(), any(), any(), any(), any()))
                 .thenReturn(new RoutingDecision.PassThrough());
         when(mailProcessingRepository.save(any(MailProcessing.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
@@ -271,7 +309,7 @@ class RoutingServiceTest {
         RoutingService routingService = new RoutingService(
                 mailRouter,
                 domainConfigRepository,
-                certificateRepository,
+                cryptoSelectionService(certificateRepository),
                 mailProcessingRepository,
                 postfixProperties()
         );
@@ -295,7 +333,7 @@ class RoutingServiceTest {
         assertEquals(MailRecordDisposition.EXCEPTION, context.recordDisposition());
         assertEquals("No recipient domain is configured and enabled as a local domain for this mail",
                 context.decision().quarantine().detail());
-        verify(mailRouter, never()).route(any(), any(), any(), any(), any(), any());
+        verify(mailRouter, never()).route(any(), any(), any(), any(), any(), any(), any());
     }
 
     private static MailEnvelope envelope(EmailAddress sender, EmailAddress recipient) {
@@ -346,5 +384,9 @@ class RoutingServiceTest {
         properties.setUseTls(false);
         properties.setTimeout(10000);
         return properties;
+    }
+
+    private static MailCryptoSelectionService cryptoSelectionService(CertificateRepository certificateRepository) {
+        return new MailCryptoSelectionService(certificateRepository, new CryptoProfileSelector());
     }
 }

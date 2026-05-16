@@ -1,10 +1,8 @@
 package com.sealmail.infra.mail.pipeline.step;
 
-import com.sealmail.domain.certificate.Certificate;
 import com.sealmail.domain.certificate.CertificateRepository;
 import com.sealmail.domain.certificate.spi.SMIMEOperations;
 import com.sealmail.domain.mailsecurity.CryptoProfile;
-import com.sealmail.domain.mailsecurity.CryptoProfileSelector;
 import com.sealmail.domain.mailsecurity.MailEnvelope;
 import com.sealmail.domain.mailsecurity.MailProcessingContext;
 import com.sealmail.domain.mailsecurity.MailProcessingErrorType;
@@ -16,7 +14,6 @@ import com.sealmail.infra.mail.pipeline.MailProcessingHeaders;
 import com.sealmail.infra.mail.pipeline.MailProcessingMessages;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.messaging.Message;
 import org.springframework.stereotype.Component;
 
@@ -32,26 +29,15 @@ public class SignStep {
     private final KeyStoreService keyStoreService;
     private final CertificateRepository certificateRepository;
     private final DomainEventPublisher domainEventPublisher;
-    private final CryptoProfileSelector cryptoProfileSelector;
 
     public SignStep(SMIMEOperations smimeOperations,
                     KeyStoreService keyStoreService,
                     CertificateRepository certificateRepository,
                     DomainEventPublisher domainEventPublisher) {
-        this(smimeOperations, keyStoreService, certificateRepository, domainEventPublisher, new CryptoProfileSelector());
-    }
-
-    @Autowired
-    public SignStep(SMIMEOperations smimeOperations,
-                    KeyStoreService keyStoreService,
-                    CertificateRepository certificateRepository,
-                    DomainEventPublisher domainEventPublisher,
-                    CryptoProfileSelector cryptoProfileSelector) {
         this.smimeOperations = smimeOperations;
         this.keyStoreService = keyStoreService;
         this.certificateRepository = certificateRepository;
         this.domainEventPublisher = domainEventPublisher;
-        this.cryptoProfileSelector = cryptoProfileSelector;
     }
 
     public Message<byte[]> execute(Message<byte[]> message) {
@@ -71,22 +57,6 @@ public class SignStep {
 
             String thumbprint = context.certificateSelection().senderCertificateThumbprint();
             CryptoProfile profile = context.cryptoProfile();
-            if (profile == null || profile == CryptoProfile.AUTO) {
-                profile = CryptoProfile.fromPreferredAlgorithm(context.preferredAlgorithm());
-            }
-
-            if (senderCert == null) {
-                Certificate selected = cryptoProfileSelector
-                        .select(certificateRepository.findTrustedForSigning(envelope.getSender()), profile)
-                        .orElse(null);
-                if (selected != null) {
-                    senderCert = selected.getPemContent();
-                    thumbprint = selected.getId().getThumbprint();
-                    cryptoProfileSelector.profileOf(selected).ifPresent(selectedProfile -> {
-                        log.info("选择 {} profile 证书用于签名", selectedProfile);
-                    });
-                }
-            }
 
             if (senderCert == null) {
                 if (profile != null && profile.isConcrete()) {

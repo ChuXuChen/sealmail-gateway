@@ -1,10 +1,10 @@
 package com.sealmail.infra.config;
 
-import com.sealmail.domain.certificate.CertificateSelector;
 import com.sealmail.domain.audit.AuditContext;
 import com.sealmail.domain.audit.AuditContextProvider;
 import com.sealmail.domain.audit.AuditLogRepository;
 import com.sealmail.domain.audit.AuditService;
+import com.sealmail.domain.certificate.CertificateSelector;
 import com.sealmail.domain.mailsecurity.CryptoProfileSelector;
 import com.sealmail.domain.mailsecurity.MailRouter;
 import com.sealmail.infra.config.properties.AuthProperties;
@@ -44,8 +44,8 @@ public class InfraConfig {
     }
 
     @Bean
-    public MailRouter mailRouter(CertificateSelector certificateSelector) {
-        return new MailRouter(certificateSelector);
+    public MailRouter mailRouter() {
+        return new MailRouter();
     }
 
     @Bean

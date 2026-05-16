@@ -2,7 +2,6 @@ package com.sealmail.domain.certificate;
 
 import com.sealmail.domain.mailsecurity.CryptoProfile;
 import com.sealmail.domain.mailsecurity.CryptoProfileSelector;
-import com.sealmail.domain.policy.PreferredAlgorithm;
 import com.sealmail.domain.shared.model.EmailAddress;
 
 import java.util.Comparator;
@@ -43,30 +42,12 @@ public class CertificateSelector {
                 profile);
     }
 
-    public Optional<Certificate> selectForEncryption(EmailAddress recipient,
-                                                     List<Certificate> candidates,
-                                                     PreferredAlgorithm preferredAlgorithm) {
-        return selectForEncryption(
-                recipient,
-                candidates,
-                CryptoProfile.fromPreferredAlgorithm(preferredAlgorithm));
-    }
-
     public Optional<Certificate> selectForSigning(EmailAddress sender,
                                                   List<Certificate> candidates,
                                                   CryptoProfile profile) {
         return cryptoProfileSelector.select(
                 signingCandidates(sender, candidates),
                 profile);
-    }
-
-    public Optional<Certificate> selectForSigning(EmailAddress sender,
-                                                  List<Certificate> candidates,
-                                                  PreferredAlgorithm preferredAlgorithm) {
-        return selectForSigning(
-                sender,
-                candidates,
-                CryptoProfile.fromPreferredAlgorithm(preferredAlgorithm));
     }
 
     private List<Certificate> encryptionCandidates(EmailAddress recipient, List<Certificate> candidates) {

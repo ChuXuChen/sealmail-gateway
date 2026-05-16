@@ -1,5 +1,6 @@
 package com.sealmail.domain.mailsecurity;
 
+import com.sealmail.domain.policy.DomainConfig;
 import com.sealmail.domain.policy.PreferredAlgorithm;
 
 import java.util.Locale;
@@ -19,6 +20,10 @@ public enum CryptoProfile {
             case GM_ONLY -> GM;
             case AUTO -> AUTO;
         };
+    }
+
+    public static CryptoProfile fromDomainConfig(DomainConfig domainConfig) {
+        return domainConfig == null ? AUTO : fromPreferredAlgorithm(domainConfig.getPreferredAlgorithm());
     }
 
     public boolean isConcrete() {

@@ -1,24 +1,19 @@
 package com.sealmail.infra.mail.pipeline;
 
 import com.sealmail.domain.certificate.Certificate;
-import com.sealmail.domain.certificate.CertificateRepository;
 import com.sealmail.domain.mailsecurity.*;
 import com.sealmail.domain.policy.DomainConfig;
 import com.sealmail.domain.policy.DomainConfigRepository;
-import com.sealmail.domain.policy.PreferredAlgorithm;
 import com.sealmail.domain.quarantine.QuarantineReason;
 import com.sealmail.domain.shared.model.EmailAddress;
 import com.sealmail.infra.config.properties.PostfixProperties;
 import org.slf4j.Logger;
 import org.springframework.messaging.Message;
 import org.springframework.messaging.support.MessageBuilder;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 
 @Service
@@ -28,38 +23,20 @@ public class RoutingService {
 
     private final MailRouter mailRouter;
     private final DomainConfigRepository domainConfigRepository;
-    private final CertificateRepository certificateRepository;
+    private final MailCryptoSelectionService cryptoSelectionService;
     private final MailProcessingRepository mailProcessingRepository;
     private final PostfixProperties postfixProperties;
-    private final CryptoProfileSelector cryptoProfileSelector;
 
     public RoutingService(MailRouter mailRouter,
                            DomainConfigRepository domainConfigRepository,
-                           CertificateRepository certificateRepository,
+                           MailCryptoSelectionService cryptoSelectionService,
                            MailProcessingRepository mailProcessingRepository,
                            PostfixProperties postfixProperties) {
-        this(
-                mailRouter,
-                domainConfigRepository,
-                certificateRepository,
-                mailProcessingRepository,
-                postfixProperties,
-                new CryptoProfileSelector());
-    }
-
-    @Autowired
-    public RoutingService(MailRouter mailRouter,
-                           DomainConfigRepository domainConfigRepository,
-                           CertificateRepository certificateRepository,
-                           MailProcessingRepository mailProcessingRepository,
-                           PostfixProperties postfixProperties,
-                           CryptoProfileSelector cryptoProfileSelector) {
         this.mailRouter = mailRouter;
         this.domainConfigRepository = domainConfigRepository;
-        this.certificateRepository = certificateRepository;
+        this.cryptoSelectionService = cryptoSelectionService;
         this.mailProcessingRepository = mailProcessingRepository;
         this.postfixProperties = postfixProperties;
-        this.cryptoProfileSelector = cryptoProfileSelector;
     }
 
     @Transactional
@@ -79,7 +56,7 @@ public class RoutingService {
                     "No recipient domain is configured and enabled as a local domain for this mail");
         }
 
-        List<Certificate> certificates = certificateRepository.findByOwner(envelope.getSender());
+        List<Certificate> certificates = cryptoSelectionService.inboundRoutingCertificates(envelope);
 
         MailProcessing processing = MailProcessing.create(envelope, MailDirection.INBOUND);
         processing.addStep("routing");
@@ -90,7 +67,8 @@ public class RoutingService {
                 domainConfig.get(),
                 certificates,
                 List.of(),
-                null
+                null,
+                CryptoProfile.AUTO
         );
 
         processing.setRoutingDecision(decision);
@@ -127,9 +105,8 @@ public class RoutingService {
                     "Sender domain is not configured and enabled as a local domain: " + senderDomain);
         }
 
-        List<Certificate> recipientCerts = envelope.getRecipients().stream()
-                .flatMap(recipient -> certificateRepository.findTrustedForEncryption(recipient).stream())
-                .toList();
+        CryptoProfile requestedProfile = CryptoProfile.fromDomainConfig(domainConfig.get());
+        List<Certificate> recipientCerts = cryptoSelectionService.outboundRoutingCertificates(envelope);
 
         MailProcessing processing = MailProcessing.create(envelope, MailDirection.OUTBOUND);
         processing.addStep("routing");
@@ -142,11 +119,16 @@ public class RoutingService {
                 domainConfig.get(),
                 recipientCerts,
                 List.of(),
-                content
+                content,
+                requestedProfile
         );
 
         processing.setRoutingDecision(decision);
-        processing.completeStep("routing", true, null);
+        if (isOutboundCryptoProfileFailure(MailDirection.OUTBOUND, decision)) {
+            processing.completeStep("routing", false, ((RoutingDecision.Quarantine) decision).getDetail());
+        } else {
+            processing.completeStep("routing", true, null);
+        }
 
         mailProcessingRepository.save(processing);
 
@@ -226,40 +208,42 @@ public class RoutingService {
                     null,
                     envelope.getRemoteHost());
         }
-        PreferredAlgorithm preferredAlgorithm = baseContext.preferredAlgorithm() != PreferredAlgorithm.AUTO
-                ? baseContext.preferredAlgorithm()
-                : domainConfig != null ? domainConfig.getPreferredAlgorithm() : PreferredAlgorithm.AUTO;
+        CryptoProfile cryptoProfile = resolveCryptoProfile(baseContext, domainConfig);
         MailProcessingDecision processingDecision = baseContext.decision();
         CertificateSelection certificates = baseContext.certificateSelection();
         RelayProfile relayProfile = relayProfile(direction);
-        CryptoProfile cryptoProfile = baseContext.cryptoProfile();
+
+        if (isOutboundCryptoProfileFailure(direction, decision)) {
+            throw new MailProcessingException(
+                    MailProcessingErrorType.ENCRYPTION,
+                    ((RoutingDecision.Quarantine) decision).getDetail(),
+                    baseContext
+                            .withRoutingDecision(decision)
+                            .withProcessingId(processingId)
+                            .withDirection(direction)
+                            .withCryptoProfile(cryptoProfile),
+                    MailRecordDisposition.EXCEPTION,
+                    false,
+                    null);
+        }
 
         if (direction == MailDirection.OUTBOUND) {
-            boolean signingEnabled = processingDecision.signingRequired()
-                    || decision instanceof RoutingDecision.OutboundSign
-                    || (decision instanceof RoutingDecision.OutboundEncrypt
-                    && domainConfig != null
-                    && domainConfig.isSigningEnabled());
-            if (signingEnabled) {
-                processingDecision = processingDecision.withSigningRequired(true);
-                certificates = ensureOutboundSigningCertificates(certificates, envelope, preferredAlgorithm);
-            }
-
-            if (decision instanceof RoutingDecision.OutboundEncrypt encrypt) {
-                processingDecision = processingDecision.withEncryptionRequired(true);
-                OutboundEncryptionSelection encryptionSelection = ensureOutboundEncryptionCertificates(
-                        certificates,
-                        encrypt.getRecipients(),
-                        preferredAlgorithm);
-                certificates = encryptionSelection.certificates();
-                if (encryptionSelection.cryptoProfile() != null) {
-                    cryptoProfile = encryptionSelection.cryptoProfile();
-                }
-            }
+            MailCryptoSelectionService.OutboundCryptoSelection outboundCrypto =
+                    cryptoSelectionService.prepareOutbound(
+                            envelope,
+                            decision,
+                            domainConfig,
+                            processingDecision,
+                            certificates,
+                            cryptoProfile);
+            processingDecision = outboundCrypto.decision();
+            certificates = outboundCrypto.certificates();
+            cryptoProfile = outboundCrypto.cryptoProfile();
         }
 
         if (direction == MailDirection.INBOUND) {
-            InboundCryptoSelection inboundCrypto = attachInboundCrypto(certificates, envelope);
+            MailCryptoSelectionService.InboundCryptoSelection inboundCrypto =
+                    cryptoSelectionService.prepareInbound(certificates, envelope);
             certificates = inboundCrypto.certificates();
             processingDecision = processingDecision
                     .withDecryptionRequired(inboundCrypto.decryptionRequired())
@@ -279,7 +263,6 @@ public class RoutingService {
                 .withRoutingDecision(decision)
                 .withProcessingId(processingId)
                 .withDirection(direction)
-                .withPreferredAlgorithm(preferredAlgorithm)
                 .withCryptoProfile(cryptoProfile)
                 .withDecision(processingDecision)
                 .withCertificateSelection(certificates)
@@ -298,71 +281,22 @@ public class RoutingService {
                 .build();
     }
 
+    private CryptoProfile resolveCryptoProfile(MailProcessingContext context, DomainConfig domainConfig) {
+        if (context.cryptoProfile() != null && context.cryptoProfile().isConcrete()) {
+            return context.cryptoProfile();
+        }
+        return CryptoProfile.fromDomainConfig(domainConfig);
+    }
+
+    private boolean isOutboundCryptoProfileFailure(MailDirection direction, RoutingDecision decision) {
+        return direction == MailDirection.OUTBOUND
+                && decision instanceof RoutingDecision.Quarantine quarantine
+                && quarantine.getReason() == QuarantineReason.CERTIFICATE_MISSING;
+    }
+
     private MailProcessingContext context(Message<?> message) {
         Object value = message.getHeaders().get(MailProcessingHeaders.CONTEXT);
         return value instanceof MailProcessingContext context ? context : null;
-    }
-
-    private CertificateSelection ensureOutboundSigningCertificates(CertificateSelection certificates,
-                                                                   MailEnvelope envelope,
-                                                                   PreferredAlgorithm preferredAlgorithm) {
-        if (hasText(certificates.senderCertificatePem())) {
-            return certificates;
-        }
-        List<Certificate> signingCerts = certificateRepository.findTrustedForSigning(envelope.getSender());
-        Certificate selected = cryptoProfileSelector.select(signingCerts, preferredAlgorithm).orElse(null);
-        if (selected != null) {
-            return certificates.withSenderCertificate(selected.getPemContent(), selected.getId().getThumbprint());
-        }
-        return certificates;
-    }
-
-    private OutboundEncryptionSelection ensureOutboundEncryptionCertificates(CertificateSelection certificates,
-                                                                            List<EmailAddress> recipients,
-                                                                            PreferredAlgorithm preferredAlgorithm) {
-        if (!certificates.recipientCertificates().isEmpty()) {
-            return new OutboundEncryptionSelection(
-                    certificates,
-                    CryptoProfile.fromPreferredAlgorithm(preferredAlgorithm));
-        }
-        Map<EmailAddress, List<Certificate>> certificatesByRecipient = new LinkedHashMap<>();
-        for (EmailAddress recipient : recipients) {
-            certificatesByRecipient.put(recipient, certificateRepository.findTrustedForEncryption(recipient));
-        }
-        CryptoProfileSelector.EncryptionProfilePlan plan = cryptoProfileSelector.encryptionPlan(
-                certificatesByRecipient,
-                preferredAlgorithm);
-        if (!plan.success()) {
-            return new OutboundEncryptionSelection(certificates, CryptoProfile.fromPreferredAlgorithm(preferredAlgorithm));
-        }
-        return new OutboundEncryptionSelection(
-                certificates.withRecipientCertificates(plan.certificatePems(), plan.certificateThumbprints()),
-                plan.profile());
-    }
-
-    private InboundCryptoSelection attachInboundCrypto(CertificateSelection certificates, MailEnvelope envelope) {
-        boolean decryptionRequired = false;
-        boolean verificationRequired = false;
-        if (!hasText(certificates.recipientCertificatePem())) {
-            Certificate decryptionCert = selectInboundDecryptionCertificate(envelope.getRecipients());
-            if (decryptionCert != null) {
-                certificates = certificates.withRecipientCertificate(
-                        decryptionCert.getPemContent(),
-                        decryptionCert.getId().getThumbprint());
-                decryptionRequired = true;
-            }
-        }
-
-        if (!hasText(certificates.senderCertificatePem())) {
-            Certificate senderCert = selectInboundVerificationCertificate(envelope.getSender());
-            if (senderCert != null) {
-                certificates = certificates.withSenderCertificate(
-                        senderCert.getPemContent(),
-                        senderCert.getId().getThumbprint());
-                verificationRequired = true;
-            }
-        }
-        return new InboundCryptoSelection(certificates, decryptionRequired, verificationRequired);
     }
 
     private RelayProfile relayProfile(MailDirection direction) {
@@ -381,38 +315,4 @@ public class RoutingService {
                 postfixProperties.getEnvelopeFrom());
     }
 
-    private Certificate selectInboundDecryptionCertificate(List<EmailAddress> recipients) {
-        for (EmailAddress recipient : recipients) {
-            Optional<Certificate> selected = certificateRepository.findTrustedForEncryption(recipient).stream()
-                    .filter(Certificate::hasPrivateKey)
-                    .findFirst();
-            if (selected.isPresent()) {
-                return selected.get();
-            }
-        }
-        return null;
-    }
-
-    private Certificate selectInboundVerificationCertificate(EmailAddress sender) {
-        return certificateRepository.findTrustedForSigning(sender).stream()
-                .findFirst()
-                .orElse(null);
-    }
-
-    private boolean hasText(String value) {
-        return value != null && !value.isBlank();
-    }
-
-    private record InboundCryptoSelection(
-            CertificateSelection certificates,
-            boolean decryptionRequired,
-            boolean verificationRequired
-    ) {
-    }
-
-    private record OutboundEncryptionSelection(
-            CertificateSelection certificates,
-            CryptoProfile cryptoProfile
-    ) {
-    }
 }

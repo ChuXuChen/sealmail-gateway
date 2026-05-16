@@ -6,8 +6,8 @@ import com.sealmail.app.usecase.certificate.CertificateChainService;
 import com.sealmail.domain.certificate.Certificate;
 import com.sealmail.domain.certificate.CertificateRepository;
 import com.sealmail.domain.certificate.spi.SMIMEOperations;
+import com.sealmail.domain.mailsecurity.CryptoProfile;
 import com.sealmail.domain.mailsecurity.CryptoProfileSelector;
-import com.sealmail.domain.policy.PreferredAlgorithm;
 import com.sealmail.domain.shared.model.EmailAddress;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
@@ -55,7 +55,7 @@ public class OutboundEncryptUseCase {
         }
 
         CryptoProfileSelector.EncryptionProfilePlan plan =
-                cryptoProfileSelector.encryptionPlan(certificatesByRecipient, PreferredAlgorithm.AUTO);
+                cryptoProfileSelector.encryptionPlan(certificatesByRecipient, CryptoProfile.AUTO);
         if (!plan.success()) {
             throw new RuntimeException("Encryption failed: " + plan.failureDetail());
         }

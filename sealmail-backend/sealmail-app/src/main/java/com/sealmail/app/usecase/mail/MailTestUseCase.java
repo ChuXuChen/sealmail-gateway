@@ -9,8 +9,9 @@ import com.sealmail.domain.mail.spi.MailMessageComposer;
 import com.sealmail.domain.mail.spi.OutboundMailSubmitter;
 import com.sealmail.domain.mail.spi.MailSampleStore;
 import com.sealmail.domain.mail.spi.SmtpRelayProbe;
-import com.sealmail.domain.mailsecurity.MailEnvelope;
+import com.sealmail.domain.mailsecurity.CryptoProfile;
 import com.sealmail.domain.mailsecurity.CryptoProfileSelector;
+import com.sealmail.domain.mailsecurity.MailEnvelope;
 import com.sealmail.domain.policy.PreferredAlgorithm;
 import com.sealmail.domain.shared.model.EmailAddress;
 import com.sealmail.domain.system.SystemSettingsProvider;
@@ -89,14 +90,14 @@ public class MailTestUseCase {
                     java.time.Instant.now()
             );
 
-            PreferredAlgorithm preference = parsePreference(request.preferredAlgorithm());
+            CryptoProfile profile = parseProfile(request.preferredAlgorithm());
             List<Certificate> senderCerts = certificateRepository.findTrustedForSigning(senderAddr);
-            Certificate selectedSenderCert = cryptoProfileSelector.select(senderCerts, preference).orElse(null);
+            Certificate selectedSenderCert = cryptoProfileSelector.select(senderCerts, profile).orElse(null);
 
             Map<EmailAddress, String> certMap = new HashMap<>();
             for (EmailAddress recipient : recipientAddrs) {
                 List<Certificate> certs = certificateRepository.findTrustedForEncryption(recipient);
-                Certificate selected = cryptoProfileSelector.select(certs, preference).orElse(null);
+                Certificate selected = cryptoProfileSelector.select(certs, profile).orElse(null);
                 if (selected != null) {
                     certMap.put(recipient, selected.getPemContent());
                 }
@@ -115,13 +116,13 @@ public class MailTestUseCase {
                     envelope,
                     true,
                     true,
-                    preference,
+                    profile,
                     selectedSenderCert == null ? null : selectedSenderCert.getPemContent(),
                     selectedSenderCert == null ? null : selectedSenderCert.getId().getThumbprint(),
                     certMap
             ));
 
-            return "加密邮件已提交发送 (算法偏好: " + preference.name() + ")，签名证书数: "
+            return "加密邮件已提交发送 (密码Profile: " + profile.name() + ")，签名证书数: "
                     + senderCerts.size() + ", 加密证书数: " + certMap.size();
         } catch (BusinessException e) {
             throw e;
@@ -188,11 +189,11 @@ public class MailTestUseCase {
                 request.content());
     }
 
-    private PreferredAlgorithm parsePreference(String preferredAlgorithm) {
+    private CryptoProfile parseProfile(String preferredAlgorithm) {
         if (preferredAlgorithm == null || preferredAlgorithm.isBlank()) {
-            return PreferredAlgorithm.AUTO;
+            return CryptoProfile.AUTO;
         }
-        return PreferredAlgorithm.valueOf(preferredAlgorithm);
+        return CryptoProfile.fromPreferredAlgorithm(PreferredAlgorithm.valueOf(preferredAlgorithm));
     }
 
     private void requireAdmin(UserContext user) {

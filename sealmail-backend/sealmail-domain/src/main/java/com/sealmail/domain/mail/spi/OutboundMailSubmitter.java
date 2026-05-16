@@ -1,7 +1,7 @@
 package com.sealmail.domain.mail.spi;
 
 import com.sealmail.domain.mailsecurity.MailEnvelope;
-import com.sealmail.domain.policy.PreferredAlgorithm;
+import com.sealmail.domain.mailsecurity.CryptoProfile;
 import com.sealmail.domain.shared.model.EmailAddress;
 
 import java.util.List;
@@ -34,7 +34,7 @@ public interface OutboundMailSubmitter {
             MailEnvelope envelope,
             boolean signingEnabled,
             boolean encryptionEnabled,
-            PreferredAlgorithm preferredAlgorithm,
+            CryptoProfile cryptoProfile,
             String senderCertificatePem,
             String senderCertificateThumbprint,
             Map<EmailAddress, String> recipientCertificates
@@ -46,7 +46,7 @@ public interface OutboundMailSubmitter {
             if (envelope == null) {
                 throw new IllegalArgumentException("envelope must not be null");
             }
-            preferredAlgorithm = preferredAlgorithm == null ? PreferredAlgorithm.AUTO : preferredAlgorithm;
+            cryptoProfile = cryptoProfile == null ? CryptoProfile.AUTO : cryptoProfile;
             recipientCertificates = recipientCertificates == null
                     ? Map.of()
                     : Map.copyOf(recipientCertificates);
