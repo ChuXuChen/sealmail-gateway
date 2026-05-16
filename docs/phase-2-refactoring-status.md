@@ -266,16 +266,16 @@ mvn -f sealmail-backend/pom.xml test
 mvn -f sealmail-backend/pom.xml test
 ```
 
-4. 确认阶段 3 只处理强类型邮件处理上下文和 header 兼容层，不混入 Spring Integration 主链路替换。
+4. 确认阶段 3 只处理强类型邮件处理上下文，不混入 Spring Integration 主链路替换。
 
 阶段 3 的推荐入口：
 
 - 定义 `MailProcessingContext`。
-- 定义 `MailProcessingHeaders`。
+- 定义只承载 `mailProcessingContext` 的 `MailProcessingHeaders`。
 - 定义 `MailProcessingDecision`。
 - 定义 `MailProcessingErrorType`。
-- 先建立旧 header 到强类型 context 的兼容层。
-- 逐步迁移 `RoutingService` 和各 pipeline step 的 header 读取逻辑。
+- 在入口直接创建强类型 context。
+- 逐步迁移 `RoutingService` 和各 pipeline step 的状态读取逻辑，并废弃旧业务 header。
 
 阶段 3 明确不应处理：
 
@@ -290,4 +290,4 @@ mvn -f sealmail-backend/pom.xml test
 
 阶段 2 已完成并停止。当前代码已将核心模块依赖方向收敛到 domain/app/infra/web/boot 的目标边界：web 只依赖 app，app 只编排 domain 端口，具体 token、证书密码学、MIME、S/MIME、文件系统和基础设施实现均归属 infra，并通过架构测试防止主要反向依赖和具体实现细节回潮。
 
-下一次继续时，应从阶段 3 开始，并严格限制在强类型邮件处理上下文与 header 兼容层范围内。
+下一次继续时，应从阶段 3 开始，并严格限制在强类型邮件处理上下文范围内。

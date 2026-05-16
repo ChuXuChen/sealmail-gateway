@@ -1,5 +1,6 @@
 package com.sealmail.infra.mail.pipeline;
 
+import com.sealmail.domain.mailsecurity.MailRecordDisposition;
 import com.sealmail.domain.shared.event.DomainEvent;
 
 import java.util.Arrays;

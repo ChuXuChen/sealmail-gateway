@@ -3,11 +3,13 @@ package com.sealmail.infra.mail.pipeline.step;
 import com.sealmail.domain.exceptionmail.ExceptionMail;
 import com.sealmail.domain.exceptionmail.ExceptionMailRepository;
 import com.sealmail.domain.mailsecurity.MailEnvelope;
+import com.sealmail.domain.mailsecurity.MailProcessingContext;
+import com.sealmail.domain.mailsecurity.MailRecordDisposition;
 import com.sealmail.domain.quarantine.QuarantineReason;
 import com.sealmail.domain.quarantine.QuarantineStatus;
 import com.sealmail.domain.quarantine.QuarantinedMail;
 import com.sealmail.domain.shared.model.EmailAddress;
-import com.sealmail.infra.mail.pipeline.MailRecordDisposition;
+import com.sealmail.infra.mail.pipeline.MailProcessingHeaders;
 import com.sealmail.infra.persistence.repository.QuarantineRepositoryImpl;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -60,11 +62,12 @@ class QuarantineStepTest {
                 Instant.now(),
                 payload
         );
+        MailProcessingContext context = MailProcessingContext.create(envelope)
+                .withDecision(com.sealmail.domain.mailsecurity.MailProcessingDecision.none()
+                        .withQuarantine(QuarantineReason.POLICY_VIOLATION, detail))
+                .withRecordDisposition(disposition);
         return MessageBuilder.withPayload(payload)
-                .setHeader("mailEnvelope", envelope)
-                .setHeader("quarantineReason", QuarantineReason.POLICY_VIOLATION.name())
-                .setHeader("quarantineDetail", detail)
-                .setHeader("mailRecordDisposition", disposition.name())
+                .setHeader(MailProcessingHeaders.CONTEXT, context)
                 .build();
     }
 

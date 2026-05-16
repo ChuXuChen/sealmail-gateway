@@ -1,6 +1,7 @@
 package com.sealmail.infra.mail.pipeline;
 
 import com.sealmail.domain.mailsecurity.MailProcessing;
+import com.sealmail.domain.mailsecurity.MailProcessingContext;
 import com.sealmail.domain.mailsecurity.MailProcessingRepository;
 import com.sealmail.domain.mailsecurity.ProcessingResult;
 import com.sealmail.infra.events.DomainEventPublisher;
@@ -38,7 +39,7 @@ public class PipelineStepTracker {
      * @return The pipeline result
      */
     public PipelineResult executeWithTracking(Message<byte[]> message, MailPipelineStep step) {
-        String processingId = (String) message.getHeaders().get("processingId");
+        String processingId = processingId(message);
         String stepName = step.getStepName();
 
         // Prevent duplicate execution for the same step and processingId
@@ -128,5 +129,13 @@ public class PipelineStepTracker {
      */
     public Function<Message<byte[]>, PipelineResult> wrap(MailPipelineStep step) {
         return message -> executeWithTracking(message, step);
+    }
+
+    private String processingId(Message<byte[]> message) {
+        Object value = message.getHeaders().get(MailProcessingHeaders.CONTEXT);
+        if (value instanceof MailProcessingContext context) {
+            return context.processingId();
+        }
+        return null;
     }
 }

@@ -1,7 +1,9 @@
 package com.sealmail.infra.mail.pipeline.step;
 
 import com.sealmail.domain.mailsecurity.MailEnvelope;
+import com.sealmail.domain.mailsecurity.MailProcessingContext;
 import com.sealmail.infra.mail.auth.MailAuthenticationService;
+import com.sealmail.infra.mail.pipeline.MailProcessingHeaders;
 import com.sealmail.infra.mail.pipeline.MailPipelineStep;
 import com.sealmail.infra.mail.pipeline.PipelineResult;
 import org.springframework.messaging.Message;
@@ -20,7 +22,8 @@ public class MailAuthenticationStep implements MailPipelineStep {
 
     @Override
     public PipelineResult execute(Message<byte[]> message) {
-        MailEnvelope envelope = (MailEnvelope) message.getHeaders().get("mailEnvelope");
+        MailProcessingContext context = context(message);
+        MailEnvelope envelope = context != null ? context.envelope() : null;
         var result = authenticationService.authenticate(message.getPayload(), envelope);
         if (result.shouldQuarantine()) {
             return PipelineResult.quarantine(message.getPayload(), "EMAIL_AUTH_FAILED", result.detail());
@@ -42,5 +45,10 @@ public class MailAuthenticationStep implements MailPipelineStep {
         System.arraycopy(header, 0, combined, 0, header.length);
         System.arraycopy(payload, 0, combined, header.length, payload.length);
         return combined;
+    }
+
+    private MailProcessingContext context(Message<?> message) {
+        Object value = message.getHeaders().get(MailProcessingHeaders.CONTEXT);
+        return value instanceof MailProcessingContext context ? context : null;
     }
 }

@@ -1,8 +1,11 @@
 package com.sealmail.infra.mail.pipeline.step;
 
 import com.sealmail.domain.certificate.spi.SMIMEOperations;
+import com.sealmail.domain.mailsecurity.CertificateSelection;
 import com.sealmail.domain.mailsecurity.MailEnvelope;
+import com.sealmail.domain.mailsecurity.MailProcessingContext;
 import com.sealmail.domain.shared.model.EmailAddress;
+import com.sealmail.infra.mail.pipeline.MailProcessingHeaders;
 import com.sealmail.infra.mail.pipeline.PipelineResult;
 import org.junit.jupiter.api.Test;
 import org.springframework.messaging.Message;
@@ -50,9 +53,11 @@ class VerifyStepTest {
                 Instant.now(),
                 payload
         );
+        MailProcessingContext context = MailProcessingContext.create(envelope)
+                .withCertificateSelection(CertificateSelection.empty()
+                        .withSenderCertificate("sender-cert", null));
         return MessageBuilder.withPayload(payload)
-                .setHeader("mailEnvelope", envelope)
-                .setHeader("senderCertificate", "sender-cert")
+                .setHeader(MailProcessingHeaders.CONTEXT, context)
                 .build();
     }
 }

@@ -6,12 +6,14 @@ import com.sealmail.domain.certificate.CertificateRepository;
 import com.sealmail.domain.certificate.spi.SMIMEOperations;
 import com.sealmail.domain.certificate.spi.SMIMEEncryptionSuite;
 import com.sealmail.domain.mailsecurity.MailEnvelope;
+import com.sealmail.domain.mailsecurity.MailProcessingContext;
+import com.sealmail.domain.mailsecurity.MailRecordDisposition;
 import com.sealmail.domain.mailsecurity.event.MailEncrypted;
 import com.sealmail.domain.policy.PreferredAlgorithm;
 import com.sealmail.domain.shared.model.EmailAddress;
 import com.sealmail.infra.crypto.util.PemUtils;
+import com.sealmail.infra.mail.pipeline.MailProcessingHeaders;
 import com.sealmail.infra.mail.pipeline.MailPipelineStep;
-import com.sealmail.infra.mail.pipeline.MailRecordDisposition;
 import com.sealmail.infra.mail.pipeline.PipelineResult;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -42,21 +44,20 @@ public class EncryptStep implements MailPipelineStep {
 
     @Override
     public PipelineResult execute(Message<byte[]> message) {
-        MailEnvelope envelope = (MailEnvelope) message.getHeaders().get("mailEnvelope");
+        MailProcessingContext context = context(message);
+        MailEnvelope envelope = context != null ? context.envelope() : null;
         if (envelope == null) {
-            return PipelineResult.failure("Mail envelope not found in message headers");
+            return PipelineResult.failure("Mail processing context not found in message headers");
         }
 
-        Boolean encryptionEnabled = (Boolean) message.getHeaders().get("encryptionEnabled");
-        boolean mustEncrypt = Boolean.TRUE.equals(message.getHeaders().get("mustEncrypt"))
-                || "true".equals(message.getHeaders().get("mustEncrypt"));
-        if ((encryptionEnabled == null || !encryptionEnabled) && !mustEncrypt) {
+        boolean encryptionEnabled = context.decision().encryptionRequired();
+        boolean mustEncrypt = context.decision().mustEncrypt();
+        if (!encryptionEnabled && !mustEncrypt) {
             return PipelineResult.success(message.getPayload());
         }
 
         try {
-            String prefStr = (String) message.getHeaders().get("preferredAlgorithm");
-            PreferredAlgorithm preference = prefStr != null ? PreferredAlgorithm.valueOf(prefStr) : PreferredAlgorithm.AUTO;
+            PreferredAlgorithm preference = context.preferredAlgorithm();
 
             EncryptionPlan plan = buildEncryptionPlan(envelope, preference);
             if (!plan.success()) {
@@ -81,12 +82,8 @@ public class EncryptStep implements MailPipelineStep {
             log.info("  Encrypted size: {} bytes", payload.length);
             log.info("  First 100 chars: {}", new String(payload).replaceAll("[\r\n]", " ").substring(0, Math.min(100, payload.length)));
 
-            return PipelineResult.successWithHeaders(payload, Map.of(
-                    "smimeEncrypted", true,
-                    "smimeEncryptionSuite", plan.suite().name(),
-                    "smimeEncryptedRecipients", List.copyOf(plan.certificates().keySet()),
-                    "smimeEncryptedRecipientCount", plan.certificates().size()
-            ), events);
+            context = context.withSmimeEncryption(plan.suite().name(), List.copyOf(plan.certificates().keySet()));
+            return PipelineResult.successWithHeaders(payload, Map.of(MailProcessingHeaders.CONTEXT, context), events);
 
         } catch (Exception e) {
             log.error("S/MIME encryption failed: {}", e.getMessage(), e);
@@ -101,6 +98,11 @@ public class EncryptStep implements MailPipelineStep {
     @Override
     public String getStepName() {
         return "encrypt";
+    }
+
+    private MailProcessingContext context(Message<?> message) {
+        Object value = message.getHeaders().get(MailProcessingHeaders.CONTEXT);
+        return value instanceof MailProcessingContext context ? context : null;
     }
 
     private EncryptionPlan buildEncryptionPlan(MailEnvelope envelope, PreferredAlgorithm preference) {

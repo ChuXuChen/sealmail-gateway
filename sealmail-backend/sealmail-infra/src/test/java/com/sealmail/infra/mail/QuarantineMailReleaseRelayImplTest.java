@@ -1,10 +1,16 @@
 package com.sealmail.infra.mail;
 
 import com.sealmail.domain.mailsecurity.MailDirection;
+import com.sealmail.domain.mailsecurity.MailEnvelope;
+import com.sealmail.domain.mailsecurity.MailProcessingContext;
+import com.sealmail.domain.mailsecurity.MailProcessingDecision;
+import com.sealmail.domain.mailsecurity.MailRecordDisposition;
+import com.sealmail.domain.mailsecurity.RelayProfile;
 import com.sealmail.domain.mailsecurity.ProcessingResult;
 import com.sealmail.domain.quarantine.QuarantineReason;
 import com.sealmail.domain.quarantine.QuarantinedMail;
 import com.sealmail.domain.shared.model.EmailAddress;
+import com.sealmail.infra.mail.pipeline.MailProcessingHeaders;
 import com.sealmail.infra.mail.pipeline.PipelineResult;
 import com.sealmail.infra.mail.pipeline.PipelineStepTracker;
 import com.sealmail.infra.mail.pipeline.RoutingService;
@@ -108,8 +114,9 @@ class QuarantineMailReleaseRelayImplTest {
 
         ArgumentCaptor<Message<byte[]>> encryptMessage = messageCaptor();
         verify(stepTracker).executeWithTracking(encryptMessage.capture(), eq(encryptStep));
-        assertEquals(Boolean.TRUE, encryptMessage.getValue().getHeaders().get("encryptionEnabled"));
-        assertEquals("true", encryptMessage.getValue().getHeaders().get("mustEncrypt"));
+        MailProcessingContext context = context(encryptMessage.getValue());
+        assertEquals(true, context.decision().encryptionRequired());
+        assertEquals(true, context.decision().mustEncrypt());
     }
 
     @Test
@@ -175,8 +182,9 @@ class QuarantineMailReleaseRelayImplTest {
 
         ArgumentCaptor<Message<byte[]>> encryptMessage = messageCaptor();
         verify(stepTracker).executeWithTracking(encryptMessage.capture(), eq(encryptStep));
-        assertEquals(Boolean.TRUE, encryptMessage.getValue().getHeaders().get("encryptionEnabled"));
-        assertEquals("true", encryptMessage.getValue().getHeaders().get("mustEncrypt"));
+        MailProcessingContext context = context(encryptMessage.getValue());
+        assertEquals(true, context.decision().encryptionRequired());
+        assertEquals(true, context.decision().mustEncrypt());
 
         ArgumentCaptor<Message<byte[]>> relayMessage = messageCaptor();
         verify(stepTracker).executeWithTracking(relayMessage.capture(), eq(relayStep));
@@ -205,8 +213,10 @@ class QuarantineMailReleaseRelayImplTest {
         QuarantinedMail mail = mail(MailDirection.OUTBOUND);
         Message<byte[]> routed = MessageBuilder.withPayload("raw".getBytes())
                 .copyHeaders(routedMessage(mail, "raw".getBytes()).getHeaders())
-                .setHeader("quarantineRequired", true)
-                .setHeader("quarantineDetail", "domain disabled")
+                .setHeader(MailProcessingHeaders.CONTEXT, context(routedMessage(mail, "raw".getBytes()))
+                        .withDecision(MailProcessingDecision.none()
+                                .withQuarantine("DOMAIN_NOT_CONFIGURED", "domain disabled"))
+                        .withRecordDisposition(MailRecordDisposition.EXCEPTION))
                 .build();
         when(routingService.routeOutbound(any())).thenReturn(routed);
 
@@ -262,24 +272,33 @@ class QuarantineMailReleaseRelayImplTest {
     }
 
     private static Message<byte[]> routedMessage(QuarantinedMail mail, byte[] payload) {
+        MailEnvelope envelope = new MailEnvelope(
+                mail.getMessageId(),
+                mail.getSender(),
+                mail.getRecipients(),
+                mail.getRemoteAddress(),
+                "release",
+                mail.getCreatedAt(),
+                payload
+        );
+        MailProcessingContext context = MailProcessingContext.create(envelope)
+                .withDirection(mail.getDirection())
+                .withProcessingId("processing-1")
+                .withRelayProfile(new RelayProfile(
+                        "127.0.0.1",
+                        mail.getDirection() == MailDirection.OUTBOUND ? 10027 : 10026,
+                        false,
+                        "",
+                        "",
+                        10000,
+                        null));
         return MessageBuilder.withPayload(payload)
-                .setHeader("mailEnvelope", new com.sealmail.domain.mailsecurity.MailEnvelope(
-                        mail.getMessageId(),
-                        mail.getSender(),
-                        mail.getRecipients(),
-                        mail.getRemoteAddress(),
-                        "release",
-                        mail.getCreatedAt(),
-                        payload
-                ))
-                .setHeader("processingId", "processing-1")
-                .setHeader("relayHost", "127.0.0.1")
-                .setHeader("relayPort", mail.getDirection() == MailDirection.OUTBOUND ? 10027 : 10026)
-                .setHeader("relayUseTls", false)
-                .setHeader("relayUsername", "")
-                .setHeader("relayPassword", "")
-                .setHeader("relayTimeout", 10000)
+                .setHeader(MailProcessingHeaders.CONTEXT, context)
                 .build();
+    }
+
+    private static MailProcessingContext context(Message<byte[]> message) {
+        return (MailProcessingContext) message.getHeaders().get(MailProcessingHeaders.CONTEXT);
     }
 
     @SuppressWarnings("unchecked")

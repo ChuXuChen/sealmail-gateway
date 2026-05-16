@@ -1,8 +1,13 @@
 package com.sealmail.infra.mail;
 
+import com.sealmail.domain.mailsecurity.CertificateSelection;
+import com.sealmail.domain.mailsecurity.MailDirection;
 import com.sealmail.domain.mailsecurity.MailEnvelope;
+import com.sealmail.domain.mailsecurity.MailProcessingContext;
+import com.sealmail.domain.mailsecurity.MailProcessingDecision;
 import com.sealmail.domain.mail.spi.OutboundMailSubmitter;
 import com.sealmail.domain.shared.model.EmailAddress;
+import com.sealmail.infra.mail.pipeline.MailProcessingHeaders;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.messaging.MessageChannel;
@@ -10,6 +15,7 @@ import org.springframework.messaging.support.MessageBuilder;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
+import java.util.Map;
 
 @Component
 public class OutboundMailGateway implements OutboundMailSubmitter {
@@ -34,11 +40,17 @@ public class OutboundMailGateway implements OutboundMailSubmitter {
 
         log.info("Submitting outbound mail from {} to {} recipients", sender, recipients.size());
 
-        mailOutboundChannel.send(MessageBuilder
+        MailProcessingContext context = MailProcessingContext.initial(
+                envelope,
+                MailDirection.OUTBOUND,
+                "api",
+                mailContent,
+                null,
+                envelope.getRemoteHost());
+        var builder = MessageBuilder
                 .withPayload(mailContent)
-                .setHeader("mailEnvelope", envelope)
-                .setHeader("submissionType", "api")
-                .build());
+                .setHeader(MailProcessingHeaders.CONTEXT, context);
+        mailOutboundChannel.send(builder.build());
     }
 
     @Override
@@ -48,22 +60,27 @@ public class OutboundMailGateway implements OutboundMailSubmitter {
 
     @Override
     public void submitProtected(ProtectedOutboundMailSubmission submission) {
+        CertificateSelection certificates = CertificateSelection.empty()
+                .withSenderCertificate(
+                        blankToNull(submission.senderCertificatePem()),
+                        blankToNull(submission.senderCertificateThumbprint()))
+                .withRecipientCertificates(submission.recipientCertificates(), Map.of());
+        MailProcessingDecision decision = MailProcessingDecision.none()
+                .withSigningRequired(submission.signingEnabled())
+                .withEncryptionRequired(submission.encryptionEnabled());
+        MailProcessingContext context = MailProcessingContext.initial(
+                        submission.envelope(),
+                        MailDirection.OUTBOUND,
+                        "api",
+                        submission.mailContent(),
+                        null,
+                        submission.envelope().getRemoteHost())
+                .withPreferredAlgorithm(submission.preferredAlgorithm())
+                .withDecision(decision)
+                .withCertificateSelection(certificates);
         var builder = MessageBuilder
                 .withPayload(submission.mailContent())
-                .setHeader("mailEnvelope", submission.envelope())
-                .setHeader("submissionType", "api")
-                .setHeader("signingEnabled", submission.signingEnabled())
-                .setHeader("encryptionEnabled", submission.encryptionEnabled())
-                .setHeader("preferredAlgorithm", submission.preferredAlgorithm().name())
-                .setHeader("recipientCertificates", submission.recipientCertificates());
-
-        if (submission.senderCertificatePem() != null && !submission.senderCertificatePem().isBlank()) {
-            builder.setHeader("senderCertificate", submission.senderCertificatePem());
-        }
-        if (submission.senderCertificateThumbprint() != null && !submission.senderCertificateThumbprint().isBlank()) {
-            builder.setHeader("senderCertificateThumbprint", submission.senderCertificateThumbprint());
-        }
-
+                .setHeader(MailProcessingHeaders.CONTEXT, context);
         mailOutboundChannel.send(builder.build());
     }
 
@@ -74,5 +91,9 @@ public class OutboundMailGateway implements OutboundMailSubmitter {
                 .toList();
 
         submitMail(mailContent, senderAddr, recipientAddrs);
+    }
+
+    private String blankToNull(String value) {
+        return value == null || value.isBlank() ? null : value;
     }
 }

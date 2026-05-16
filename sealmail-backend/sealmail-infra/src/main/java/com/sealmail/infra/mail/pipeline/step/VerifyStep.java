@@ -2,7 +2,9 @@ package com.sealmail.infra.mail.pipeline.step;
 
 import com.sealmail.domain.certificate.spi.SMIMEOperations;
 import com.sealmail.domain.mailsecurity.MailEnvelope;
+import com.sealmail.domain.mailsecurity.MailProcessingContext;
 import com.sealmail.domain.mailsecurity.event.MailVerified;
+import com.sealmail.infra.mail.pipeline.MailProcessingHeaders;
 import com.sealmail.infra.mail.pipeline.MailPipelineStep;
 import com.sealmail.infra.mail.pipeline.PipelineResult;
 import org.springframework.messaging.Message;
@@ -22,9 +24,10 @@ public class VerifyStep implements MailPipelineStep {
 
     @Override
     public PipelineResult execute(Message<byte[]> message) {
-        MailEnvelope envelope = (MailEnvelope) message.getHeaders().get("mailEnvelope");
+        MailProcessingContext context = context(message);
+        MailEnvelope envelope = context != null ? context.envelope() : null;
         if (envelope == null) {
-            return PipelineResult.failure("Mail envelope not found in message headers");
+            return PipelineResult.failure("Mail processing context not found in message headers");
         }
 
         try {
@@ -32,7 +35,7 @@ public class VerifyStep implements MailPipelineStep {
                 return PipelineResult.success(message.getPayload());
             }
 
-            String senderCert = (String) message.getHeaders().get("senderCertificate");
+            String senderCert = context.certificateSelection().senderCertificatePem();
 
             if (senderCert == null) {
                 // Unknown sender certificate - skip verification instead of quarantining blindly.
@@ -64,5 +67,10 @@ public class VerifyStep implements MailPipelineStep {
     @Override
     public String getStepName() {
         return "verify-signature";
+    }
+
+    private MailProcessingContext context(Message<?> message) {
+        Object value = message.getHeaders().get(MailProcessingHeaders.CONTEXT);
+        return value instanceof MailProcessingContext context ? context : null;
     }
 }

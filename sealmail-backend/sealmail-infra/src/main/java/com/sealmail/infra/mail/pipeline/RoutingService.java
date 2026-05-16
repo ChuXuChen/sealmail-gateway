@@ -12,7 +12,6 @@ import com.sealmail.infra.config.properties.PostfixProperties;
 import com.sealmail.infra.crypto.util.PemUtils;
 import org.slf4j.Logger;
 import org.springframework.messaging.Message;
-import org.springframework.messaging.MessageHeaders;
 import org.springframework.messaging.support.MessageBuilder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -47,7 +46,8 @@ public class RoutingService {
 
     @Transactional
     public Message<byte[]> routeInbound(Message<byte[]> message) {
-        MailEnvelope envelope = (MailEnvelope) message.getHeaders().get("mailEnvelope");
+        MailProcessingContext messageContext = context(message);
+        MailEnvelope envelope = messageContext != null ? messageContext.envelope() : null;
         if (envelope == null) {
             return message;
         }
@@ -92,7 +92,8 @@ public class RoutingService {
 
     @Transactional
     public Message<byte[]> routeOutbound(Message<byte[]> message) {
-        MailEnvelope envelope = (MailEnvelope) message.getHeaders().get("mailEnvelope");
+        MailProcessingContext messageContext = context(message);
+        MailEnvelope envelope = messageContext != null ? messageContext.envelope() : null;
         if (envelope == null) {
             return message;
         }
@@ -197,77 +198,109 @@ public class RoutingService {
     private Message<byte[]> enhanceMessageWithRouting(Message<byte[]> message, RoutingDecision decision,
                                                        MailEnvelope envelope, DomainConfig domainConfig,
                                                        String processingId, MailDirection direction) {
-        Map<String, Object> headers = new HashMap<>();
-        headers.putAll(message.getHeaders());
-        headers.put("routingDecision", decision);
-        headers.put("processingId", processingId);
-        headers.put("messageId", envelope.getMessageId());
-        headers.put("sender", envelope.getSender());
-        headers.put("recipients", envelope.getRecipients());
-        headers.put("mailDirection", direction.name());
-        headers.put("remoteAddress", envelope.getRemoteHost());
-        headers.put("originalMailContent", message.getPayload());
-
-        if (domainConfig != null) {
-            headers.putIfAbsent("preferredAlgorithm", domainConfig.getPreferredAlgorithm().name());
-            headers.putIfAbsent("dkimEnabled", domainConfig.isDkimEnabled());
+        MailProcessingContext baseContext = context(message);
+        if (baseContext == null) {
+            baseContext = MailProcessingContext.initial(
+                    envelope,
+                    direction,
+                    null,
+                    message.getPayload(),
+                    null,
+                    envelope.getRemoteHost());
         }
+        PreferredAlgorithm preferredAlgorithm = baseContext.preferredAlgorithm() != PreferredAlgorithm.AUTO
+                ? baseContext.preferredAlgorithm()
+                : domainConfig != null ? domainConfig.getPreferredAlgorithm() : PreferredAlgorithm.AUTO;
+        MailProcessingDecision processingDecision = baseContext.decision();
+        CertificateSelection certificates = baseContext.certificateSelection();
+        RelayProfile relayProfile = relayProfile(direction);
 
         if (direction == MailDirection.OUTBOUND) {
-            applyRelayHeaders(headers, MailDirection.OUTBOUND);
-            boolean signingEnabled = Boolean.TRUE.equals(message.getHeaders().get("signingEnabled"))
+            boolean signingEnabled = processingDecision.signingRequired()
                     || decision instanceof RoutingDecision.OutboundSign
                     || (decision instanceof RoutingDecision.OutboundEncrypt
                     && domainConfig != null
                     && domainConfig.isSigningEnabled());
             if (signingEnabled) {
-                headers.put("signingEnabled", true);
-                ensureOutboundSigningHeaders(headers, envelope, domainConfig);
+                processingDecision = processingDecision.withSigningRequired(true);
+                certificates = ensureOutboundSigningCertificates(certificates, envelope, preferredAlgorithm);
             }
 
             if (decision instanceof RoutingDecision.OutboundEncrypt encrypt) {
-                headers.put("encryptionEnabled", true);
-                ensureOutboundEncryptionHeaders(headers, encrypt.getRecipients(), domainConfig);
+                processingDecision = processingDecision.withEncryptionRequired(true);
+                certificates = ensureOutboundEncryptionCertificates(
+                        certificates,
+                        encrypt.getRecipients(),
+                        preferredAlgorithm);
             }
         }
 
         if (direction == MailDirection.INBOUND) {
-            attachInboundCryptoHeaders(headers, envelope);
-            applyRelayHeaders(headers, MailDirection.INBOUND);
+            InboundCryptoSelection inboundCrypto = attachInboundCrypto(certificates, envelope);
+            certificates = inboundCrypto.certificates();
+            processingDecision = processingDecision
+                    .withDecryptionRequired(inboundCrypto.decryptionRequired())
+                    .withVerificationRequired(inboundCrypto.verificationRequired());
         }
 
         if (decision instanceof RoutingDecision.Quarantine quarantine) {
-            headers.put("quarantineRequired", true);
-            headers.put("quarantineReason", quarantine.getReason().name());
-            headers.put("quarantineDetail", quarantine.getDetail());
-            headers.put("mailRecordDisposition", MailRecordDisposition.EXCEPTION.name());
+            processingDecision = processingDecision.withQuarantine(quarantine.getReason(), quarantine.getDetail());
+            baseContext = baseContext.withRecordDisposition(MailRecordDisposition.EXCEPTION);
         }
 
-        return MessageBuilder.createMessage(message.getPayload(), new MessageHeaders(headers));
+        if (domainConfig != null && domainConfig.isDkimEnabled()) {
+            processingDecision = processingDecision.withDkimSigningRequired(true);
+        }
+
+        MailProcessingContext context = baseContext
+                .withRoutingDecision(decision)
+                .withProcessingId(processingId)
+                .withDirection(direction)
+                .withPreferredAlgorithm(preferredAlgorithm)
+                .withDecision(processingDecision)
+                .withCertificateSelection(certificates)
+                .withRelayProfile(relayProfile);
+        AuditTrace auditTrace = context.auditTrace();
+        if (auditTrace != null) {
+            context = context.withAuditTrace(new AuditTrace(
+                    processingId,
+                    auditTrace.correlationId(),
+                    auditTrace.messageId(),
+                    auditTrace.submissionType(),
+                    auditTrace.remoteAddress()));
+        }
+        return MessageBuilder.withPayload(message.getPayload())
+                .setHeader(MailProcessingHeaders.CONTEXT, context)
+                .build();
     }
 
-    private void ensureOutboundSigningHeaders(Map<String, Object> headers,
-                                              MailEnvelope envelope,
-                                              DomainConfig domainConfig) {
-        if (headers.containsKey("senderCertificate")) {
-            return;
+    private MailProcessingContext context(Message<?> message) {
+        Object value = message.getHeaders().get(MailProcessingHeaders.CONTEXT);
+        return value instanceof MailProcessingContext context ? context : null;
+    }
+
+    private CertificateSelection ensureOutboundSigningCertificates(CertificateSelection certificates,
+                                                                   MailEnvelope envelope,
+                                                                   PreferredAlgorithm preferredAlgorithm) {
+        if (hasText(certificates.senderCertificatePem())) {
+            return certificates;
         }
         List<Certificate> signingCerts = certificateRepository.findTrustedForSigning(envelope.getSender());
         Certificate selected = selectCertByPreference(
                 signingCerts,
-                domainConfig != null ? domainConfig.getPreferredAlgorithm() : null
+                preferredAlgorithm
         );
         if (selected != null) {
-            headers.put("senderCertificate", selected.getPemContent());
-            headers.put("senderCertificateThumbprint", selected.getId().getThumbprint());
+            return certificates.withSenderCertificate(selected.getPemContent(), selected.getId().getThumbprint());
         }
+        return certificates;
     }
 
-    private void ensureOutboundEncryptionHeaders(Map<String, Object> headers,
-                                                 List<EmailAddress> recipients,
-                                                 DomainConfig domainConfig) {
-        if (headers.containsKey("recipientCertificates")) {
-            return;
+    private CertificateSelection ensureOutboundEncryptionCertificates(CertificateSelection certificates,
+                                                                     List<EmailAddress> recipients,
+                                                                     PreferredAlgorithm preferredAlgorithm) {
+        if (!certificates.recipientCertificates().isEmpty()) {
+            return certificates;
         }
         Map<EmailAddress, String> certMap = new HashMap<>();
         Map<EmailAddress, String> thumbprintMap = new HashMap<>();
@@ -275,52 +308,55 @@ public class RoutingService {
             List<Certificate> certs = certificateRepository.findTrustedForEncryption(recipient);
             Certificate selected = selectCertByPreference(
                     certs,
-                    domainConfig != null ? domainConfig.getPreferredAlgorithm() : null
+                    preferredAlgorithm
             );
             if (selected != null) {
                 certMap.put(recipient, selected.getPemContent());
                 thumbprintMap.put(recipient, selected.getId().getThumbprint());
             }
         }
-        headers.put("recipientCertificates", certMap);
-        headers.put("recipientCertificateThumbprints", thumbprintMap);
+        return certificates.withRecipientCertificates(certMap, thumbprintMap);
     }
 
-    private void attachInboundCryptoHeaders(Map<String, Object> headers, MailEnvelope envelope) {
-        if (!headers.containsKey("recipientCertificate")) {
+    private InboundCryptoSelection attachInboundCrypto(CertificateSelection certificates, MailEnvelope envelope) {
+        boolean decryptionRequired = false;
+        boolean verificationRequired = false;
+        if (!hasText(certificates.recipientCertificatePem())) {
             Certificate decryptionCert = selectInboundDecryptionCertificate(envelope.getRecipients());
             if (decryptionCert != null) {
-                headers.put("recipientCertificate", decryptionCert.getPemContent());
-                headers.put("recipientCertificateThumbprint", decryptionCert.getId().getThumbprint());
-                headers.put("decryptionRequired", true);
+                certificates = certificates.withRecipientCertificate(
+                        decryptionCert.getPemContent(),
+                        decryptionCert.getId().getThumbprint());
+                decryptionRequired = true;
             }
         }
 
-        if (!headers.containsKey("senderCertificate")) {
+        if (!hasText(certificates.senderCertificatePem())) {
             Certificate senderCert = selectInboundVerificationCertificate(envelope.getSender());
             if (senderCert != null) {
-                headers.put("senderCertificate", senderCert.getPemContent());
-                headers.put("verificationRequired", true);
+                certificates = certificates.withSenderCertificate(
+                        senderCert.getPemContent(),
+                        senderCert.getId().getThumbprint());
+                verificationRequired = true;
             }
         }
+        return new InboundCryptoSelection(certificates, decryptionRequired, verificationRequired);
     }
 
-    private void applyRelayHeaders(Map<String, Object> headers, MailDirection direction) {
-        if (headers.containsKey("relayHost") || !postfixProperties.isEnabled()) {
-            return;
+    private RelayProfile relayProfile(MailDirection direction) {
+        if (!postfixProperties.isEnabled()) {
+            return null;
         }
-
-        headers.put("relayHost", postfixProperties.getHost());
-        headers.put("relayPort", direction == MailDirection.INBOUND
-                ? postfixProperties.getAfterFilterPort()
-                : postfixProperties.getOutboundPort());
-        headers.put("relayUseTls", postfixProperties.isUseTls());
-        headers.put("relayUsername", "");
-        headers.put("relayPassword", "");
-        headers.put("relayTimeout", postfixProperties.getTimeout());
-        if (postfixProperties.getEnvelopeFrom() != null && !postfixProperties.getEnvelopeFrom().isBlank()) {
-            headers.put("relayEnvelopeFrom", postfixProperties.getEnvelopeFrom());
-        }
+        return new RelayProfile(
+                postfixProperties.getHost(),
+                direction == MailDirection.INBOUND
+                        ? postfixProperties.getAfterFilterPort()
+                        : postfixProperties.getOutboundPort(),
+                postfixProperties.isUseTls(),
+                "",
+                "",
+                postfixProperties.getTimeout(),
+                postfixProperties.getEnvelopeFrom());
     }
 
     private Certificate selectInboundDecryptionCertificate(List<EmailAddress> recipients) {
@@ -397,6 +433,10 @@ public class RoutingService {
         return "RSA".equals(getCertAlgorithm(cert));
     }
 
+    private boolean hasText(String value) {
+        return value != null && !value.isBlank();
+    }
+
     private String getCertCurveOid(Certificate cert) {
         try {
             java.security.cert.X509Certificate x509 = PemUtils.parseCertificate(cert.getPemContent());
@@ -407,5 +447,12 @@ public class RoutingService {
         } catch (Exception e) {
             return null;
         }
+    }
+
+    private record InboundCryptoSelection(
+            CertificateSelection certificates,
+            boolean decryptionRequired,
+            boolean verificationRequired
+    ) {
     }
 }

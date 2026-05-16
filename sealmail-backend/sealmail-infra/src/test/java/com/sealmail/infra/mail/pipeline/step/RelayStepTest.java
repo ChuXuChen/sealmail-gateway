@@ -7,8 +7,12 @@ import com.sealmail.domain.certificate.KeyUsage;
 import com.sealmail.domain.certificate.ValidityPeriod;
 import com.sealmail.domain.mailsecurity.MailDirection;
 import com.sealmail.domain.mailsecurity.MailEnvelope;
+import com.sealmail.domain.mailsecurity.MailProcessingContext;
+import com.sealmail.domain.mailsecurity.MailProcessingDecision;
+import com.sealmail.domain.mailsecurity.RelayProfile;
 import com.sealmail.domain.shared.model.EmailAddress;
 import com.sealmail.infra.config.properties.RelayProperties;
+import com.sealmail.infra.mail.pipeline.MailProcessingHeaders;
 import com.sealmail.infra.mail.relay.SmtpRelayClient;
 import com.sealmail.infra.mail.relay.SmtpRelayRequest;
 import com.sealmail.infra.mail.pipeline.PipelineResult;
@@ -50,15 +54,14 @@ class RelayStepTest {
         RelayStep relayStep = new RelayStep(relayProperties, smtpRelayClient, mock(CertificateRepository.class));
 
         byte[] payload = "Subject: Test\r\n\r\nBody".getBytes();
-        Message<byte[]> message = MessageBuilder.withPayload(payload)
-                .setHeader("mailEnvelope", envelope("sender@example.com", List.of("a@example.com", "b@example.com"), payload))
-                .setHeader("relayHost", "smtp.override.example.com")
-                .setHeader("relayPort", "587")
-                .setHeader("relayUsername", "auth@example.com")
-                .setHeader("relayPassword", "auth-secret")
-                .setHeader("relayUseTls", "true")
-                .setHeader("relayTimeout", "12000")
-                .build();
+        Message<byte[]> message = message(
+                payload,
+                "sender@example.com",
+                List.of("a@example.com", "b@example.com"),
+                MailDirection.OUTBOUND,
+                MailProcessingDecision.none(),
+                new RelayProfile("smtp.override.example.com", 587, true,
+                        "auth@example.com", "auth-secret", 12000, null));
 
         PipelineResult result = relayStep.execute(message);
 
@@ -90,9 +93,8 @@ class RelayStepTest {
         RelayStep relayStep = new RelayStep(relayProperties, smtpRelayClient, mock(CertificateRepository.class));
 
         byte[] payload = "Subject: Test\r\n\r\nBody".getBytes();
-        Message<byte[]> message = MessageBuilder.withPayload(payload)
-                .setHeader("mailEnvelope", envelope("sender@example.com", List.of("recipient@example.com"), payload))
-                .build();
+        Message<byte[]> message = message(payload, "sender@example.com", List.of("recipient@example.com"),
+                MailDirection.OUTBOUND, MailProcessingDecision.none(), null);
 
         PipelineResult result = relayStep.execute(message);
 
@@ -117,10 +119,9 @@ class RelayStepTest {
         RelayStep relayStep = new RelayStep(relayProperties, smtpRelayClient, mock(CertificateRepository.class));
 
         byte[] payload = "Subject: Test\r\n\r\nBody".getBytes();
-        Message<byte[]> message = MessageBuilder.withPayload(payload)
-                .setHeader("mailEnvelope", envelope("sender@example.com", List.of("recipient@example.com"), payload))
-                .setHeader("relayEnvelopeFrom", "override@example.com")
-                .build();
+        Message<byte[]> message = message(payload, "sender@example.com", List.of("recipient@example.com"),
+                MailDirection.OUTBOUND, MailProcessingDecision.none(),
+                new RelayProfile("smtp.example.com", 25, false, "", "", 5000, "override@example.com"));
 
         PipelineResult result = relayStep.execute(message);
 
@@ -128,6 +129,46 @@ class RelayStepTest {
         ArgumentCaptor<SmtpRelayRequest> requestCaptor = ArgumentCaptor.forClass(SmtpRelayRequest.class);
         verify(smtpRelayClient).send(requestCaptor.capture());
         assertEquals("override@example.com", requestCaptor.getValue().envelopeFrom());
+    }
+
+    @Test
+    void usesRelayProfileFromContext() throws Exception {
+        RelayProperties relayProperties = new RelayProperties();
+        relayProperties.setHost("fallback.example.com");
+        relayProperties.setPort(25);
+        relayProperties.setUsername("");
+        relayProperties.setPassword("");
+        relayProperties.setUseTls(false);
+        relayProperties.setTimeout(5000);
+
+        SmtpRelayClient smtpRelayClient = mock(SmtpRelayClient.class);
+        doNothing().when(smtpRelayClient).send(org.mockito.ArgumentMatchers.any(SmtpRelayRequest.class));
+        RelayStep relayStep = new RelayStep(relayProperties, smtpRelayClient, mock(CertificateRepository.class));
+
+        byte[] payload = "Subject: Test\r\n\r\nBody".getBytes();
+        MailEnvelope envelope = envelope("sender@example.com", List.of("recipient@example.com"), payload);
+        MailProcessingContext context = MailProcessingContext.create(envelope)
+                .withRelayProfile(new RelayProfile(
+                        "context.smtp.example.com",
+                        2525,
+                        true,
+                        "context-user@example.com",
+                        "secret",
+                        12000,
+                        "context-envelope@example.com"));
+        Message<byte[]> message = MessageBuilder.withPayload(payload)
+                .setHeader(MailProcessingHeaders.CONTEXT, context)
+                .build();
+
+        PipelineResult result = relayStep.execute(message);
+
+        assertTrue(result.success());
+        ArgumentCaptor<SmtpRelayRequest> requestCaptor = ArgumentCaptor.forClass(SmtpRelayRequest.class);
+        verify(smtpRelayClient).send(requestCaptor.capture());
+        assertEquals("context.smtp.example.com", requestCaptor.getValue().connection().host());
+        assertEquals(2525, requestCaptor.getValue().connection().port());
+        assertTrue(requestCaptor.getValue().connection().useStartTls());
+        assertEquals("context-envelope@example.com", requestCaptor.getValue().envelopeFrom());
     }
 
     @Test
@@ -151,20 +192,17 @@ class RelayStepTest {
                 .thenReturn(List.of(certificate(certified, "RSA")));
         when(certificateRepository.findTrustedForEncryption(missing)).thenReturn(List.of());
 
-        Message<byte[]> message = MessageBuilder.withPayload(payload)
-                .setHeader("mailEnvelope", envelope(
-                        "sender@example.com",
-                        List.of(certified.getValue(), missing.getValue()),
-                        payload))
-                .setHeader("mailDirection", MailDirection.OUTBOUND.name())
-                .setHeader("encryptionEnabled", true)
-                .build();
+        Message<byte[]> message = message(payload, "sender@example.com",
+                List.of(certified.getValue(), missing.getValue()),
+                MailDirection.OUTBOUND,
+                MailProcessingDecision.none().withEncryptionRequired(true),
+                null);
 
         PipelineResult result = relayStep.execute(message);
 
         assertFalse(result.success());
         assertTrue(result.requiresQuarantine());
-        assertTrue(result.errorMessage().contains("1261017453@qq.com"));
+        assertTrue(result.quarantineDetail().contains("1261017453@qq.com"));
         verify(smtpRelayClient, never()).send(org.mockito.ArgumentMatchers.any(SmtpRelayRequest.class));
     }
 
@@ -194,13 +232,11 @@ class RelayStepTest {
                 .thenReturn(List.of(certificate(certified, "RSA")));
         when(certificateRepository.findTrustedForEncryption(missing)).thenReturn(List.of());
 
-        Message<byte[]> message = MessageBuilder.withPayload(payload)
-                .setHeader("mailEnvelope", envelope(
-                        "sender@example.com",
-                        List.of(certified.getValue(), missing.getValue()),
-                        payload))
-                .setHeader("mailDirection", MailDirection.OUTBOUND.name())
-                .build();
+        Message<byte[]> message = message(payload, "sender@example.com",
+                List.of(certified.getValue(), missing.getValue()),
+                MailDirection.OUTBOUND,
+                MailProcessingDecision.none(),
+                null);
 
         PipelineResult result = relayStep.execute(message);
 
@@ -221,6 +257,21 @@ class RelayStepTest {
                 Instant.now(),
                 payload
         );
+    }
+
+    private static Message<byte[]> message(byte[] payload,
+                                           String sender,
+                                           List<String> recipients,
+                                           MailDirection direction,
+                                           MailProcessingDecision decision,
+                                           RelayProfile relayProfile) {
+        MailProcessingContext context = MailProcessingContext.create(envelope(sender, recipients, payload))
+                .withDirection(direction)
+                .withDecision(decision)
+                .withRelayProfile(relayProfile);
+        return MessageBuilder.withPayload(payload)
+                .setHeader(MailProcessingHeaders.CONTEXT, context)
+                .build();
     }
 
     private static Certificate certificate(EmailAddress owner, String algorithm) {

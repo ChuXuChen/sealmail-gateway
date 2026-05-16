@@ -1,7 +1,9 @@
 package com.sealmail.infra.mail.pipeline.step;
 
 import com.sealmail.domain.mailsecurity.MailEnvelope;
+import com.sealmail.domain.mailsecurity.MailProcessingContext;
 import com.sealmail.infra.mail.auth.DkimSigner;
+import com.sealmail.infra.mail.pipeline.MailProcessingHeaders;
 import com.sealmail.infra.mail.pipeline.MailPipelineStep;
 import com.sealmail.infra.mail.pipeline.PipelineResult;
 import org.springframework.messaging.Message;
@@ -18,11 +20,11 @@ public class DkimSignStep implements MailPipelineStep {
 
     @Override
     public PipelineResult execute(Message<byte[]> message) {
-        Boolean dkimEnabled = (Boolean) message.getHeaders().get("dkimEnabled");
-        if (dkimEnabled == null || !dkimEnabled) {
+        MailProcessingContext context = context(message);
+        if (context == null || !context.decision().dkimSigningRequired()) {
             return PipelineResult.success(message.getPayload());
         }
-        MailEnvelope envelope = (MailEnvelope) message.getHeaders().get("mailEnvelope");
+        MailEnvelope envelope = context.envelope();
         if (envelope == null) {
             return PipelineResult.success(message.getPayload());
         }
@@ -32,5 +34,10 @@ public class DkimSignStep implements MailPipelineStep {
     @Override
     public String getStepName() {
         return "dkim-sign";
+    }
+
+    private MailProcessingContext context(Message<?> message) {
+        Object value = message.getHeaders().get(MailProcessingHeaders.CONTEXT);
+        return value instanceof MailProcessingContext context ? context : null;
     }
 }

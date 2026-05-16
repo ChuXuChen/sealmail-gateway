@@ -8,8 +8,10 @@ import com.sealmail.domain.certificate.KeyUsage;
 import com.sealmail.domain.certificate.ValidityPeriod;
 import com.sealmail.domain.mailsecurity.MailDirection;
 import com.sealmail.domain.mailsecurity.MailEnvelope;
+import com.sealmail.domain.mailsecurity.MailProcessingContext;
 import com.sealmail.domain.mailsecurity.MailProcessing;
 import com.sealmail.domain.mailsecurity.MailProcessingRepository;
+import com.sealmail.domain.mailsecurity.MailRecordDisposition;
 import com.sealmail.domain.mailsecurity.MailRouter;
 import com.sealmail.domain.mailsecurity.RoutingDecision;
 import com.sealmail.domain.policy.DomainConfig;
@@ -71,25 +73,26 @@ class RoutingServiceTest {
         when(mailProcessingRepository.save(any(MailProcessing.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
         Message<byte[]> message = MessageBuilder.withPayload("hello".getBytes())
-                .setHeader("mailEnvelope", envelope)
+                .setHeader(MailProcessingHeaders.CONTEXT, MailProcessingContext.create(envelope))
                 .build();
 
         Message<byte[]> routed = routingService.routeOutbound(message);
 
-        assertEquals(Boolean.TRUE, routed.getHeaders().get("signingEnabled"));
-        assertEquals(Boolean.TRUE, routed.getHeaders().get("encryptionEnabled"));
-        assertEquals("127.0.0.1", routed.getHeaders().get("relayHost"));
-        assertEquals(10027, routed.getHeaders().get("relayPort"));
-        assertEquals("mailer@example.com", routed.getHeaders().get("relayEnvelopeFrom"));
-        assertEquals(senderCert.getPemContent(), routed.getHeaders().get("senderCertificate"));
-        assertNotNull(routed.getHeaders().get("senderCertificateThumbprint"));
-        @SuppressWarnings("unchecked")
-        var recipientCertificates = (java.util.Map<EmailAddress, String>) routed.getHeaders().get("recipientCertificates");
-        assertEquals(1, recipientCertificates.size());
-        assertEquals(recipientCert.getPemContent(), recipientCertificates.get(recipient));
-        @SuppressWarnings("unchecked")
-        var recipientThumbprints = (java.util.Map<EmailAddress, String>) routed.getHeaders().get("recipientCertificateThumbprints");
-        assertEquals(recipientCert.getId().getThumbprint(), recipientThumbprints.get(recipient));
+        MailProcessingContext context = (MailProcessingContext) routed.getHeaders().get(MailProcessingHeaders.CONTEXT);
+        assertNotNull(context);
+        assertEquals(envelope, context.envelope());
+        assertEquals(MailDirection.OUTBOUND, context.direction());
+        assertEquals(PreferredAlgorithm.AUTO, context.preferredAlgorithm());
+        assertTrue(context.decision().signingRequired());
+        assertTrue(context.decision().encryptionRequired());
+        assertEquals(senderCert.getPemContent(), context.certificateSelection().senderCertificatePem());
+        assertEquals(senderCert.getId().getThumbprint(), context.certificateSelection().senderCertificateThumbprint());
+        assertEquals(recipientCert.getPemContent(), context.certificateSelection().recipientCertificates().get(recipient));
+        assertEquals(recipientCert.getId().getThumbprint(),
+                context.certificateSelection().recipientCertificateThumbprints().get(recipient));
+        assertEquals("127.0.0.1", context.relayProfile().host());
+        assertEquals(10027, context.relayProfile().port());
+        assertEquals("mailer@example.com", context.relayProfile().envelopeFrom());
     }
 
     @Test
@@ -122,18 +125,21 @@ class RoutingServiceTest {
         when(mailProcessingRepository.save(any(MailProcessing.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
         Message<byte[]> message = MessageBuilder.withPayload("ciphertext".getBytes())
-                .setHeader("mailEnvelope", envelope)
+                .setHeader(MailProcessingHeaders.CONTEXT, MailProcessingContext.create(envelope))
                 .build();
 
         Message<byte[]> routed = routingService.routeInbound(message);
 
-        assertEquals(senderCert.getPemContent(), routed.getHeaders().get("senderCertificate"));
-        assertEquals(recipientCert.getPemContent(), routed.getHeaders().get("recipientCertificate"));
-        assertEquals("127.0.0.1", routed.getHeaders().get("relayHost"));
-        assertEquals(10026, routed.getHeaders().get("relayPort"));
-        assertEquals("mailer@example.com", routed.getHeaders().get("relayEnvelopeFrom"));
-        assertTrue(Boolean.TRUE.equals(routed.getHeaders().get("verificationRequired")));
-        assertTrue(Boolean.TRUE.equals(routed.getHeaders().get("decryptionRequired")));
+        MailProcessingContext context = (MailProcessingContext) routed.getHeaders().get(MailProcessingHeaders.CONTEXT);
+        assertNotNull(context);
+        assertEquals(MailDirection.INBOUND, context.direction());
+        assertTrue(context.decision().verificationRequired());
+        assertTrue(context.decision().decryptionRequired());
+        assertEquals(senderCert.getPemContent(), context.certificateSelection().senderCertificatePem());
+        assertEquals(recipientCert.getPemContent(), context.certificateSelection().recipientCertificatePem());
+        assertEquals("127.0.0.1", context.relayProfile().host());
+        assertEquals(10026, context.relayProfile().port());
+        assertEquals("mailer@example.com", context.relayProfile().envelopeFrom());
     }
 
     @Test
@@ -162,11 +168,12 @@ class RoutingServiceTest {
         when(mailProcessingRepository.save(any(MailProcessing.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
         Message<byte[]> routed = routingService.routeOutbound(MessageBuilder.withPayload("hello".getBytes())
-                .setHeader("mailEnvelope", envelope)
-                .setHeader("preferredAlgorithm", PreferredAlgorithm.STANDARD_ONLY.name())
+                .setHeader(MailProcessingHeaders.CONTEXT, MailProcessingContext.create(envelope)
+                        .withPreferredAlgorithm(PreferredAlgorithm.STANDARD_ONLY))
                 .build());
 
-        assertEquals(PreferredAlgorithm.STANDARD_ONLY.name(), routed.getHeaders().get("preferredAlgorithm"));
+        MailProcessingContext context = (MailProcessingContext) routed.getHeaders().get(MailProcessingHeaders.CONTEXT);
+        assertEquals(PreferredAlgorithm.STANDARD_ONLY, context.preferredAlgorithm());
     }
 
     @Test
@@ -204,11 +211,12 @@ class RoutingServiceTest {
         when(mailProcessingRepository.save(any(MailProcessing.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
         Message<byte[]> routed = routingService.routeOutbound(MessageBuilder.withPayload("hello".getBytes())
-                .setHeader("mailEnvelope", envelope)
+                .setHeader(MailProcessingHeaders.CONTEXT, MailProcessingContext.create(envelope))
                 .build());
 
-        assertEquals(null, routed.getHeaders().get("encryptionEnabled"));
-        assertEquals(null, routed.getHeaders().get("recipientCertificates"));
+        MailProcessingContext context = (MailProcessingContext) routed.getHeaders().get(MailProcessingHeaders.CONTEXT);
+        assertEquals(false, context.decision().encryptionRequired());
+        assertEquals(true, context.certificateSelection().recipientCertificates().isEmpty());
     }
 
     @Test
@@ -239,16 +247,18 @@ class RoutingServiceTest {
         when(mailProcessingRepository.save(any(MailProcessing.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
         Message<byte[]> routed = routingService.routeOutbound(MessageBuilder.withPayload("hello".getBytes())
-                .setHeader("mailEnvelope", envelope)
+                .setHeader(MailProcessingHeaders.CONTEXT, MailProcessingContext.create(envelope))
                 .build());
 
-        assertEquals(Boolean.TRUE, routed.getHeaders().get("quarantineRequired"));
-        assertEquals("DOMAIN_NOT_CONFIGURED", routed.getHeaders().get("quarantineReason"));
-        assertEquals(MailRecordDisposition.EXCEPTION.name(), routed.getHeaders().get("mailRecordDisposition"));
+        MailProcessingContext context = (MailProcessingContext) routed.getHeaders().get(MailProcessingHeaders.CONTEXT);
+        assertNotNull(context);
+        assertTrue(context.decision().requiresQuarantine());
+        assertEquals("DOMAIN_NOT_CONFIGURED", context.decision().quarantine().reason());
+        assertEquals(MailRecordDisposition.EXCEPTION, context.recordDisposition());
         assertEquals("Sender domain is not configured and enabled as a local domain: example.com",
-                routed.getHeaders().get("quarantineDetail"));
-        assertEquals(null, routed.getHeaders().get("signingEnabled"));
-        assertEquals(null, routed.getHeaders().get("dkimEnabled"));
+                context.decision().quarantine().detail());
+        assertEquals(false, context.decision().signingRequired());
+        assertEquals(false, context.decision().dkimSigningRequired());
         verify(certificateRepository, never()).findTrustedForSigning(sender);
     }
 
@@ -276,14 +286,15 @@ class RoutingServiceTest {
         when(mailProcessingRepository.save(any(MailProcessing.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
         Message<byte[]> routed = routingService.routeInbound(MessageBuilder.withPayload("hello".getBytes())
-                .setHeader("mailEnvelope", envelope)
+                .setHeader(MailProcessingHeaders.CONTEXT, MailProcessingContext.create(envelope))
                 .build());
 
-        assertEquals(Boolean.TRUE, routed.getHeaders().get("quarantineRequired"));
-        assertEquals("DOMAIN_NOT_CONFIGURED", routed.getHeaders().get("quarantineReason"));
-        assertEquals(MailRecordDisposition.EXCEPTION.name(), routed.getHeaders().get("mailRecordDisposition"));
+        MailProcessingContext context = (MailProcessingContext) routed.getHeaders().get(MailProcessingHeaders.CONTEXT);
+        assertTrue(context.decision().requiresQuarantine());
+        assertEquals("DOMAIN_NOT_CONFIGURED", context.decision().quarantine().reason());
+        assertEquals(MailRecordDisposition.EXCEPTION, context.recordDisposition());
         assertEquals("No recipient domain is configured and enabled as a local domain for this mail",
-                routed.getHeaders().get("quarantineDetail"));
+                context.decision().quarantine().detail());
         verify(mailRouter, never()).route(any(), any(), any(), any(), any(), any());
     }
 

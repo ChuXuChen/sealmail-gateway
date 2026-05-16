@@ -3,10 +3,12 @@ package com.sealmail.infra.mail.pipeline.step;
 import com.sealmail.domain.certificate.CertificateRepository;
 import com.sealmail.domain.certificate.spi.SMIMEOperations;
 import com.sealmail.domain.mailsecurity.MailEnvelope;
+import com.sealmail.domain.mailsecurity.MailProcessingContext;
 import com.sealmail.domain.mailsecurity.event.MailSigned;
 import com.sealmail.domain.policy.PreferredAlgorithm;
 import com.sealmail.infra.crypto.KeyStoreService;
 import com.sealmail.infra.crypto.util.PemUtils;
+import com.sealmail.infra.mail.pipeline.MailProcessingHeaders;
 import com.sealmail.infra.mail.pipeline.MailPipelineStep;
 import com.sealmail.infra.mail.pipeline.PipelineResult;
 import org.slf4j.Logger;
@@ -36,23 +38,22 @@ public class SignStep implements MailPipelineStep {
 
     @Override
     public PipelineResult execute(Message<byte[]> message) {
-        MailEnvelope envelope = (MailEnvelope) message.getHeaders().get("mailEnvelope");
+        MailProcessingContext context = context(message);
+        MailEnvelope envelope = context != null ? context.envelope() : null;
         if (envelope == null) {
             return PipelineResult.success(message.getPayload());
         }
 
-        Boolean signingEnabled = (Boolean) message.getHeaders().get("signingEnabled");
-        if (signingEnabled == null || !signingEnabled) {
+        if (!context.decision().signingRequired()) {
             return PipelineResult.success(message.getPayload());
         }
 
         try {
-            String senderCert = (String) message.getHeaders().get("senderCertificate");
+            String senderCert = context.certificateSelection().senderCertificatePem();
             String privateKey = null;
 
-            String prefStr = (String) message.getHeaders().get("preferredAlgorithm");
-            PreferredAlgorithm preference = prefStr != null ? PreferredAlgorithm.valueOf(prefStr) : PreferredAlgorithm.AUTO;
-            String thumbprint = (String) message.getHeaders().get("senderCertificateThumbprint");
+            PreferredAlgorithm preference = context.preferredAlgorithm();
+            String thumbprint = context.certificateSelection().senderCertificateThumbprint();
 
             // 根据算法偏好选择证书（RoutingService已预筛选，此处作为后备）
             if (senderCert == null) {
@@ -169,5 +170,10 @@ public class SignStep implements MailPipelineStep {
     @Override
     public String getStepName() {
         return "sign";
+    }
+
+    private MailProcessingContext context(Message<?> message) {
+        Object value = message.getHeaders().get(MailProcessingHeaders.CONTEXT);
+        return value instanceof MailProcessingContext context ? context : null;
     }
 }

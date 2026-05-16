@@ -1,10 +1,17 @@
 package com.sealmail.infra.mail.pipeline;
 
+import com.sealmail.domain.mailsecurity.MailEnvelope;
+import com.sealmail.domain.mailsecurity.MailProcessingContext;
+import com.sealmail.domain.mailsecurity.MailRecordDisposition;
+import com.sealmail.domain.shared.model.EmailAddress;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.messaging.Message;
 import org.springframework.messaging.MessageChannel;
 import org.springframework.messaging.support.MessageBuilder;
+
+import java.time.Instant;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -24,9 +31,17 @@ class DeadLetterHandlerTest {
 
         byte[] originalPayload = "raw mail".getBytes();
         Throwable error = new RuntimeException("relay down");
+        MailProcessingContext context = MailProcessingContext.create(new MailEnvelope(
+                        "msg-1@example.com",
+                        new EmailAddress("sender@example.com"),
+                        List.of(new EmailAddress("recipient@example.com")),
+                        "127.0.0.1",
+                        "helo",
+                        Instant.now(),
+                        originalPayload))
+                .withProcessingId("processing-1");
         Message<Throwable> errorMessage = MessageBuilder.withPayload(error)
-                .setHeader("originalMessage", originalPayload)
-                .setHeader("processingId", "processing-1")
+                .setHeader(MailProcessingHeaders.CONTEXT, context)
                 .build();
 
         handler.handleError(errorMessage);
@@ -40,11 +55,13 @@ class DeadLetterHandlerTest {
         ArgumentCaptor<Message<byte[]>> quarantineMessage = messageCaptor();
         verify(quarantineChannel).send(quarantineMessage.capture());
         assertArrayEquals(originalPayload, quarantineMessage.getValue().getPayload());
-        assertEquals("PIPELINE_ERROR", quarantineMessage.getValue().getHeaders().get("quarantineReason"));
-        assertEquals("relay down", quarantineMessage.getValue().getHeaders().get("quarantineDetail"));
-        assertEquals(MailRecordDisposition.EXCEPTION.name(),
-                quarantineMessage.getValue().getHeaders().get("mailRecordDisposition"));
-        assertEquals("processing-1", quarantineMessage.getValue().getHeaders().get("processingId"));
+        MailProcessingContext quarantineContext = (MailProcessingContext) quarantineMessage.getValue()
+                .getHeaders()
+                .get(MailProcessingHeaders.CONTEXT);
+        assertEquals("PIPELINE_ERROR", quarantineContext.decision().quarantine().reason());
+        assertEquals("relay down", quarantineContext.decision().quarantine().detail());
+        assertEquals(MailRecordDisposition.EXCEPTION, quarantineContext.recordDisposition());
+        assertEquals("processing-1", quarantineContext.processingId());
     }
 
     @SuppressWarnings("unchecked")

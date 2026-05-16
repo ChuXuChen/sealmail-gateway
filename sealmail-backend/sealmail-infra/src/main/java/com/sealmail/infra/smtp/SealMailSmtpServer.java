@@ -2,11 +2,13 @@ package com.sealmail.infra.smtp;
 
 import com.sealmail.domain.mailsecurity.MailDirection;
 import com.sealmail.domain.mailsecurity.MailEnvelope;
+import com.sealmail.domain.mailsecurity.MailProcessingContext;
 import com.sealmail.domain.policy.DomainConfig;
 import com.sealmail.domain.policy.DomainConfigRepository;
 import com.sealmail.domain.shared.model.EmailAddress;
 import com.sealmail.infra.config.properties.SmtpServerProperties;
 import com.sealmail.infra.crypto.util.PemUtils;
+import com.sealmail.infra.mail.pipeline.MailProcessingHeaders;
 import jakarta.annotation.PreDestroy;
 import org.bouncycastle.jce.provider.BouncyCastleProvider;
 import org.slf4j.Logger;
@@ -225,13 +227,17 @@ public class SealMailSmtpServer {
             log.debug("Dispatching content-filter mail as {} from {} to {} recipients",
                     direction, from, recipients.size());
 
-            targetChannel.send(MessageBuilder
+            var context = MailProcessingContext.initial(
+                    envelope,
+                    direction,
+                    "content_filter",
+                    content,
+                    null,
+                    remoteAddr.getAddress().getHostAddress());
+            var builder = MessageBuilder
                     .withPayload(content)
-                    .setHeader("mailEnvelope", envelope)
-                    .setHeader("submissionType", "content_filter")
-                    .setHeader("mailDirection", direction.name())
-                    .setHeader("remoteAddress", remoteAddr.getAddress().getHostAddress())
-                    .build());
+                    .setHeader(MailProcessingHeaders.CONTEXT, context);
+            targetChannel.send(builder.build());
         }
 
         @Override

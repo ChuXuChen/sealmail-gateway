@@ -3,15 +3,20 @@ package com.sealmail.infra.mail.pipeline.step;
 import com.sealmail.domain.audit.AuditLogType;
 import com.sealmail.domain.dlp.DlpScanResult;
 import com.sealmail.domain.dlp.DlpViolation;
+import com.sealmail.domain.mailsecurity.MailEnvelope;
+import com.sealmail.domain.mailsecurity.MailProcessingContext;
+import com.sealmail.domain.mailsecurity.MailRecordDisposition;
 import com.sealmail.domain.policy.DispositionAction;
+import com.sealmail.domain.shared.model.EmailAddress;
 import com.sealmail.domain.shared.event.AuditEvent;
 import com.sealmail.infra.dlp.DlpService;
 import com.sealmail.infra.dlp.MimeContentExtractor;
 import com.sealmail.infra.events.DomainEventPublisher;
-import com.sealmail.infra.mail.pipeline.MailRecordDisposition;
+import com.sealmail.infra.mail.pipeline.MailProcessingHeaders;
 import org.junit.jupiter.api.Test;
 import org.springframework.messaging.support.MessageBuilder;
 
+import java.time.Instant;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
@@ -42,11 +47,14 @@ class DlpStepTest {
         byte[] payload = mailPayload();
         DlpStep step = stepReturning(result(DispositionAction.MUST_ENCRYPT));
 
-        var pipelineResult = step.execute(MessageBuilder.withPayload(payload).build());
+        var pipelineResult = step.execute(MessageBuilder.withPayload(payload)
+                .setHeader(MailProcessingHeaders.CONTEXT, context(payload))
+                .build());
 
         assertTrue(pipelineResult.success());
-        assertEquals("mustEncrypt", pipelineResult.headerName());
-        assertEquals("true", pipelineResult.headerValue());
+        MailProcessingContext context = (MailProcessingContext) pipelineResult.headers()
+                .get(MailProcessingHeaders.CONTEXT);
+        assertTrue(context.decision().mustEncrypt());
     }
 
     @Test
@@ -107,13 +115,13 @@ class DlpStepTest {
         DlpStep step = new DlpStep(service, new MimeContentExtractor(), domainEventPublisher);
 
         step.execute(MessageBuilder.withPayload(payload)
-                .setHeader("messageId", "msg-1")
+                .setHeader(MailProcessingHeaders.CONTEXT, context(payload))
                 .build());
 
         verify(domainEventPublisher).publishEvent(argThat((AuditEvent event) ->
                 AuditLogType.DLP_VIOLATION.name().equals(event.getEventType())
                         && "EMAIL".equals(event.getResourceType())
-                        && "msg-1".equals(event.getResourceId())
+                        && context(payload).envelope().getMessageId().equals(event.getResourceId())
                         && "DLP_WARN".equals(event.getAction())
         ));
     }
@@ -130,5 +138,17 @@ class DlpStepTest {
 
     private byte[] mailPayload() {
         return "Subject: dlp\r\n\r\nbody\r\n".getBytes(java.nio.charset.StandardCharsets.ISO_8859_1);
+    }
+
+    private MailProcessingContext context(byte[] payload) {
+        return MailProcessingContext.create(new MailEnvelope(
+                "msg-1@example.com",
+                new EmailAddress("sender@example.com"),
+                List.of(new EmailAddress("recipient@example.com")),
+                "127.0.0.1",
+                "helo",
+                Instant.now(),
+                payload
+        ));
     }
 }

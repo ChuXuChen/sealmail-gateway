@@ -3,7 +3,9 @@ package com.sealmail.infra.mail.pipeline.step;
 import com.sealmail.domain.certificate.CertificateRepository;
 import com.sealmail.domain.certificate.spi.SMIMEOperations;
 import com.sealmail.domain.mailsecurity.MailEnvelope;
+import com.sealmail.domain.mailsecurity.MailProcessingContext;
 import com.sealmail.domain.shared.model.EmailAddress;
+import com.sealmail.infra.mail.pipeline.MailProcessingHeaders;
 import com.sealmail.infra.crypto.KeyStoreService;
 import com.sealmail.infra.mail.pipeline.PipelineResult;
 import org.junit.jupiter.api.Test;
@@ -76,7 +78,7 @@ class DecryptStepTest {
                 payload
         );
         return MessageBuilder.withPayload(payload)
-                .setHeader("mailEnvelope", envelope)
+                .setHeader(MailProcessingHeaders.CONTEXT, MailProcessingContext.create(envelope))
                 .build();
     }
 }

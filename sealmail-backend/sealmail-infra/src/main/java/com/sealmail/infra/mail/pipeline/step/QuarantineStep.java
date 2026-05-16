@@ -4,10 +4,12 @@ import com.sealmail.domain.exceptionmail.ExceptionMail;
 import com.sealmail.domain.exceptionmail.ExceptionMailRepository;
 import com.sealmail.domain.mailsecurity.MailDirection;
 import com.sealmail.domain.mailsecurity.MailEnvelope;
+import com.sealmail.domain.mailsecurity.MailProcessingContext;
+import com.sealmail.domain.mailsecurity.MailRecordDisposition;
 import com.sealmail.domain.quarantine.QuarantineReason;
 import com.sealmail.domain.quarantine.QuarantinedMail;
+import com.sealmail.infra.mail.pipeline.MailProcessingHeaders;
 import com.sealmail.infra.mail.pipeline.MailPipelineStep;
-import com.sealmail.infra.mail.pipeline.MailRecordDisposition;
 import com.sealmail.infra.mail.pipeline.PipelineResult;
 import com.sealmail.infra.persistence.repository.QuarantineRepositoryImpl;
 import org.springframework.messaging.Message;
@@ -30,24 +32,27 @@ public class QuarantineStep implements MailPipelineStep {
 
     @Override
     public PipelineResult execute(Message<byte[]> message) {
-        String reason = (String) message.getHeaders().get("quarantineReason");
+        MailProcessingContext context = context(message);
+        String reason = quarantineReason(context);
         if (reason == null) {
             reason = "POLICY_VIOLATION";
         }
         QuarantineReason quarantineReason = parseReason(reason);
-        MailEnvelope envelope = (MailEnvelope) message.getHeaders().get("mailEnvelope");
-        MailRecordDisposition disposition = recordDisposition(message);
+        MailEnvelope envelope = context != null ? context.envelope() : null;
+        MailRecordDisposition disposition = context != null && context.recordDisposition() != null
+                ? context.recordDisposition()
+                : MailRecordDisposition.EXCEPTION;
 
         try {
             if (disposition == MailRecordDisposition.DLP_QUARANTINE) {
                 QuarantinedMail quarantined = QuarantinedMail.create(
                         java.util.UUID.randomUUID().toString(),
-                        stringHeader(message, "messageId", envelope != null ? envelope.getMessageId() : null),
-                        (String) message.getHeaders().get("subject"),
-                        emailHeader(message, "sender", envelope),
-                        recipientsHeader(message, envelope),
-                        directionHeader(message),
-                        stringHeader(message, "remoteAddress", envelope != null ? envelope.getRemoteHost() : null),
+                        messageId(context),
+                        subject(context),
+                        sender(envelope),
+                        recipients(envelope),
+                        direction(context),
+                        remoteAddress(context),
                         quarantineReason,
                         detail(message, reason),
                         message.getPayload()
@@ -56,12 +61,12 @@ public class QuarantineStep implements MailPipelineStep {
             } else {
                 ExceptionMail exceptionMail = ExceptionMail.create(
                         java.util.UUID.randomUUID().toString(),
-                        stringHeader(message, "messageId", envelope != null ? envelope.getMessageId() : null),
-                        (String) message.getHeaders().get("subject"),
-                        emailHeader(message, "sender", envelope),
-                        recipientsHeader(message, envelope),
-                        directionHeader(message),
-                        stringHeader(message, "remoteAddress", envelope != null ? envelope.getRemoteHost() : null),
+                        messageId(context),
+                        subject(context),
+                        sender(envelope),
+                        recipients(envelope),
+                        direction(context),
+                        remoteAddress(context),
                         quarantineReason,
                         detail(message, reason),
                         blockComment(detail(message, reason))
@@ -90,23 +95,8 @@ public class QuarantineStep implements MailPipelineStep {
     }
 
     private String detail(Message<byte[]> message, String fallback) {
-        String detail = (String) message.getHeaders().get("quarantineDetail");
+        String detail = quarantineDetail(context(message));
         return detail != null ? detail : fallback;
-    }
-
-    private MailRecordDisposition recordDisposition(Message<byte[]> message) {
-        Object value = message.getHeaders().get("mailRecordDisposition");
-        if (value instanceof MailRecordDisposition disposition) {
-            return disposition;
-        }
-        if (value instanceof String stringValue && !stringValue.isBlank()) {
-            try {
-                return MailRecordDisposition.valueOf(stringValue);
-            } catch (IllegalArgumentException ignored) {
-                return MailRecordDisposition.EXCEPTION;
-            }
-        }
-        return MailRecordDisposition.EXCEPTION;
     }
 
     private String blockComment(String detail) {
@@ -116,37 +106,56 @@ public class QuarantineStep implements MailPipelineStep {
         return "Exception mail blocked automatically";
     }
 
-    private String stringHeader(Message<byte[]> message, String name, String fallback) {
-        Object value = message.getHeaders().get(name);
-        return value instanceof String stringValue ? stringValue : fallback;
+    private String messageId(MailProcessingContext context) {
+        return context != null ? context.envelope().getMessageId() : null;
     }
 
-    private com.sealmail.domain.shared.model.EmailAddress emailHeader(Message<byte[]> message, String name, MailEnvelope envelope) {
-        Object value = message.getHeaders().get(name);
-        if (value instanceof com.sealmail.domain.shared.model.EmailAddress email) {
-            return email;
-        }
-        return envelope != null ? envelope.getSender() : new com.sealmail.domain.shared.model.EmailAddress("unknown@invalid.local");
+    private String subject(MailProcessingContext context) {
+        return context != null ? context.subject() : null;
     }
 
-    private MailDirection directionHeader(Message<byte[]> message) {
-        Object value = message.getHeaders().get("mailDirection");
-        if (value instanceof MailDirection direction) {
-            return direction;
-        }
-        if (value instanceof String stringValue && !stringValue.isBlank()) {
-            return MailDirection.valueOf(stringValue);
-        }
-        return null;
+    private com.sealmail.domain.shared.model.EmailAddress sender(MailEnvelope envelope) {
+        return envelope != null
+                ? envelope.getSender()
+                : new com.sealmail.domain.shared.model.EmailAddress("unknown@invalid.local");
     }
 
-    @SuppressWarnings("unchecked")
-    private java.util.List<com.sealmail.domain.shared.model.EmailAddress> recipientsHeader(Message<byte[]> message, MailEnvelope envelope) {
-        Object value = message.getHeaders().get("recipients");
-        if (value instanceof java.util.List<?> list && (list.isEmpty()
-                || list.get(0) instanceof com.sealmail.domain.shared.model.EmailAddress)) {
-            return (java.util.List<com.sealmail.domain.shared.model.EmailAddress>) list;
+    private java.util.List<com.sealmail.domain.shared.model.EmailAddress> recipients(MailEnvelope envelope) {
+        return envelope != null
+                ? envelope.getRecipients()
+                : java.util.List.of(new com.sealmail.domain.shared.model.EmailAddress("unknown@invalid.local"));
+    }
+
+    private MailDirection direction(MailProcessingContext context) {
+        return context != null ? context.direction() : null;
+    }
+
+    private String remoteAddress(MailProcessingContext context) {
+        if (context == null) {
+            return null;
         }
-        return envelope != null ? envelope.getRecipients() : java.util.List.of(new com.sealmail.domain.shared.model.EmailAddress("unknown@invalid.local"));
+        if (context.auditTrace() != null && context.auditTrace().remoteAddress() != null) {
+            return context.auditTrace().remoteAddress();
+        }
+        return context.envelope().getRemoteHost();
+    }
+
+    private MailProcessingContext context(Message<?> message) {
+        Object value = message.getHeaders().get(MailProcessingHeaders.CONTEXT);
+        return value instanceof MailProcessingContext context ? context : null;
+    }
+
+    private String quarantineReason(MailProcessingContext context) {
+        if (context == null || context.decision().quarantine() == null) {
+            return null;
+        }
+        return context.decision().quarantine().reason();
+    }
+
+    private String quarantineDetail(MailProcessingContext context) {
+        if (context == null || context.decision().quarantine() == null) {
+            return null;
+        }
+        return context.decision().quarantine().detail();
     }
 }

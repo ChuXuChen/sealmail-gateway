@@ -242,7 +242,7 @@ git diff -- docs/refactoring-principles.md docs/epic-refactoring-plan.md
 - 阶段 0 只允许文档变更，不改业务代码，不改数据库 migration。
 - 阶段 1 只允许新增或调整 characterization tests，不替换主实现。
 - 阶段 2 只处理模块依赖、装配边界和架构防回退机制。
-- 阶段 3 只处理强类型上下文和 header 兼容层。
+- 阶段 3 只处理强类型上下文和旧业务 header 废弃。
 - 阶段 4 只处理 Spring Integration 编排替换旧 Pipeline 语义。
 - 阶段 5 只处理统一错误流、隔离决策和 dead-letter。
 - 阶段 6 只处理密码算法 profile 化。
@@ -358,7 +358,7 @@ mvn test
 
 ## 阶段 3：强类型邮件处理上下文
 
-目标：引入强类型上下文，降低字符串 header 和隐式状态依赖。
+目标：引入强类型上下文，废弃旧业务 header 和隐式状态依赖。
 
 范围：
 
@@ -376,12 +376,12 @@ mvn test
 实施步骤：
 
 1. 在合适层定义 `MailProcessingContext`。
-2. 定义 `MailProcessingHeaders`，集中管理 Spring Integration header 名称。
+2. 定义 `MailProcessingHeaders`，只保留 `mailProcessingContext` 这个框架承载 header。
 3. 定义 `MailProcessingDecision`，替代松散的 `quarantineRequired`、`mustEncrypt`、`encryptionEnabled` 等状态。
 4. 定义 `MailProcessingErrorType`，用于错误分类。
 5. 定义 `CryptoProfile`，先作为上下文元数据，不立即改算法实现。
-6. 在消息入口将旧 header 转换成 context。
-7. 在消息出口保留兼容 header，保证旧步骤仍可运行。
+6. 在消息入口直接创建 context。
+7. 删除旧业务 header 的读取、写入和 fallback。
 8. 分批将 pipeline step 从读字符串 header 改为读 context。
 
 迁移顺序：
@@ -398,10 +398,10 @@ mvn test
 
 验收标准：
 
-- 字符串 header 名称集中在 `MailProcessingHeaders`。
-- 核心步骤不再散落硬编码 header 名称。
+- `MailProcessingHeaders` 只暴露 `CONTEXT = "mailProcessingContext"`。
+- 核心步骤不再读取或输出旧业务 header。
 - 旧 behavior tests 全部通过。
-- 兼容层仍保证旧 flow 可运行。
+- 不保留 `MailProcessingHeaderAdapter`；生产代码直接读取 `mailProcessingContext` 中的 `MailProcessingContext`。
 
 建议验收命令：
 
@@ -411,7 +411,7 @@ mvn -pl sealmail-backend/sealmail-infra -am test
 
 回滚方式：
 
-- 保留旧 header 兼容层，任何一个步骤迁移失败时只回滚该步骤。
+- 以阶段 1 characterization tests 为保护，任何一个步骤迁移失败时只回滚该步骤。
 
 ## 阶段 4：Spring Integration 编排替换旧 Pipeline 语义
 
@@ -708,7 +708,7 @@ npm run lint
 
 1. 删除不再被主链路引用的旧 Pipeline 类。
 2. 删除 `PipelineStepTracker` 中的静态状态控制。
-3. 删除旧 header 兼容层。
+3. 删除阶段 4 替换后不再需要的上下文桥接代码。
 4. 删除业务步骤内部手动隔离和手动 relay 逻辑。
 5. 删除不再使用的配置项和 properties。
 6. 删除或限制测试控制器。
@@ -785,7 +785,7 @@ npm run lint
 - 文档阶段：回滚文档。
 - 测试阶段：回滚新增测试。
 - 模块依赖阶段：回滚 POM 与装配。
-- 上下文阶段：保留旧 header 兼容层。
+- 上下文阶段：废弃旧业务 header，只保留 `mailProcessingContext`。
 - 编排阶段：保留旧 flow 可切换入口直到验收完成。
 - 错误流阶段：保留旧失败适配器直到所有失败场景通过。
 - 数据库阶段：只前进式 migration，应用层保留 fallback。

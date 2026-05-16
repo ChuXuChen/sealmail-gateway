@@ -134,7 +134,7 @@ mailOutboundChannel -> route -> dlp -> sign -> encrypt -> dkimSign -> relay/quar
 
 ## 8. 禁止硬编码
 
-除稳定协议常量、枚举、错误码、header 常量外，禁止硬编码业务规则、安全策略和部署参数。
+除稳定协议常量、枚举和错误码外，禁止硬编码业务规则、安全策略和部署参数。
 
 以下内容必须配置化或数据化：
 
@@ -212,7 +212,7 @@ PostgreSQL 负责运行时业务配置，包括：
 - `CryptoProfile`
 - `MailProcessingErrorType`
 
-payload、headers 与 context 的职责必须稳定。不得在同一条消息流中频繁改变 payload 语义，或依赖散落的字符串 header 传递关键状态。
+payload、headers 与 context 的职责必须稳定。Spring Integration headers 只允许承载框架路由所需的少量边界元数据；邮件处理业务状态必须统一放入 `mailProcessingContext`。不得在同一条消息流中频繁改变 payload 语义，或依赖散落的字符串 header 传递关键状态。
 
 ## 13. 审计与可观测性
 

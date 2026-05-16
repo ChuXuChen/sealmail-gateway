@@ -3,19 +3,24 @@ package com.sealmail.infra.mail.pipeline.step;
 import com.sealmail.domain.audit.AuditLogType;
 import com.sealmail.domain.dlp.DlpScanResult;
 import com.sealmail.domain.dlp.DlpViolation;
+import com.sealmail.domain.mailsecurity.DlpDecision;
 import com.sealmail.domain.mailsecurity.MailEnvelope;
+import com.sealmail.domain.mailsecurity.MailProcessingContext;
+import com.sealmail.domain.mailsecurity.MailProcessingDecision;
+import com.sealmail.domain.mailsecurity.MailRecordDisposition;
 import com.sealmail.domain.shared.event.AuditEvent;
 import com.sealmail.infra.dlp.DlpService;
 import com.sealmail.infra.dlp.MimeContentExtractor;
 import com.sealmail.infra.events.DomainEventPublisher;
+import com.sealmail.infra.mail.pipeline.MailProcessingHeaders;
 import com.sealmail.infra.mail.pipeline.MailPipelineStep;
-import com.sealmail.infra.mail.pipeline.MailRecordDisposition;
 import com.sealmail.infra.mail.pipeline.PipelineResult;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.messaging.Message;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
+import java.util.Map;
 
 /**
  * DLP 检测步骤
@@ -43,7 +48,8 @@ public class DlpStep implements MailPipelineStep {
 
         try {
             MimeContentExtractor.ExtractedContent content = contentExtractor.extract(payload);
-            MailEnvelope envelope = (MailEnvelope) message.getHeaders().get("mailEnvelope");
+            MailProcessingContext context = context(message);
+            MailEnvelope envelope = context != null ? context.envelope() : null;
             DlpScanResult result = dlpService.scan(content.subject(), content.body(), payload, envelope);
 
             if (!result.hasViolations()) {
@@ -75,13 +81,18 @@ public class DlpStep implements MailPipelineStep {
                         "DLP QUARANTINE: " + formatViolationSummary(violations),
                         MailRecordDisposition.DLP_QUARANTINE);
                 case MUST_ENCRYPT -> {
-                    // 设置必须加密的 header，后续加密步骤会检查。
-                    java.util.Map<String, Object> headers = new java.util.HashMap<>();
-                    headers.put("mustEncrypt", "true");
-                    if (message.getHeaders().containsKey("preferredAlgorithm")) {
-                        headers.put("preferredAlgorithm", message.getHeaders().get("preferredAlgorithm"));
+                    if (context != null) {
+                        MailProcessingDecision decision = context.decision()
+                                .withMustEncrypt(true)
+                                .withDlpDecision(new DlpDecision(
+                                        result.getFinalAction(),
+                                        result.getMaxSeverity(),
+                                        result.getViolations().stream().map(DlpViolation::getRuleName).toList()));
+                        MailProcessingContext updatedContext = context.withDecision(decision);
+                        yield PipelineResult.successWithHeaders(payload, Map.of(
+                                MailProcessingHeaders.CONTEXT, updatedContext));
                     }
-                    yield PipelineResult.successWithHeaders(payload, headers);
+                    yield PipelineResult.success(payload);
                 }
                 case WARN -> PipelineResult.success(payload);
             };
@@ -112,7 +123,7 @@ public class DlpStep implements MailPipelineStep {
 
     private void recordViolation(Message<byte[]> message, MailEnvelope envelope, DlpScanResult result) {
         try {
-            String messageId = envelope != null ? envelope.getMessageId() : stringHeader(message, "messageId");
+            String messageId = envelope != null ? envelope.getMessageId() : message.getHeaders().getId().toString();
             domainEventPublisher.publishEvent(AuditEvent.builder()
                     .eventType(AuditLogType.DLP_VIOLATION.name())
                     .resourceType("EMAIL")
@@ -136,13 +147,13 @@ public class DlpStep implements MailPipelineStep {
                 .orElse("");
     }
 
-    private String stringHeader(Message<byte[]> message, String name) {
-        Object value = message.getHeaders().get(name);
-        return value instanceof String stringValue ? stringValue : null;
-    }
-
     @Override
     public String getStepName() {
         return "dlp";
+    }
+
+    private MailProcessingContext context(Message<?> message) {
+        Object value = message.getHeaders().get(MailProcessingHeaders.CONTEXT);
+        return value instanceof MailProcessingContext context ? context : null;
     }
 }

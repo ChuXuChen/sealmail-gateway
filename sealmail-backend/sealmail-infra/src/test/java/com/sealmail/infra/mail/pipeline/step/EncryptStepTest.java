@@ -7,11 +7,14 @@ import com.sealmail.domain.certificate.KeyUsage;
 import com.sealmail.domain.certificate.ValidityPeriod;
 import com.sealmail.domain.certificate.spi.SMIMEEncryptionSuite;
 import com.sealmail.domain.certificate.spi.SMIMEOperations;
+import com.sealmail.domain.mailsecurity.MailProcessingContext;
+import com.sealmail.domain.mailsecurity.MailProcessingDecision;
 import com.sealmail.domain.mailsecurity.MailEnvelope;
+import com.sealmail.domain.mailsecurity.MailRecordDisposition;
 import com.sealmail.domain.mailsecurity.event.MailEncrypted;
 import com.sealmail.domain.policy.PreferredAlgorithm;
 import com.sealmail.domain.shared.model.EmailAddress;
-import com.sealmail.infra.mail.pipeline.MailRecordDisposition;
+import com.sealmail.infra.mail.pipeline.MailProcessingHeaders;
 import com.sealmail.infra.mail.pipeline.PipelineResult;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -56,18 +59,9 @@ class EncryptStepTest {
         when(smimeOperations.encryptMultiple(same(payload), any(), eq(SMIMEEncryptionSuite.STANDARD)))
                 .thenReturn(encrypted);
 
-        Message<byte[]> message = MessageBuilder.withPayload(payload)
-                .setHeader("mailEnvelope", new MailEnvelope(
-                        "msg-" + UUID.randomUUID() + "@example.com",
-                        sender,
-                        List.of(recipientA, recipientB),
-                        "127.0.0.1",
-                        "helo",
-                        Instant.now(),
-                        payload
-                ))
-                .setHeader("encryptionEnabled", true)
-                .build();
+        Message<byte[]> message = message(payload, sender, List.of(recipientA, recipientB),
+                MailProcessingDecision.none().withEncryptionRequired(true),
+                PreferredAlgorithm.AUTO);
 
         PipelineResult result = encryptStep.execute(message);
 
@@ -95,18 +89,10 @@ class EncryptStepTest {
         EncryptStep encryptStep = new EncryptStep(smimeOperations, certificateRepository);
 
         byte[] payload = "hello".getBytes();
-        Message<byte[]> message = MessageBuilder.withPayload(payload)
-                .setHeader("mailEnvelope", new MailEnvelope(
-                        "msg-" + UUID.randomUUID() + "@example.com",
-                        new EmailAddress("sender@example.com"),
-                        List.of(new EmailAddress("a@example.com")),
-                        "127.0.0.1",
-                        "helo",
-                        Instant.now(),
-                        payload
-                ))
-                .setHeader("mustEncrypt", "true")
-                .build();
+        Message<byte[]> message = message(payload, new EmailAddress("sender@example.com"),
+                List.of(new EmailAddress("a@example.com")),
+                MailProcessingDecision.none().withMustEncrypt(true),
+                PreferredAlgorithm.AUTO);
 
         PipelineResult result = encryptStep.execute(message);
 
@@ -125,18 +111,10 @@ class EncryptStepTest {
         EncryptStep encryptStep = new EncryptStep(smimeOperations, certificateRepository);
 
         byte[] payload = "hello".getBytes();
-        Message<byte[]> message = MessageBuilder.withPayload(payload)
-                .setHeader("mailEnvelope", new MailEnvelope(
-                        "msg-" + UUID.randomUUID() + "@example.com",
-                        new EmailAddress("sender@example.com"),
-                        List.of(new EmailAddress("a@example.com")),
-                        "127.0.0.1",
-                        "helo",
-                        Instant.now(),
-                        payload
-                ))
-                .setHeader("mustEncrypt", "true")
-                .build();
+        Message<byte[]> message = message(payload, new EmailAddress("sender@example.com"),
+                List.of(new EmailAddress("a@example.com")),
+                MailProcessingDecision.none().withMustEncrypt(true),
+                PreferredAlgorithm.AUTO);
 
         PipelineResult result = encryptStep.execute(message);
 
@@ -158,18 +136,10 @@ class EncryptStepTest {
         when(smimeOperations.encryptMultiple(same(payload), any(), eq(SMIMEEncryptionSuite.STANDARD)))
                 .thenReturn(encrypted);
 
-        Message<byte[]> message = MessageBuilder.withPayload(payload)
-                .setHeader("mailEnvelope", new MailEnvelope(
-                        "msg-" + UUID.randomUUID() + "@example.com",
-                        new EmailAddress("sender@example.com"),
-                        List.of(recipient),
-                        "127.0.0.1",
-                        "helo",
-                        Instant.now(),
-                        payload
-                ))
-                .setHeader("mustEncrypt", "true")
-                .build();
+        Message<byte[]> message = message(payload, new EmailAddress("sender@example.com"),
+                List.of(recipient),
+                MailProcessingDecision.none().withMustEncrypt(true),
+                PreferredAlgorithm.AUTO);
 
         PipelineResult result = encryptStep.execute(message);
 
@@ -193,18 +163,10 @@ class EncryptStepTest {
         when(certificateRepository.findTrustedForEncryption(recipientB))
                 .thenReturn(List.of());
 
-        Message<byte[]> message = MessageBuilder.withPayload(payload)
-                .setHeader("mailEnvelope", new MailEnvelope(
-                        "msg-" + UUID.randomUUID() + "@example.com",
-                        new EmailAddress("sender@example.com"),
-                        List.of(recipientA, recipientB),
-                        "127.0.0.1",
-                        "helo",
-                        Instant.now(),
-                        payload
-                ))
-                .setHeader("mustEncrypt", "true")
-                .build();
+        Message<byte[]> message = message(payload, new EmailAddress("sender@example.com"),
+                List.of(recipientA, recipientB),
+                MailProcessingDecision.none().withMustEncrypt(true),
+                PreferredAlgorithm.AUTO);
 
         PipelineResult result = encryptStep.execute(message);
 
@@ -228,18 +190,10 @@ class EncryptStepTest {
         when(certificateRepository.findTrustedForEncryption(recipientB))
                 .thenReturn(List.of(certificate(recipientB, "cert-B", "RSA")));
 
-        Message<byte[]> message = MessageBuilder.withPayload(payload)
-                .setHeader("mailEnvelope", new MailEnvelope(
-                        "msg-" + UUID.randomUUID() + "@example.com",
-                        new EmailAddress("sender@example.com"),
-                        List.of(recipientA, recipientB),
-                        "127.0.0.1",
-                        "helo",
-                        Instant.now(),
-                        payload
-                ))
-                .setHeader("encryptionEnabled", true)
-                .build();
+        Message<byte[]> message = message(payload, new EmailAddress("sender@example.com"),
+                List.of(recipientA, recipientB),
+                MailProcessingDecision.none().withEncryptionRequired(true),
+                PreferredAlgorithm.AUTO);
 
         PipelineResult result = encryptStep.execute(message);
 
@@ -265,25 +219,52 @@ class EncryptStepTest {
         when(smimeOperations.encryptMultiple(same(payload), any(), eq(SMIMEEncryptionSuite.GM)))
                 .thenReturn(encrypted);
 
-        Message<byte[]> message = MessageBuilder.withPayload(payload)
-                .setHeader("mailEnvelope", new MailEnvelope(
-                        "msg-" + UUID.randomUUID() + "@example.com",
-                        new EmailAddress("sender@example.com"),
-                        List.of(recipientA, recipientB),
-                        "127.0.0.1",
-                        "helo",
-                        Instant.now(),
-                        payload
-                ))
-                .setHeader("encryptionEnabled", true)
-                .setHeader("preferredAlgorithm", PreferredAlgorithm.GM_ONLY.name())
-                .build();
+        Message<byte[]> message = message(payload, new EmailAddress("sender@example.com"),
+                List.of(recipientA, recipientB),
+                MailProcessingDecision.none().withEncryptionRequired(true),
+                PreferredAlgorithm.GM_ONLY);
 
         PipelineResult result = encryptStep.execute(message);
 
         assertTrue(result.success());
         assertArrayEquals(encrypted, result.payload());
         verify(smimeOperations).encryptMultiple(same(payload), any(), eq(SMIMEEncryptionSuite.GM));
+    }
+
+    @Test
+    void encryptsWhenOnlyContextRequiresEncryption() {
+        SMIMEOperations smimeOperations = mock(SMIMEOperations.class);
+        CertificateRepository certificateRepository = mock(CertificateRepository.class);
+        EncryptStep encryptStep = new EncryptStep(smimeOperations, certificateRepository);
+
+        EmailAddress recipient = new EmailAddress("a@example.com");
+        byte[] payload = "hello".getBytes();
+        byte[] encrypted = "encrypted".getBytes();
+        when(certificateRepository.findTrustedForEncryption(recipient))
+                .thenReturn(List.of(certificate(recipient, "cert-A", "RSA")));
+        when(smimeOperations.encryptMultiple(same(payload), any(), eq(SMIMEEncryptionSuite.STANDARD)))
+                .thenReturn(encrypted);
+
+        MailEnvelope envelope = new MailEnvelope(
+                "msg-" + UUID.randomUUID() + "@example.com",
+                new EmailAddress("sender@example.com"),
+                List.of(recipient),
+                "127.0.0.1",
+                "helo",
+                Instant.now(),
+                payload
+        );
+        MailProcessingContext context = MailProcessingContext.create(envelope)
+                .withDecision(MailProcessingDecision.none().withEncryptionRequired(true));
+        Message<byte[]> message = MessageBuilder.withPayload(payload)
+                .setHeader(MailProcessingHeaders.CONTEXT, context)
+                .build();
+
+        PipelineResult result = encryptStep.execute(message);
+
+        assertTrue(result.success());
+        assertArrayEquals(encrypted, result.payload());
+        verify(smimeOperations).encryptMultiple(same(payload), any(), eq(SMIMEEncryptionSuite.STANDARD));
     }
 
     private static Certificate certificate(EmailAddress owner, String pemContent, String algorithm) {
@@ -301,5 +282,27 @@ class EncryptStepTest {
         cert.trust();
         cert.setAlgorithm(algorithm);
         return cert;
+    }
+
+    private static Message<byte[]> message(byte[] payload,
+                                           EmailAddress sender,
+                                           List<EmailAddress> recipients,
+                                           MailProcessingDecision decision,
+                                           PreferredAlgorithm preferredAlgorithm) {
+        MailEnvelope envelope = new MailEnvelope(
+                "msg-" + UUID.randomUUID() + "@example.com",
+                sender,
+                recipients,
+                "127.0.0.1",
+                "helo",
+                Instant.now(),
+                payload
+        );
+        MailProcessingContext context = MailProcessingContext.create(envelope)
+                .withDecision(decision)
+                .withPreferredAlgorithm(preferredAlgorithm);
+        return MessageBuilder.withPayload(payload)
+                .setHeader(MailProcessingHeaders.CONTEXT, context)
+                .build();
     }
 }

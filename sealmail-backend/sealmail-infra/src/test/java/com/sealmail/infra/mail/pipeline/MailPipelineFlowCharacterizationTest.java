@@ -1,5 +1,8 @@
 package com.sealmail.infra.mail.pipeline;
 
+import com.sealmail.domain.mailsecurity.MailProcessingContext;
+import com.sealmail.domain.mailsecurity.MailProcessingDecision;
+import com.sealmail.domain.mailsecurity.MailRecordDisposition;
 import com.sealmail.domain.mailsecurity.MailEnvelope;
 import com.sealmail.domain.mailsecurity.ProcessingResult;
 import com.sealmail.domain.shared.model.EmailAddress;
@@ -98,9 +101,7 @@ class MailPipelineFlowCharacterizationTest {
         byte[] raw = "raw".getBytes();
         Message<byte[]> outbound = outboundMessage(raw);
         when(routingService.routeOutbound(any())).thenAnswer(invocation ->
-                MessageBuilder.fromMessage(invocation.getArgument(0))
-                        .setHeader("processingId", "processing-1")
-                        .build());
+                withProcessingId(invocation.getArgument(0), "processing-1"));
         when(stepTracker.executeWithTracking(any(), eq(dlpStep)))
                 .thenReturn(PipelineResult.success("after-dlp".getBytes()));
         when(stepTracker.executeWithTracking(any(), eq(signStep)))
@@ -128,9 +129,7 @@ class MailPipelineFlowCharacterizationTest {
         byte[] raw = "raw".getBytes();
         Message<byte[]> outbound = outboundMessage(raw);
         when(routingService.routeOutbound(any())).thenAnswer(invocation ->
-                MessageBuilder.fromMessage(invocation.getArgument(0))
-                        .setHeader("processingId", "processing-1")
-                        .build());
+                withProcessingId(invocation.getArgument(0), "processing-1"));
         when(stepTracker.executeWithTracking(any(), eq(dlpStep)))
                 .thenReturn(PipelineResult.quarantine(
                         raw,
@@ -154,25 +153,25 @@ class MailPipelineFlowCharacterizationTest {
     }
 
     @Test
-    void outboundRoutingQuarantineHeaderShortCircuitsStepsAndRoutesRawPayloadToQuarantineChannel() {
+    void outboundRoutingQuarantineContextShortCircuitsStepsAndRoutesRawPayloadToQuarantineChannel() {
         byte[] raw = "raw".getBytes();
         Message<byte[]> outbound = outboundMessage(raw);
         when(routingService.routeOutbound(any())).thenAnswer(invocation ->
-                MessageBuilder.fromMessage(invocation.getArgument(0))
-                        .setHeader("processingId", "processing-1")
-                        .setHeader("quarantineRequired", true)
-                        .setHeader("quarantineReason", "DOMAIN_NOT_CONFIGURED")
-                        .setHeader("quarantineDetail", "domain disabled")
-                        .setHeader("mailRecordDisposition", MailRecordDisposition.EXCEPTION.name())
-                        .build());
+                withQuarantine(invocation.getArgument(0),
+                        "processing-1",
+                        "DOMAIN_NOT_CONFIGURED",
+                        "domain disabled",
+                        MailRecordDisposition.EXCEPTION));
 
         assertTrue(mailOutboundChannel.send(outbound));
 
         Message<?> quarantined = quarantineChannel.receive(1000);
         assertArrayEquals(raw, (byte[]) quarantined.getPayload());
-        assertEquals("DOMAIN_NOT_CONFIGURED", quarantined.getHeaders().get("quarantineReason"));
-        assertEquals("domain disabled", quarantined.getHeaders().get("quarantineDetail"));
-        assertEquals(MailRecordDisposition.EXCEPTION.name(), quarantined.getHeaders().get("mailRecordDisposition"));
+        MailProcessingContext context = (MailProcessingContext) quarantined.getHeaders()
+                .get(MailProcessingHeaders.CONTEXT);
+        assertEquals("DOMAIN_NOT_CONFIGURED", context.decision().quarantine().reason());
+        assertEquals("domain disabled", context.decision().quarantine().detail());
+        assertEquals(MailRecordDisposition.EXCEPTION, context.recordDisposition());
         assertNull(relayChannel.receive(0));
         verify(stepTracker).completeProcessing("processing-1", ProcessingResult.FAILED);
         verify(stepTracker, never()).executeWithTracking(any(), eq(dlpStep));
@@ -184,9 +183,7 @@ class MailPipelineFlowCharacterizationTest {
         byte[] raw = "raw".getBytes();
         Message<byte[]> inbound = inboundMessage(raw);
         when(routingService.routeInbound(any())).thenAnswer(invocation ->
-                MessageBuilder.fromMessage(invocation.getArgument(0))
-                        .setHeader("processingId", "processing-1")
-                        .build());
+                withProcessingId(invocation.getArgument(0), "processing-1"));
         when(stepTracker.executeWithTracking(any(), eq(mailAuthenticationStep)))
                 .thenReturn(PipelineResult.success("authenticated".getBytes()));
         when(stepTracker.executeWithTracking(any(), eq(decryptStep)))
@@ -214,9 +211,7 @@ class MailPipelineFlowCharacterizationTest {
         byte[] raw = "raw".getBytes();
         Message<byte[]> inbound = inboundMessage(raw);
         when(routingService.routeInbound(any())).thenAnswer(invocation ->
-                MessageBuilder.fromMessage(invocation.getArgument(0))
-                        .setHeader("processingId", "processing-1")
-                        .build());
+                withProcessingId(invocation.getArgument(0), "processing-1"));
         when(stepTracker.executeWithTracking(any(), eq(mailAuthenticationStep)))
                 .thenReturn(PipelineResult.quarantine(
                         raw,
@@ -239,8 +234,7 @@ class MailPipelineFlowCharacterizationTest {
     }
 
     private static Message<byte[]> outboundMessage(byte[] payload) {
-        return MessageBuilder.withPayload(payload)
-                .setHeader("mailEnvelope", new MailEnvelope(
+        MailEnvelope envelope = new MailEnvelope(
                         "msg-" + UUID.randomUUID() + "@example.com",
                         new EmailAddress("sender@example.com"),
                         List.of(new EmailAddress("recipient@example.com")),
@@ -248,13 +242,14 @@ class MailPipelineFlowCharacterizationTest {
                         "helo",
                         Instant.now(),
                         payload
-                ))
+                );
+        return MessageBuilder.withPayload(payload)
+                .setHeader(MailProcessingHeaders.CONTEXT, MailProcessingContext.create(envelope))
                 .build();
     }
 
     private static Message<byte[]> inboundMessage(byte[] payload) {
-        return MessageBuilder.withPayload(payload)
-                .setHeader("mailEnvelope", new MailEnvelope(
+        MailEnvelope envelope = new MailEnvelope(
                         "msg-" + UUID.randomUUID() + "@example.com",
                         new EmailAddress("sender@example.net"),
                         List.of(new EmailAddress("recipient@example.com")),
@@ -262,7 +257,33 @@ class MailPipelineFlowCharacterizationTest {
                         "helo",
                         Instant.now(),
                         payload
-                ))
+                );
+        return MessageBuilder.withPayload(payload)
+                .setHeader(MailProcessingHeaders.CONTEXT, MailProcessingContext.create(envelope))
+                .build();
+    }
+
+    private static Message<byte[]> withProcessingId(Message<byte[]> message, String processingId) {
+        MailProcessingContext context = ((MailProcessingContext) message.getHeaders()
+                .get(MailProcessingHeaders.CONTEXT))
+                .withProcessingId(processingId);
+        return MessageBuilder.fromMessage(message)
+                .setHeader(MailProcessingHeaders.CONTEXT, context)
+                .build();
+    }
+
+    private static Message<byte[]> withQuarantine(Message<byte[]> message,
+                                                  String processingId,
+                                                  String reason,
+                                                  String detail,
+                                                  MailRecordDisposition disposition) {
+        MailProcessingContext context = ((MailProcessingContext) message.getHeaders()
+                .get(MailProcessingHeaders.CONTEXT))
+                .withProcessingId(processingId)
+                .withDecision(MailProcessingDecision.none().withQuarantine(reason, detail))
+                .withRecordDisposition(disposition);
+        return MessageBuilder.fromMessage(message)
+                .setHeader(MailProcessingHeaders.CONTEXT, context)
                 .build();
     }
 

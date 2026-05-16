@@ -1,7 +1,9 @@
 package com.sealmail.infra.mail.pipeline.step;
 
+import com.sealmail.domain.mailsecurity.MailProcessingContext;
 import com.sealmail.domain.mailsecurity.MailEnvelope;
 import com.sealmail.domain.shared.model.EmailAddress;
+import com.sealmail.infra.mail.pipeline.MailProcessingHeaders;
 import com.sealmail.infra.mail.auth.AuthResult;
 import com.sealmail.infra.mail.auth.DmarcPolicy;
 import com.sealmail.infra.mail.auth.MailAuthenticationResult;
@@ -44,8 +46,7 @@ class MailAuthenticationStepTest {
         ));
 
         var result = step.execute(MessageBuilder.withPayload(payload)
-                .setHeader("submissionType", "content_filter")
-                .setHeader("mailEnvelope", envelope)
+                .setHeader(MailProcessingHeaders.CONTEXT, MailProcessingContext.create(envelope))
                 .build());
 
         assertEquals(true, result.success());
@@ -77,7 +78,7 @@ class MailAuthenticationStepTest {
         ));
 
         var result = step.execute(MessageBuilder.withPayload(payload)
-                .setHeader("mailEnvelope", envelope)
+                .setHeader(MailProcessingHeaders.CONTEXT, MailProcessingContext.create(envelope))
                 .build());
 
         assertFalse(result.success());
@@ -110,7 +111,7 @@ class MailAuthenticationStepTest {
         ));
 
         var result = step.execute(MessageBuilder.withPayload(payload)
-                .setHeader("mailEnvelope", envelope)
+                .setHeader(MailProcessingHeaders.CONTEXT, MailProcessingContext.create(envelope))
                 .build());
 
         assertEquals(true, result.success());

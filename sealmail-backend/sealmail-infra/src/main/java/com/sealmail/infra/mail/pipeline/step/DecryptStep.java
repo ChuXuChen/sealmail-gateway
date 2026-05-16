@@ -4,8 +4,10 @@ import com.sealmail.domain.certificate.CertificateId;
 import com.sealmail.domain.certificate.CertificateRepository;
 import com.sealmail.domain.certificate.spi.SMIMEOperations;
 import com.sealmail.domain.mailsecurity.MailEnvelope;
+import com.sealmail.domain.mailsecurity.MailProcessingContext;
 import com.sealmail.domain.mailsecurity.event.MailDecrypted;
 import com.sealmail.domain.shared.model.EmailAddress;
+import com.sealmail.infra.mail.pipeline.MailProcessingHeaders;
 import com.sealmail.infra.mail.pipeline.MailPipelineStep;
 import com.sealmail.infra.mail.pipeline.PipelineResult;
 import com.sealmail.infra.crypto.KeyStoreService;
@@ -36,9 +38,10 @@ public class DecryptStep implements MailPipelineStep {
 
     @Override
     public PipelineResult execute(Message<byte[]> message) {
-        MailEnvelope envelope = (MailEnvelope) message.getHeaders().get("mailEnvelope");
+        MailProcessingContext context = context(message);
+        MailEnvelope envelope = context != null ? context.envelope() : null;
         if (envelope == null) {
-            return PipelineResult.failure("Mail envelope not found in message headers");
+            return PipelineResult.failure("Mail processing context not found in message headers");
         }
 
         try {
@@ -46,10 +49,10 @@ public class DecryptStep implements MailPipelineStep {
                 return PipelineResult.success(message.getPayload());
             }
 
-            String recipientCert = (String) message.getHeaders().get("recipientCertificate");
+            String recipientCert = context.certificateSelection().recipientCertificatePem();
             String privateKey = null;
 
-            String thumbprint = (String) message.getHeaders().get("recipientCertificateThumbprint");
+            String thumbprint = context.certificateSelection().recipientCertificateThumbprint();
             if (thumbprint != null && !thumbprint.isBlank()) {
                 var certOpt = certificateRepository.findById(new CertificateId(thumbprint));
                 if (certOpt.isPresent() && certOpt.get().hasPrivateKey()) {
@@ -94,5 +97,10 @@ public class DecryptStep implements MailPipelineStep {
     @Override
     public String getStepName() {
         return "decrypt";
+    }
+
+    private MailProcessingContext context(Message<?> message) {
+        Object value = message.getHeaders().get(MailProcessingHeaders.CONTEXT);
+        return value instanceof MailProcessingContext context ? context : null;
     }
 }

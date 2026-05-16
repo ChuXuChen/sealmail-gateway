@@ -4,13 +4,16 @@ import com.sealmail.domain.certificate.Certificate;
 import com.sealmail.domain.certificate.CertificateRepository;
 import com.sealmail.domain.mailsecurity.MailEnvelope;
 import com.sealmail.domain.mailsecurity.MailDirection;
+import com.sealmail.domain.mailsecurity.MailProcessingContext;
+import com.sealmail.domain.mailsecurity.MailRecordDisposition;
 import com.sealmail.domain.policy.PreferredAlgorithm;
 import com.sealmail.domain.shared.model.EmailAddress;
 import com.sealmail.infra.config.properties.RelayProperties;
-import com.sealmail.infra.mail.pipeline.MailRecordDisposition;
+import com.sealmail.domain.mailsecurity.RelayProfile;
 import com.sealmail.infra.mail.relay.SmtpRelayClient;
 import com.sealmail.infra.mail.relay.SmtpRelayConnectionSettings;
 import com.sealmail.infra.mail.relay.SmtpRelayRequest;
+import com.sealmail.infra.mail.pipeline.MailProcessingHeaders;
 import com.sealmail.infra.mail.pipeline.MailPipelineStep;
 import com.sealmail.infra.mail.pipeline.PipelineResult;
 import com.sealmail.infra.crypto.util.PemUtils;
@@ -46,9 +49,10 @@ public class RelayStep implements MailPipelineStep {
 
     @Override
     public PipelineResult execute(Message<byte[]> message) {
-        MailEnvelope envelope = (MailEnvelope) message.getHeaders().get("mailEnvelope");
+        MailProcessingContext context = context(message);
+        MailEnvelope envelope = context != null ? context.envelope() : null;
         if (envelope == null) {
-            return PipelineResult.failure("Mail envelope not found in message headers");
+            return PipelineResult.failure("Mail processing context not found in message headers");
         }
 
         byte[] mailContent = message.getPayload();
@@ -56,20 +60,22 @@ public class RelayStep implements MailPipelineStep {
             return PipelineResult.failure("Mail content is empty");
         }
 
-        PipelineResult relayGuard = validateEncryptedOutboundRelay(message, envelope, mailContent);
+        PipelineResult relayGuard = validateEncryptedOutboundRelay(context, envelope, mailContent);
         if (relayGuard != null) {
             return relayGuard;
         }
 
-        // Read from message headers or fall back to properties
-        String host = readStringHeader(message, "relayHost", relayProperties.getHost());
-        int port = readIntHeader(message, "relayPort", relayProperties.getPort());
-        String username = readStringHeader(message, "relayUsername", relayProperties.getUsername());
-        String password = readStringHeader(message, "relayPassword", relayProperties.getPassword());
-        boolean useTls = readBooleanHeader(message, "relayUseTls", relayProperties.isUseTls());
-        int timeout = readIntHeader(message, "relayTimeout", relayProperties.getTimeout());
+        RelayProfile relayProfile = context.relayProfile();
+        String host = relayProfile != null ? relayProfile.host() : relayProperties.getHost();
+        int port = relayProfile != null ? relayProfile.port() : relayProperties.getPort();
+        String username = relayProfile != null ? relayProfile.username() : relayProperties.getUsername();
+        String password = relayProfile != null ? relayProfile.password() : relayProperties.getPassword();
+        boolean useTls = relayProfile != null ? relayProfile.useTls() : relayProperties.isUseTls();
+        int timeout = relayProfile != null ? relayProfile.timeout() : relayProperties.getTimeout();
         try {
-            String envelopeFrom = readStringHeader(message, "relayEnvelopeFrom", null);
+            String envelopeFrom = relayProfile != null
+                    ? relayProfile.envelopeFrom()
+                    : null;
             if (!hasText(envelopeFrom)) {
                 envelopeFrom = hasText(username) ? username : envelope.getSender().getValue();
             }
@@ -110,21 +116,21 @@ public class RelayStep implements MailPipelineStep {
         return "relay";
     }
 
-    private PipelineResult validateEncryptedOutboundRelay(Message<byte[]> message,
+    private PipelineResult validateEncryptedOutboundRelay(MailProcessingContext context,
                                                           MailEnvelope envelope,
                                                           byte[] mailContent) {
-        if (!isOutbound(message)) {
+        if (!isOutbound(context)) {
             return null;
         }
-        boolean encryptionRequired = readBooleanHeader(message, "encryptionEnabled", false)
-                || readBooleanHeader(message, "mustEncrypt", false)
-                || readBooleanHeader(message, "smimeEncrypted", false)
+        boolean encryptionRequired = context.decision().encryptionRequired()
+                || context.decision().mustEncrypt()
+                || context.smimeEncrypted()
                 || isSmimeEncryptedPayload(mailContent);
         if (!encryptionRequired) {
             return null;
         }
 
-        PreferredAlgorithm preference = preferredAlgorithm(message);
+        PreferredAlgorithm preference = context.preferredAlgorithm();
         EncryptionPlan plan = buildEncryptionPlan(envelope, preference);
         if (plan.success()) {
             return null;
@@ -152,24 +158,8 @@ public class RelayStep implements MailPipelineStep {
                 || content.contains("name=smime.p7m");
     }
 
-    private boolean isOutbound(Message<byte[]> message) {
-        Object value = message.getHeaders().get("mailDirection");
-        if (value instanceof MailDirection direction) {
-            return direction == MailDirection.OUTBOUND;
-        }
-        return value instanceof String stringValue
-                && MailDirection.OUTBOUND.name().equalsIgnoreCase(stringValue);
-    }
-
-    private PreferredAlgorithm preferredAlgorithm(Message<byte[]> message) {
-        Object value = message.getHeaders().get("preferredAlgorithm");
-        if (value instanceof PreferredAlgorithm algorithm) {
-            return algorithm;
-        }
-        if (value instanceof String stringValue && !stringValue.isBlank()) {
-            return PreferredAlgorithm.valueOf(stringValue);
-        }
-        return PreferredAlgorithm.AUTO;
+    private boolean isOutbound(MailProcessingContext context) {
+        return context.direction() == MailDirection.OUTBOUND;
     }
 
     private EncryptionPlan buildEncryptionPlan(MailEnvelope envelope, PreferredAlgorithm preference) {
@@ -273,35 +263,13 @@ public class RelayStep implements MailPipelineStep {
                 .orElse("");
     }
 
-    private static String readStringHeader(Message<byte[]> message, String headerName, String fallback) {
-        Object value = message.getHeaders().get(headerName);
-        return value instanceof String stringValue ? stringValue : fallback;
-    }
-
-    private static int readIntHeader(Message<byte[]> message, String headerName, int fallback) {
-        Object value = message.getHeaders().get(headerName);
-        if (value instanceof Number numberValue) {
-            return numberValue.intValue();
-        }
-        if (value instanceof String stringValue && !stringValue.isBlank()) {
-            return Integer.parseInt(stringValue);
-        }
-        return fallback;
-    }
-
-    private static boolean readBooleanHeader(Message<byte[]> message, String headerName, boolean fallback) {
-        Object value = message.getHeaders().get(headerName);
-        if (value instanceof Boolean booleanValue) {
-            return booleanValue;
-        }
-        if (value instanceof String stringValue && !stringValue.isBlank()) {
-            return Boolean.parseBoolean(stringValue);
-        }
-        return fallback;
-    }
-
     private static boolean hasText(String value) {
         return value != null && !value.isBlank();
+    }
+
+    private MailProcessingContext context(Message<?> message) {
+        Object value = message.getHeaders().get(MailProcessingHeaders.CONTEXT);
+        return value instanceof MailProcessingContext context ? context : null;
     }
 
     private record RecipientCertificateOptions(EmailAddress recipient,

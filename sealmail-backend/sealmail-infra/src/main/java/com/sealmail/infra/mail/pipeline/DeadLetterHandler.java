@@ -1,5 +1,8 @@
 package com.sealmail.infra.mail.pipeline;
 
+import com.sealmail.domain.mailsecurity.MailProcessingContext;
+import com.sealmail.domain.mailsecurity.MailProcessingDecision;
+import com.sealmail.domain.mailsecurity.MailRecordDisposition;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.integration.annotation.ServiceActivator;
@@ -54,20 +57,20 @@ public class DeadLetterHandler {
             recentErrors.removeLast();
         }
 
-        Object originalMessage = message.getHeaders().get("originalMessage");
-        if (originalMessage instanceof byte[]) {
-            routeToQuarantine((byte[]) originalMessage, message.getHeaders(), errorMessage);
+        MailProcessingContext context = context(message);
+        if (context != null && context.originalMailContent().length > 0) {
+            routeToQuarantine(context.originalMailContent(), context, errorMessage);
         }
     }
 
-    private void routeToQuarantine(byte[] payload, Map<String, Object> headers, String errorMessage) {
+    private void routeToQuarantine(byte[] payload, MailProcessingContext context, String errorMessage) {
         try {
+            MailProcessingContext quarantineContext = context
+                    .withDecision(MailProcessingDecision.none().withQuarantine("PIPELINE_ERROR", errorMessage))
+                    .withRecordDisposition(MailRecordDisposition.EXCEPTION);
             quarantineChannel.send(MessageBuilder
                     .withPayload(payload)
-                    .copyHeaders(headers)
-                    .setHeader("quarantineReason", "PIPELINE_ERROR")
-                    .setHeader("quarantineDetail", errorMessage)
-                    .setHeader("mailRecordDisposition", MailRecordDisposition.EXCEPTION.name())
+                    .setHeader(MailProcessingHeaders.CONTEXT, quarantineContext)
                     .build());
 
             log.debug("Failed message routed to quarantine");
@@ -87,10 +90,16 @@ public class DeadLetterHandler {
     }
 
     private Map<String, Object> extractHeaders(Message<?> message) {
+        MailProcessingContext context = context(message);
         return Map.of(
-                "messageId", message.getHeaders().getId(),
+                "messageId", context != null ? context.envelope().getMessageId() : message.getHeaders().getId(),
                 "timestamp", message.getHeaders().getTimestamp()
         );
+    }
+
+    private MailProcessingContext context(Message<?> message) {
+        Object value = message.getHeaders().get(MailProcessingHeaders.CONTEXT);
+        return value instanceof MailProcessingContext context ? context : null;
     }
 
     public List<DeadLetterEntry> getRecentErrors() {
