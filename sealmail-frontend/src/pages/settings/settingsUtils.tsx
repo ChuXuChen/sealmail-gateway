@@ -63,6 +63,12 @@ export const transportSecurityTag = (value?: SmtpTransportSecurity) => (
   </Tag>
 );
 
+export const transportTlsEngineLabel = (value?: string) => {
+  if (value === 'KONA_TLCP') return 'Kona TLCP';
+  if (value === 'KONA_RFC8998_TLS') return 'Kona RFC8998 TLS';
+  return 'JDK TLS';
+};
+
 export const getSettingsSummary = (settings: SystemSettingsSnapshot | null) => {
   const smtpEndpoint = settings ? `${settings.smtpServer.bindAddress}:${settings.smtpServer.port}` : '-';
   const deliveryMode = settings?.delivery.mode === 'POSTFIX' ? 'Postfix' : 'SMTP 中继';

@@ -1,171 +1,260 @@
-import React, { useCallback, useEffect, useState } from 'react';
-import { Button, Form, Input, Modal, Select, Space, Switch, Tag, message } from 'antd';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { Button, Checkbox, Form, Input, InputNumber, Modal, Select, Space, Switch, Tabs, Tag, message } from 'antd';
 import { DeleteOutlined, EditOutlined, PlusOutlined, ReloadOutlined } from '@ant-design/icons';
 import type { TableColumnsType } from 'antd';
 import { dlpApi } from '../api/client';
 import { getApiErrorMessage } from '../api/errors';
-import { DlpPattern, DlpSelection } from '../types';
-import {
-  DataTable,
-  EnabledTag,
-  PageHeader,
-  PageShell,
-  confirmDeleteAction,
-} from '../components/Page';
+import type { DlpPolicy, DlpRule, DlpRuleGroup, DlpSelection } from '../types';
+import { DataTable, EnabledTag, PageHeader, PageShell, confirmDeleteAction } from '../components/Page';
 
-const scopeLabels: Record<string, string> = {
-  GLOBAL: '全局',
-  SENDER_DOMAIN: '发件域',
-  RECIPIENT_DOMAIN: '收件域',
-};
+const modeLabels: Record<string, string> = { MONITOR: '监控', ENFORCE: '执行' };
+const scopeLabels: Record<string, string> = { GLOBAL: '全局', SENDER_DOMAIN: '发件域', RECIPIENT_DOMAIN: '收件域' };
 
 const DlpSelection: React.FC = () => {
-  const [data, setData] = useState<DlpSelection[]>([]);
-  const [patterns, setPatterns] = useState<DlpPattern[]>([]);
+  const [rules, setRules] = useState<DlpRule[]>([]);
+  const [groups, setGroups] = useState<DlpRuleGroup[]>([]);
+  const [policies, setPolicies] = useState<DlpPolicy[]>([]);
+  const [selections, setSelections] = useState<DlpSelection[]>([]);
   const [loading, setLoading] = useState(false);
-  const [modalOpen, setModalOpen] = useState(false);
-  const [editing, setEditing] = useState<DlpSelection | null>(null);
+  const [groupOpen, setGroupOpen] = useState(false);
+  const [policyOpen, setPolicyOpen] = useState(false);
+  const [legacyOpen, setLegacyOpen] = useState(false);
+  const [editingGroup, setEditingGroup] = useState<DlpRuleGroup | null>(null);
+  const [editingPolicy, setEditingPolicy] = useState<DlpPolicy | null>(null);
+  const [editingSelection, setEditingSelection] = useState<DlpSelection | null>(null);
   const [scopeType, setScopeType] = useState<string>('GLOBAL');
   const [patternMode, setPatternMode] = useState<'ALL' | 'SELECTED'>('ALL');
-  const [form] = Form.useForm();
+  const [groupForm] = Form.useForm();
+  const [policyForm] = Form.useForm();
+  const [legacyForm] = Form.useForm();
+
+  const ruleOptions = useMemo(() => rules.map((rule) => ({ value: rule.id, label: rule.name })), [rules]);
+  const groupOptions = useMemo(() => groups.map((group) => ({ value: group.id, label: group.name })), [groups]);
 
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
-      const response = await dlpApi.listSelections();
-      setData(response.data.data);
+      const [rulesResponse, groupsResponse, policiesResponse, selectionsResponse] = await Promise.all([
+        dlpApi.listRules(),
+        dlpApi.listRuleGroups(),
+        dlpApi.listPolicies(),
+        dlpApi.listSelections(),
+      ]);
+      setRules(rulesResponse.data.data);
+      setGroups(groupsResponse.data.data);
+      setPolicies(policiesResponse.data.data);
+      setSelections(selectionsResponse.data.data);
     } catch (error) {
-      message.error(getApiErrorMessage(error, '加载 DLP 生效范围失败'));
+      message.error(getApiErrorMessage(error, '加载 DLP 策略配置失败'));
     } finally {
       setLoading(false);
     }
   }, []);
 
-  const loadPatterns = useCallback(async () => {
-    try {
-      const response = await dlpApi.listPatterns();
-      setPatterns(response.data.data);
-    } catch (error) {
-      message.error(getApiErrorMessage(error, '加载 DLP 规则失败'));
-    }
-  }, []);
-
   useEffect(() => {
-    void loadData();
-    void loadPatterns();
-  }, [loadData, loadPatterns]);
+    void Promise.resolve().then(loadData);
+  }, [loadData]);
 
-  const showCreate = () => {
-    setEditing(null);
+  const showCreateGroup = () => {
+    setEditingGroup(null);
+    groupForm.resetFields();
+    groupForm.setFieldsValue({ enabled: true, priority: 100, ruleIds: [] });
+    setGroupOpen(true);
+  };
+
+  const showEditGroup = (record: DlpRuleGroup) => {
+    setEditingGroup(record);
+    groupForm.setFieldsValue(record);
+    setGroupOpen(true);
+  };
+
+  const saveGroup = async (values: Partial<DlpRuleGroup>) => {
+    try {
+      if (editingGroup) {
+        await dlpApi.updateRuleGroup(editingGroup.id, values);
+      } else {
+        await dlpApi.createRuleGroup(values as Omit<DlpRuleGroup, 'id' | 'createdAt' | 'updatedAt'>);
+      }
+      message.success('规则组已保存');
+      setGroupOpen(false);
+      void loadData();
+    } catch (error) {
+      message.error(getApiErrorMessage(error, '保存规则组失败'));
+    }
+  };
+
+  const removeGroup = async (id: string) => {
+    try {
+      await dlpApi.deleteRuleGroup(id);
+      message.success('规则组已删除');
+      void loadData();
+    } catch (error) {
+      message.error(getApiErrorMessage(error, '删除规则组失败'));
+    }
+  };
+
+  const showCreatePolicy = () => {
+    setEditingPolicy(null);
+    policyForm.resetFields();
+    policyForm.setFieldsValue({
+      mode: 'ENFORCE',
+      enabled: true,
+      priority: 100,
+      attachmentRequired: false,
+      senderDomains: [],
+      recipientDomains: [],
+      senderAddressPatterns: [],
+      recipientAddressPatterns: [],
+      ruleGroupIds: [],
+    });
+    setPolicyOpen(true);
+  };
+
+  const showEditPolicy = (record: DlpPolicy) => {
+    setEditingPolicy(record);
+    policyForm.setFieldsValue(record);
+    setPolicyOpen(true);
+  };
+
+  const savePolicy = async (values: Partial<DlpPolicy>) => {
+    const payload = {
+      ...values,
+      senderDomains: values.senderDomains || [],
+      recipientDomains: values.recipientDomains || [],
+      senderAddressPatterns: values.senderAddressPatterns || [],
+      recipientAddressPatterns: values.recipientAddressPatterns || [],
+      ruleGroupIds: values.ruleGroupIds || [],
+      attachmentRequired: !!values.attachmentRequired,
+      enabled: values.enabled !== false,
+      priority: values.priority ?? 100,
+      mode: values.mode || 'ENFORCE',
+    };
+    try {
+      if (editingPolicy) {
+        await dlpApi.updatePolicy(editingPolicy.id, payload);
+      } else {
+        await dlpApi.createPolicy(payload as Omit<DlpPolicy, 'id' | 'createdAt' | 'updatedAt'>);
+      }
+      message.success('策略已保存');
+      setPolicyOpen(false);
+      void loadData();
+    } catch (error) {
+      message.error(getApiErrorMessage(error, '保存策略失败'));
+    }
+  };
+
+  const removePolicy = async (id: string) => {
+    try {
+      await dlpApi.deletePolicy(id);
+      message.success('策略已删除');
+      void loadData();
+    } catch (error) {
+      message.error(getApiErrorMessage(error, '删除策略失败'));
+    }
+  };
+
+  const showCreateLegacy = () => {
+    setEditingSelection(null);
     setScopeType('GLOBAL');
     setPatternMode('ALL');
-    form.resetFields();
-    form.setFieldsValue({ scopeType: 'GLOBAL', scopeValue: '', patternMode: 'ALL', patternIds: [], enabled: true });
-    setModalOpen(true);
+    legacyForm.resetFields();
+    legacyForm.setFieldsValue({ scopeType: 'GLOBAL', patternMode: 'ALL', patternIds: [], enabled: true });
+    setLegacyOpen(true);
   };
 
-  const showEdit = (record: DlpSelection) => {
-    setEditing(record);
+  const showEditLegacy = (record: DlpSelection) => {
+    setEditingSelection(record);
     setScopeType(record.scopeType);
-    const nextPatternMode = record.patternIds === null || record.patternIds === undefined ? 'ALL' : 'SELECTED';
-    setPatternMode(nextPatternMode);
-    form.resetFields();
-    form.setFieldsValue({
-      ...record,
-      patternMode: nextPatternMode,
-      patternIds: record.patternIds || [],
-    });
-    setModalOpen(true);
+    const mode = record.patternIds == null ? 'ALL' : 'SELECTED';
+    setPatternMode(mode);
+    legacyForm.setFieldsValue({ ...record, patternMode: mode, patternIds: record.patternIds || [] });
+    setLegacyOpen(true);
   };
 
-  const save = async (values: Omit<DlpSelection, 'id'>) => {
+  const saveLegacy = async (values: DlpSelection) => {
+    const payload = {
+      ...values,
+      scopeValue: values.scopeType === 'GLOBAL' ? undefined : values.scopeValue,
+      patternIds: values.patternMode === 'ALL' ? undefined : values.patternIds,
+    };
     try {
-      const selectedPatternIds = values.patternMode === 'ALL'
-        ? undefined
-        : (values.patternIds || []);
-      const payload = {
-        ...values,
-        patternIds: selectedPatternIds,
-        scopeValue: values.scopeType === 'GLOBAL' ? undefined : values.scopeValue,
-      };
-      if (editing) {
-        await dlpApi.updateSelection(editing.id, payload);
+      if (editingSelection) {
+        await dlpApi.updateSelection(editingSelection.id, payload);
       } else {
         await dlpApi.createSelection(payload);
       }
-      message.success('DLP 生效范围已保存');
-      setModalOpen(false);
+      message.success('兼容范围已保存');
+      setLegacyOpen(false);
       void loadData();
     } catch (error) {
-      message.error(getApiErrorMessage(error, '保存 DLP 生效范围失败'));
+      message.error(getApiErrorMessage(error, '保存兼容范围失败'));
     }
   };
 
-  const remove = async (id: string) => {
+  const removeLegacy = async (id: string) => {
     try {
       await dlpApi.deleteSelection(id);
-      message.success('DLP 生效范围已删除');
+      message.success('兼容范围已删除');
       void loadData();
     } catch (error) {
-      message.error(getApiErrorMessage(error, '删除 DLP 生效范围失败'));
+      message.error(getApiErrorMessage(error, '删除兼容范围失败'));
     }
   };
 
-  const columns: TableColumnsType<DlpSelection> = [
-    {
-      title: '范围',
-      dataIndex: 'scopeType',
-      key: 'scopeType',
-      width: 120,
-      render: (value: string) => scopeLabels[value] || value,
-    },
-    {
-      title: '值',
-      dataIndex: 'scopeValue',
-      key: 'scopeValue',
-      width: 260,
-      ellipsis: true,
-      render: (value?: string) => value || '*',
-    },
-    {
-      title: '启用规则',
-      dataIndex: 'patternIds',
-      key: 'patternIds',
-      width: 140,
-      render: (patternIds?: string[] | null) => {
-        if (patternIds === null || patternIds === undefined) {
-          return <Tag color="blue">全部规则</Tag>;
-        }
-        if (patternIds.length === 0) {
-          return <Tag color="default">未选择规则</Tag>;
-        }
-        return `${patternIds.length} 条规则`;
-      },
-    },
-    {
-      title: '状态',
-      dataIndex: 'enabled',
-      key: 'enabled',
-      width: 90,
-      render: (enabled: boolean) => <EnabledTag enabled={enabled} />,
-    },
+  const groupColumns: TableColumnsType<DlpRuleGroup> = [
+    { title: '名称', dataIndex: 'name', key: 'name', width: 180, ellipsis: true },
+    { title: '规则数', dataIndex: 'ruleIds', key: 'ruleIds', width: 90, render: (ids: string[]) => ids.length },
+    { title: '优先级', dataIndex: 'priority', key: 'priority', width: 90 },
+    { title: '状态', dataIndex: 'enabled', key: 'enabled', width: 90, render: (enabled: boolean) => <EnabledTag enabled={enabled} /> },
     {
       title: '操作',
       key: 'actions',
       width: 130,
       fixed: 'right',
+      render: (_: unknown, record: DlpRuleGroup) => (
+        <Space size={4} wrap={false}>
+          <Button type="link" size="small" icon={<EditOutlined />} onClick={() => showEditGroup(record)}>编辑</Button>
+          <Button type="link" size="small" danger icon={<DeleteOutlined />} onClick={() => confirmDeleteAction('确认删除该规则组？', () => removeGroup(record.id), record.name)}>删除</Button>
+        </Space>
+      ),
+    },
+  ];
+
+  const policyColumns: TableColumnsType<DlpPolicy> = [
+    { title: '名称', dataIndex: 'name', key: 'name', width: 180, ellipsis: true },
+    { title: '模式', dataIndex: 'mode', key: 'mode', width: 90, render: (value: string) => <Tag color={value === 'ENFORCE' ? 'red' : 'blue'}>{modeLabels[value] || value}</Tag> },
+    { title: '方向', dataIndex: 'direction', key: 'direction', width: 90, render: (value?: string) => value || '*' },
+    { title: '规则组', dataIndex: 'ruleGroupIds', key: 'ruleGroupIds', width: 90, render: (ids: string[]) => ids.length },
+    { title: '附件', dataIndex: 'attachmentRequired', key: 'attachmentRequired', width: 80, render: (value: boolean) => value ? <Tag>需要</Tag> : '-' },
+    { title: '优先级', dataIndex: 'priority', key: 'priority', width: 90 },
+    { title: '状态', dataIndex: 'enabled', key: 'enabled', width: 90, render: (enabled: boolean) => <EnabledTag enabled={enabled} /> },
+    {
+      title: '操作',
+      key: 'actions',
+      width: 130,
+      fixed: 'right',
+      render: (_: unknown, record: DlpPolicy) => (
+        <Space size={4} wrap={false}>
+          <Button type="link" size="small" icon={<EditOutlined />} onClick={() => showEditPolicy(record)}>编辑</Button>
+          <Button type="link" size="small" danger icon={<DeleteOutlined />} onClick={() => confirmDeleteAction('确认删除该策略？', () => removePolicy(record.id), record.name)}>删除</Button>
+        </Space>
+      ),
+    },
+  ];
+
+  const legacyColumns: TableColumnsType<DlpSelection> = [
+    { title: '范围', dataIndex: 'scopeType', key: 'scopeType', width: 120, render: (value: string) => scopeLabels[value] || value },
+    { title: '值', dataIndex: 'scopeValue', key: 'scopeValue', width: 220, render: (value?: string) => value || '*' },
+    { title: '规则', dataIndex: 'patternIds', key: 'patternIds', width: 120, render: (ids?: string[] | null) => ids == null ? <Tag color="blue">全部规则</Tag> : `${ids.length} 条` },
+    { title: '状态', dataIndex: 'enabled', key: 'enabled', width: 90, render: (enabled: boolean) => <EnabledTag enabled={enabled} /> },
+    {
+      title: '操作',
+      key: 'actions',
+      width: 130,
       render: (_: unknown, record: DlpSelection) => (
         <Space size={4} wrap={false}>
-          <Button type="link" size="small" icon={<EditOutlined />} onClick={() => showEdit(record)}>编辑</Button>
-          <Button
-            type="link"
-            size="small"
-            danger
-            icon={<DeleteOutlined />}
-            onClick={() => confirmDeleteAction('确认删除该范围？', () => remove(record.id), record.scopeValue || scopeLabels[record.scopeType])}
-          >
-            删除
-          </Button>
+          <Button type="link" size="small" icon={<EditOutlined />} onClick={() => showEditLegacy(record)}>编辑</Button>
+          <Button type="link" size="small" danger icon={<DeleteOutlined />} onClick={() => confirmDeleteAction('确认删除该范围？', () => removeLegacy(record.id), record.scopeValue || scopeLabels[record.scopeType])}>删除</Button>
         </Space>
       ),
     },
@@ -174,82 +263,89 @@ const DlpSelection: React.FC = () => {
   return (
     <PageShell>
       <PageHeader
-        title="DLP 生效范围"
-        description="配置 DLP 规则在全局、发件域或收件域中的启用范围。"
-        actions={(
-          <Space wrap>
-            <Button icon={<ReloadOutlined />} loading={loading} onClick={loadData}>刷新</Button>
-            <Button type="primary" icon={<PlusOutlined />} onClick={showCreate}>添加范围</Button>
+        title="DLP 策略集"
+        description="配置规则组和策略条件；保留旧生效范围作为兼容层。"
+        actions={<Button icon={<ReloadOutlined />} loading={loading} onClick={loadData}>刷新</Button>}
+      />
+
+      <Tabs
+        items={[
+          {
+            key: 'policies',
+            label: '策略',
+            children: (
+              <>
+                <Space style={{ marginBottom: 12 }}><Button type="primary" icon={<PlusOutlined />} onClick={showCreatePolicy}>添加策略</Button></Space>
+                <DataTable<DlpPolicy> rowKey="id" loading={loading} dataSource={policies} columns={policyColumns} scroll={{ x: 980 }} pagination={{ pageSize: 20, total: policies.length }} />
+              </>
+            ),
+          },
+          {
+            key: 'groups',
+            label: '规则组',
+            children: (
+              <>
+                <Space style={{ marginBottom: 12 }}><Button type="primary" icon={<PlusOutlined />} onClick={showCreateGroup}>添加规则组</Button></Space>
+                <DataTable<DlpRuleGroup> rowKey="id" loading={loading} dataSource={groups} columns={groupColumns} scroll={{ x: 720 }} pagination={{ pageSize: 20, total: groups.length }} />
+              </>
+            ),
+          },
+          {
+            key: 'legacy',
+            label: '兼容范围',
+            children: (
+              <>
+                <Space style={{ marginBottom: 12 }}><Button icon={<PlusOutlined />} onClick={showCreateLegacy}>添加范围</Button></Space>
+                <DataTable<DlpSelection> rowKey="id" loading={loading} dataSource={selections} columns={legacyColumns} scroll={{ x: 720 }} pagination={{ pageSize: 20, total: selections.length }} />
+              </>
+            ),
+          },
+        ]}
+      />
+
+      <Modal title={editingGroup ? '编辑规则组' : '添加规则组'} open={groupOpen} onCancel={() => setGroupOpen(false)} footer={null} width={640}>
+        <Form form={groupForm} layout="vertical" onFinish={saveGroup}>
+          <Form.Item name="name" label="名称" rules={[{ required: true }]}><Input /></Form.Item>
+          <Form.Item name="description" label="说明"><Input /></Form.Item>
+          <Form.Item name="ruleIds" label="规则"><Select mode="multiple" options={ruleOptions} /></Form.Item>
+          <Space size="large" wrap>
+            <Form.Item name="priority" label="优先级"><InputNumber min={0} /></Form.Item>
+            <Form.Item name="enabled" label="启用" valuePropName="checked"><Switch /></Form.Item>
           </Space>
-        )}
-      />
+          <Form.Item style={{ textAlign: 'right', marginBottom: 0 }}><Space><Button onClick={() => setGroupOpen(false)}>取消</Button><Button type="primary" htmlType="submit">保存</Button></Space></Form.Item>
+        </Form>
+      </Modal>
 
-      <DataTable<DlpSelection>
-        rowKey="id"
-        loading={loading}
-        dataSource={data}
-        columns={columns}
-        scroll={{ x: 740 }}
-        pagination={{ pageSize: 20, total: data.length }}
-      />
+      <Modal title={editingPolicy ? '编辑策略' : '添加策略'} open={policyOpen} onCancel={() => setPolicyOpen(false)} footer={null} width={760}>
+        <Form form={policyForm} layout="vertical" onFinish={savePolicy}>
+          <Form.Item name="name" label="名称" rules={[{ required: true }]}><Input /></Form.Item>
+          <Form.Item name="description" label="说明"><Input /></Form.Item>
+          <Space style={{ width: '100%' }} size="large" wrap>
+            <Form.Item name="mode" label="模式" rules={[{ required: true }]} style={{ minWidth: 140 }}><Select options={[{ value: 'ENFORCE', label: '执行' }, { value: 'MONITOR', label: '监控' }]} /></Form.Item>
+            <Form.Item name="direction" label="方向" style={{ minWidth: 140 }}><Select allowClear options={[{ value: 'OUTBOUND', label: '出站' }, { value: 'INBOUND', label: '入站' }]} /></Form.Item>
+            <Form.Item name="priority" label="优先级"><InputNumber min={0} /></Form.Item>
+            <Form.Item name="attachmentRequired" valuePropName="checked"><Checkbox>仅含附件</Checkbox></Form.Item>
+            <Form.Item name="enabled" label="启用" valuePropName="checked"><Switch /></Form.Item>
+          </Space>
+          <Form.Item name="ruleGroupIds" label="规则组" rules={[{ required: true, message: '请选择规则组' }]}><Select mode="multiple" options={groupOptions} /></Form.Item>
+          <Form.Item name="senderDomains" label="发件域"><Select mode="tags" tokenSeparators={[',']} /></Form.Item>
+          <Form.Item name="recipientDomains" label="收件域"><Select mode="tags" tokenSeparators={[',']} /></Form.Item>
+          <Form.Item name="senderAddressPatterns" label="发件地址模式"><Select mode="tags" tokenSeparators={[',']} placeholder="*@example.com" /></Form.Item>
+          <Form.Item name="recipientAddressPatterns" label="收件地址模式"><Select mode="tags" tokenSeparators={[',']} placeholder="security@*" /></Form.Item>
+          <Form.Item style={{ textAlign: 'right', marginBottom: 0 }}><Space><Button onClick={() => setPolicyOpen(false)}>取消</Button><Button type="primary" htmlType="submit">保存</Button></Space></Form.Item>
+        </Form>
+      </Modal>
 
-      <Modal
-        title={editing ? '编辑 DLP 生效范围' : '添加 DLP 生效范围'}
-        open={modalOpen}
-        onCancel={() => setModalOpen(false)}
-        footer={null}
-      >
-        <Form form={form} layout="vertical" onFinish={save}>
+      <Modal title={editingSelection ? '编辑兼容范围' : '添加兼容范围'} open={legacyOpen} onCancel={() => setLegacyOpen(false)} footer={null} width={600}>
+        <Form form={legacyForm} layout="vertical" onFinish={saveLegacy}>
           <Form.Item name="scopeType" label="范围" rules={[{ required: true }]}>
-            <Select
-              onChange={setScopeType}
-              options={[
-                { value: 'GLOBAL', label: '全局' },
-                { value: 'SENDER_DOMAIN', label: '发件域' },
-                { value: 'RECIPIENT_DOMAIN', label: '收件域' },
-              ]}
-            />
+            <Select onChange={setScopeType} options={[{ value: 'GLOBAL', label: '全局' }, { value: 'SENDER_DOMAIN', label: '发件域' }, { value: 'RECIPIENT_DOMAIN', label: '收件域' }]} />
           </Form.Item>
-          {scopeType !== 'GLOBAL' && (
-            <Form.Item name="scopeValue" label="域名" rules={[{ required: true, message: '请输入域名' }]}>
-              <Input placeholder="example.com" />
-            </Form.Item>
-          )}
-          <Form.Item name="patternMode" label="规则模式" rules={[{ required: true }]}>
-            <Select
-              onChange={(value: 'ALL' | 'SELECTED') => setPatternMode(value)}
-              options={[
-                { value: 'ALL', label: '全部规则' },
-                { value: 'SELECTED', label: '仅选择的规则' },
-              ]}
-            />
-          </Form.Item>
-          {patternMode === 'SELECTED' && (
-            <Form.Item
-              name="patternIds"
-              label="启用规则"
-              rules={[{ required: true, message: '请选择至少一条 DLP 规则' }]}
-            >
-              <Select
-                mode="multiple"
-                allowClear
-                placeholder="选择要启用的 DLP 规则"
-                options={patterns.map((pattern) => ({
-                  value: pattern.id,
-                  label: pattern.name,
-                }))}
-              />
-            </Form.Item>
-          )}
-          <Form.Item name="enabled" label="启用" valuePropName="checked">
-            <Switch />
-          </Form.Item>
-          <Form.Item style={{ textAlign: 'right', marginBottom: 0 }}>
-            <Space>
-              <Button onClick={() => setModalOpen(false)}>取消</Button>
-              <Button type="primary" htmlType="submit">保存</Button>
-            </Space>
-          </Form.Item>
+          {scopeType !== 'GLOBAL' && <Form.Item name="scopeValue" label="域名" rules={[{ required: true }]}><Input placeholder="example.com" /></Form.Item>}
+          <Form.Item name="patternMode" label="规则模式"><Select onChange={(value: 'ALL' | 'SELECTED') => setPatternMode(value)} options={[{ value: 'ALL', label: '全部规则' }, { value: 'SELECTED', label: '仅选择规则' }]} /></Form.Item>
+          {patternMode === 'SELECTED' && <Form.Item name="patternIds" label="启用规则"><Select mode="multiple" options={ruleOptions} /></Form.Item>}
+          <Form.Item name="enabled" label="启用" valuePropName="checked"><Switch /></Form.Item>
+          <Form.Item style={{ textAlign: 'right', marginBottom: 0 }}><Space><Button onClick={() => setLegacyOpen(false)}>取消</Button><Button type="primary" htmlType="submit">保存</Button></Space></Form.Item>
         </Form>
       </Modal>
     </PageShell>

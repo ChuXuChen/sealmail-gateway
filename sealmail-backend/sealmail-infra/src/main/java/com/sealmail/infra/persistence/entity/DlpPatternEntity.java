@@ -20,8 +20,26 @@ public class DlpPatternEntity {
     @Column(name = "description", length = 512)
     private String description;
 
-    @Column(name = "regex", nullable = false, columnDefinition = "TEXT")
+    @Column(name = "regex", columnDefinition = "TEXT")
     private String regex;
+
+    @Column(name = "rule_type", nullable = false, length = 32)
+    private String ruleType;
+
+    @Column(name = "builtin_code", length = 128)
+    private String builtinCode;
+
+    @Column(name = "content_kinds", columnDefinition = "TEXT")
+    private String contentKinds;
+
+    @Column(name = "min_match_count", nullable = false)
+    private int minMatchCount;
+
+    @Column(name = "max_evidence_count", nullable = false)
+    private int maxEvidenceCount;
+
+    @Column(name = "masking_strategy", nullable = false, length = 32)
+    private String maskingStrategy;
 
     @Column(name = "action", nullable = false, length = 32)
     private String action;

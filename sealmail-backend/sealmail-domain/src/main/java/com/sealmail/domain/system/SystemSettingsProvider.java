@@ -49,8 +49,17 @@ public interface SystemSettingsProvider {
             boolean tlsRequired,
             boolean keystoreConfigured,
             boolean pemConfigured,
-            String keyAlias
+            String keyAlias,
+            String engine,
+            String provider,
+            String protocol,
+            List<String> enabledProtocols,
+            List<String> enabledCipherSuites
     ) {
+        public TlsSettings {
+            enabledProtocols = enabledProtocols == null ? List.of() : List.copyOf(enabledProtocols);
+            enabledCipherSuites = enabledCipherSuites == null ? List.of() : List.copyOf(enabledCipherSuites);
+        }
     }
 
     record DeliverySettings(

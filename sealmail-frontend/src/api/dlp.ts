@@ -2,8 +2,18 @@ import type {
   ApiResponse,
   CreateDlpPatternRequest,
   CreateDlpSelectionRequest,
+  DlpEvaluation,
+  DlpEvent,
+  DlpEvidence,
   DlpPattern,
+  DlpPolicy,
+  DlpPolicyRequest,
+  DlpRule,
+  DlpRuleGroup,
+  DlpRuleGroupRequest,
+  DlpRuleRequest,
   DlpSelection,
+  DlpTestRequest,
   ExceptionMailItem,
   ExceptionMailStats,
   PageResponse,
@@ -52,6 +62,12 @@ export const dlpQuarantineApi = {
 
   batchReject: (ids: string[]) =>
     apiClient.post<ApiResponse<void>>('/api/v1/dlp/quarantine/batch-reject', ids),
+
+  evidence: (id: string) =>
+    apiClient.get<ApiResponse<DlpEvidence[]>>(`/api/v1/dlp/quarantine/${id}/evidence`),
+
+  falsePositive: (id: string, data?: { comment?: string }) =>
+    apiClient.post<ApiResponse<void>>(`/api/v1/dlp/quarantine/${id}/false-positive`, data),
 };
 
 export const dlpApi = {
@@ -78,4 +94,52 @@ export const dlpApi = {
 
   deleteSelection: (id: string) =>
     apiClient.delete<ApiResponse<void>>(`/api/v1/dlp/selections/${id}`),
+
+  listRules: () =>
+    apiClient.get<ApiResponse<DlpRule[]>>('/api/v1/dlp/rules'),
+
+  createRule: (data: DlpRuleRequest) =>
+    apiClient.post<ApiResponse<DlpRule>>('/api/v1/dlp/rules', data),
+
+  updateRule: (id: string, data: Partial<DlpRuleRequest>) =>
+    apiClient.put<ApiResponse<DlpRule>>(`/api/v1/dlp/rules/${id}`, data),
+
+  deleteRule: (id: string) =>
+    apiClient.delete<ApiResponse<void>>(`/api/v1/dlp/rules/${id}`),
+
+  listRuleGroups: () =>
+    apiClient.get<ApiResponse<DlpRuleGroup[]>>('/api/v1/dlp/rule-groups'),
+
+  createRuleGroup: (data: DlpRuleGroupRequest) =>
+    apiClient.post<ApiResponse<DlpRuleGroup>>('/api/v1/dlp/rule-groups', data),
+
+  updateRuleGroup: (id: string, data: Partial<DlpRuleGroupRequest>) =>
+    apiClient.put<ApiResponse<DlpRuleGroup>>(`/api/v1/dlp/rule-groups/${id}`, data),
+
+  deleteRuleGroup: (id: string) =>
+    apiClient.delete<ApiResponse<void>>(`/api/v1/dlp/rule-groups/${id}`),
+
+  listPolicies: () =>
+    apiClient.get<ApiResponse<DlpPolicy[]>>('/api/v1/dlp/policies'),
+
+  createPolicy: (data: DlpPolicyRequest) =>
+    apiClient.post<ApiResponse<DlpPolicy>>('/api/v1/dlp/policies', data),
+
+  updatePolicy: (id: string, data: Partial<DlpPolicyRequest>) =>
+    apiClient.put<ApiResponse<DlpPolicy>>(`/api/v1/dlp/policies/${id}`, data),
+
+  deletePolicy: (id: string) =>
+    apiClient.delete<ApiResponse<void>>(`/api/v1/dlp/policies/${id}`),
+
+  test: (data: DlpTestRequest) =>
+    apiClient.post<ApiResponse<DlpEvaluation>>('/api/v1/dlp/test', data),
+
+  simulatePolicy: (id: string, data: DlpTestRequest) =>
+    apiClient.post<ApiResponse<DlpEvaluation>>(`/api/v1/dlp/policies/${id}/simulate`, data),
+
+  listEvents: (params: { page?: number; size?: number; action?: string; minSeverity?: number; rule?: string; domain?: string }) =>
+    apiClient.get<ApiResponse<PageResponse<DlpEvent>>>('/api/v1/dlp/events', { params }),
+
+  eventEvidence: (id: string) =>
+    apiClient.get<ApiResponse<DlpEvidence[]>>(`/api/v1/dlp/events/${id}/evidence`),
 };

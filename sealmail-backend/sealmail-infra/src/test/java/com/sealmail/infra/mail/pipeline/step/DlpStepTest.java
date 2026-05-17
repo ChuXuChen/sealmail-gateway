@@ -1,8 +1,14 @@
 package com.sealmail.infra.mail.pipeline.step;
 
 import com.sealmail.domain.audit.AuditLogType;
-import com.sealmail.domain.dlp.DlpScanResult;
-import com.sealmail.domain.dlp.DlpViolation;
+import com.sealmail.domain.dlp.DlpContentKind;
+import com.sealmail.domain.dlp.DlpContentPart;
+import com.sealmail.domain.dlp.DlpEvaluationResult;
+import com.sealmail.domain.dlp.DlpMaskingStrategy;
+import com.sealmail.domain.dlp.DlpMatch;
+import com.sealmail.domain.dlp.DlpRule;
+import com.sealmail.domain.dlp.DlpRuleType;
+import com.sealmail.domain.dlp.spi.DlpEvaluationPort;
 import com.sealmail.domain.mailsecurity.MailEnvelope;
 import com.sealmail.domain.mailsecurity.MailProcessingContext;
 import com.sealmail.domain.mailsecurity.MailProcessingErrorType;
@@ -11,8 +17,6 @@ import com.sealmail.domain.mailsecurity.MailRecordDisposition;
 import com.sealmail.domain.policy.DispositionAction;
 import com.sealmail.domain.shared.model.EmailAddress;
 import com.sealmail.domain.shared.event.AuditEvent;
-import com.sealmail.infra.dlp.DlpService;
-import com.sealmail.infra.dlp.MimeContentExtractor;
 import com.sealmail.infra.events.DomainEventPublisher;
 import com.sealmail.infra.mail.pipeline.MailProcessingHeaders;
 import org.junit.jupiter.api.Test;
@@ -89,10 +93,10 @@ class DlpStepTest {
     @Test
     void scannerExceptionRecordsExceptionMailInsteadOfAllowingDelivery() {
         byte[] payload = mailPayload();
-        DlpService service = mock(DlpService.class);
+        DlpEvaluationPort service = mock(DlpEvaluationPort.class);
         DomainEventPublisher domainEventPublisher = mock(DomainEventPublisher.class);
-        when(service.scan(any(), any(), any(), any())).thenThrow(new IllegalStateException("scanner down"));
-        DlpStep step = new DlpStep(service, new MimeContentExtractor(), domainEventPublisher);
+        when(service.evaluate(any(), any(), any(Boolean.class))).thenThrow(new IllegalStateException("scanner down"));
+        DlpStep step = new DlpStep(service, domainEventPublisher);
 
         MailProcessingException exception = assertThrows(MailProcessingException.class,
                 () -> step.execute(MessageBuilder.withPayload(payload)
@@ -104,20 +108,20 @@ class DlpStepTest {
         assertEquals(MailRecordDisposition.EXCEPTION, exception.recordDisposition());
     }
 
-    private DlpStep stepReturning(DlpScanResult result) {
-        DlpService service = mock(DlpService.class);
+    private DlpStep stepReturning(DlpEvaluationResult result) {
+        DlpEvaluationPort service = mock(DlpEvaluationPort.class);
         DomainEventPublisher domainEventPublisher = mock(DomainEventPublisher.class);
-        when(service.scan(any(), any(), any(), any())).thenReturn(result);
-        return new DlpStep(service, new MimeContentExtractor(), domainEventPublisher);
+        when(service.evaluate(any(), any(), any(Boolean.class))).thenReturn(result);
+        return new DlpStep(service, domainEventPublisher);
     }
 
     @Test
     void publishesAuditEventForViolations() {
         byte[] payload = mailPayload();
-        DlpService service = mock(DlpService.class);
+        DlpEvaluationPort service = mock(DlpEvaluationPort.class);
         DomainEventPublisher domainEventPublisher = mock(DomainEventPublisher.class);
-        when(service.scan(any(), any(), any(), any())).thenReturn(result(DispositionAction.WARN));
-        DlpStep step = new DlpStep(service, new MimeContentExtractor(), domainEventPublisher);
+        when(service.evaluate(any(), any(), any(Boolean.class))).thenReturn(result(DispositionAction.WARN));
+        DlpStep step = new DlpStep(service, domainEventPublisher);
 
         step.execute(MessageBuilder.withPayload(payload)
                 .setHeader(MailProcessingHeaders.CONTEXT, context(payload))
@@ -131,14 +135,46 @@ class DlpStepTest {
         ));
     }
 
-    private DlpScanResult result(DispositionAction action) {
-        return new DlpScanResult("test", List.of(new DlpViolation(
+    private DlpEvaluationResult result(DispositionAction action) {
+        DlpRule rule = new DlpRule(
+                "rule-id",
                 "rule",
                 "rule matched",
+                DlpRuleType.KEYWORD,
                 "matched",
+                null,
+                List.of(),
+                1,
                 5,
-                action
-        )), 1);
+                DlpMaskingStrategy.DEFAULT,
+                100,
+                action,
+                5,
+                true,
+                null,
+                null);
+        DlpContentPart part = new DlpContentPart(
+                "body",
+                DlpContentKind.BODY_TEXT,
+                null,
+                "text/plain",
+                7,
+                "matched",
+                false,
+                List.of());
+        DlpMatch match = new DlpMatch(rule, part, "matched", 0, 7);
+        return new DlpEvaluationResult(
+                "event-1",
+                action,
+                action,
+                5,
+                List.of(match),
+                List.of(),
+                List.of(),
+                List.of("policy-1"),
+                List.of("group-1"),
+                false,
+                1);
     }
 
     private byte[] mailPayload() {

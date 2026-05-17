@@ -6,6 +6,7 @@ import com.sealmail.infra.config.properties.CaProperties;
 import com.sealmail.infra.config.properties.PostfixProperties;
 import com.sealmail.infra.config.properties.SecurityProperties;
 import com.sealmail.infra.config.properties.SmtpServerProperties;
+import com.sealmail.infra.tls.TransportTlsContextFactory;
 import org.springframework.core.env.Environment;
 import org.springframework.stereotype.Component;
 
@@ -22,6 +23,7 @@ public class SystemSettingsProviderImpl implements SystemSettingsProvider {
     private final QuarantinePolicyService quarantinePolicyService;
     private final SecurityProperties securityProperties;
     private final CaProperties caProperties;
+    private final TransportTlsContextFactory transportTlsContextFactory;
 
     public SystemSettingsProviderImpl(Environment environment,
                                       SmtpServerProperties smtpServerProperties,
@@ -29,7 +31,8 @@ public class SystemSettingsProviderImpl implements SystemSettingsProvider {
                                       RelayPolicyService relayPolicyService,
                                       QuarantinePolicyService quarantinePolicyService,
                                       SecurityProperties securityProperties,
-                                      CaProperties caProperties) {
+                                      CaProperties caProperties,
+                                      TransportTlsContextFactory transportTlsContextFactory) {
         this.environment = environment;
         this.smtpServerProperties = smtpServerProperties;
         this.postfixProperties = postfixProperties;
@@ -37,6 +40,7 @@ public class SystemSettingsProviderImpl implements SystemSettingsProvider {
         this.quarantinePolicyService = quarantinePolicyService;
         this.securityProperties = securityProperties;
         this.caProperties = caProperties;
+        this.transportTlsContextFactory = transportTlsContextFactory;
     }
 
     @Override
@@ -74,7 +78,12 @@ public class SystemSettingsProviderImpl implements SystemSettingsProvider {
                         hasText(smtpServerProperties.getKeystorePath()),
                         hasText(smtpServerProperties.getCertificatePath())
                                 && hasText(smtpServerProperties.getPrivateKeyPath()),
-                        emptyToNull(smtpServerProperties.getKeyAlias())
+                        emptyToNull(smtpServerProperties.getKeyAlias()),
+                        transportTlsContextFactory.engine().name(),
+                        transportTlsContextFactory.effectiveProvider(),
+                        transportTlsContextFactory.effectiveProtocol(),
+                        transportTlsContextFactory.effectiveEnabledProtocols(),
+                        transportTlsContextFactory.effectiveEnabledCipherSuites()
                 )
         );
     }
@@ -140,7 +149,8 @@ public class SystemSettingsProviderImpl implements SystemSettingsProvider {
                 new CryptoCapability("签名算法", List.of("SM3withSM2", "SHA256withRSA")),
                 new CryptoCapability("内容加密", List.of("SM4-CBC", "AES-256-CBC")),
                 new CryptoCapability("密钥交换", List.of("SM2 KeyAgreement", "RSA KeyTransport")),
-                new CryptoCapability("哈希算法", List.of("SM3", "SHA-256"))
+                new CryptoCapability("哈希算法", List.of("SM3", "SHA-256")),
+                new CryptoCapability("传输层", List.of("TLS/STARTTLS", "TLCP 1.1", "TLS 1.3 RFC 8998"))
         );
     }
 

@@ -38,6 +38,11 @@ public class QuarantineDtoMapper {
                 .resolvedAt(mail.getResolvedAt())
                 .resolvedBy(mail.getProcessedBy())
                 .resolutionComment(mail.getProcessComment())
+                .dlpEventId(mail.getDlpEventId())
+                .falsePositive(mail.isFalsePositive())
+                .falsePositiveAt(mail.getFalsePositiveAt())
+                .falsePositiveBy(mail.getFalsePositiveBy())
+                .falsePositiveComment(mail.getFalsePositiveComment())
                 .build();
     }
 

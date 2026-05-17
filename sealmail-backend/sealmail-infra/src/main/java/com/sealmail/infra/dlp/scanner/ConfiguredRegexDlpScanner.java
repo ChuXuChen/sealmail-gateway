@@ -8,7 +8,6 @@ import com.sealmail.infra.dlp.config.DlpConfigService;
 import com.sealmail.infra.dlp.config.DlpPatternConfig;
 import org.springframework.stereotype.Component;
 
-import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.regex.Matcher;
@@ -41,7 +40,7 @@ public class ConfiguredRegexDlpScanner implements DlpContentScanner {
     @Override
     public DlpScanResult scan(String subject, String body, byte[] rawContent, MailEnvelope envelope) {
         long startTime = System.currentTimeMillis();
-        String content = content(subject, body, rawContent);
+        String content = content(subject, body);
         List<DlpViolation> violations = new ArrayList<>();
 
         for (DlpPatternConfig rule : configService.activePatternsFor(envelope)) {
@@ -60,15 +59,10 @@ public class ConfiguredRegexDlpScanner implements DlpContentScanner {
         return new DlpScanResult(getName(), violations, System.currentTimeMillis() - startTime);
     }
 
-    private String content(String subject, String body, byte[] rawContent) {
-        String raw = rawContent != null && rawContent.length > 0
-                ? new String(rawContent, StandardCharsets.UTF_8)
-                : "";
+    private String content(String subject, String body) {
         return (subject != null ? subject : "")
                 + "\n"
-                + (body != null ? body : "")
-                + "\n"
-                + raw;
+                + (body != null ? body : "");
     }
 
     private String description(DlpPatternConfig rule) {

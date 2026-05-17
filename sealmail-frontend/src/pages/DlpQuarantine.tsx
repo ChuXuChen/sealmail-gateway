@@ -8,7 +8,7 @@ import {
   CheckCircleOutlined,
   CloseCircleOutlined,
 } from '@ant-design/icons';
-import { QuarantineItem } from '../types';
+import type { DlpEvidence, QuarantineItem } from '../types';
 import { dlpQuarantineApi } from '../api/client';
 import { getApiErrorMessage } from '../api/errors';
 import {
@@ -30,6 +30,7 @@ const DlpQuarantine: React.FC = () => {
   const [selectedRowKeys, setSelectedRowKeys] = useState<React.Key[]>([]);
   const [detailVisible, setDetailVisible] = useState(false);
   const [selectedItem, setSelectedItem] = useState<QuarantineItem | null>(null);
+  const [selectedEvidence, setSelectedEvidence] = useState<DlpEvidence[]>([]);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -76,6 +77,19 @@ const DlpQuarantine: React.FC = () => {
       void loadData();
     } catch (error) {
       message.error(getApiErrorMessage(error, '操作失败'));
+    }
+  };
+
+  const handleFalsePositive = async (record: QuarantineItem) => {
+    try {
+      await dlpQuarantineApi.falsePositive(record.id, { comment: 'Operator marked as false positive' });
+      message.success('已标记为误报');
+      void loadData();
+      if (selectedItem?.id === record.id) {
+        setSelectedItem({ ...record, falsePositive: true, falsePositiveComment: 'Operator marked as false positive' });
+      }
+    } catch (error) {
+      message.error(getApiErrorMessage(error, '标记误报失败'));
     }
   };
 
@@ -303,19 +317,29 @@ const DlpQuarantine: React.FC = () => {
         onAction={handleActionClick}
         onPaginationChange={(page, size) => setPagination((prev) => ({ ...prev, page, size }))}
         onSelectionChange={setSelectedRowKeys}
-        onView={(record) => {
+        onView={async (record) => {
           setSelectedItem(record);
           setDetailVisible(true);
+          try {
+            const response = await dlpQuarantineApi.evidence(record.id);
+            setSelectedEvidence(response.data.data);
+          } catch (error) {
+            setSelectedEvidence([]);
+            message.error(getApiErrorMessage(error, '加载 DLP 证据失败'));
+          }
         }}
       />
 
       <DlpQuarantineDetailDrawer
         item={selectedItem}
+        evidence={selectedEvidence}
         open={detailVisible}
         onClose={() => {
           setDetailVisible(false);
           setSelectedItem(null);
+          setSelectedEvidence([]);
         }}
+        onFalsePositive={handleFalsePositive}
       />
     </PageShell>
   );

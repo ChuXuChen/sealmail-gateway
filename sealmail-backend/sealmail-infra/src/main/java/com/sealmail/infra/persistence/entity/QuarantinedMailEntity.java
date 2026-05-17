@@ -56,6 +56,21 @@ public class QuarantinedMailEntity {
     @Column(name = "process_comment", length = 1024)
     private String processComment;
 
+    @Column(name = "dlp_event_id", length = 128)
+    private String dlpEventId;
+
+    @Column(name = "false_positive", nullable = false)
+    private boolean falsePositive;
+
+    @Column(name = "false_positive_at")
+    private Instant falsePositiveAt;
+
+    @Column(name = "false_positive_by", length = 254)
+    private String falsePositiveBy;
+
+    @Column(name = "false_positive_comment", length = 1024)
+    private String falsePositiveComment;
+
     @Version
     @Column(name = "version")
     private long version;

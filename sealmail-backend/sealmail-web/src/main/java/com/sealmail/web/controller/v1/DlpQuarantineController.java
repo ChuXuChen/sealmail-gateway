@@ -2,12 +2,15 @@ package com.sealmail.web.controller.v1;
 
 import com.sealmail.app.dto.common.PageRequest;
 import com.sealmail.app.dto.common.PageResponse;
+import com.sealmail.app.dto.request.DlpFalsePositiveRequest;
 import com.sealmail.app.dto.request.RejectQuarantineRequest;
 import com.sealmail.app.dto.request.RepairQuarantineReleaseRequest;
 import com.sealmail.app.dto.request.ReleaseQuarantineRequest;
+import com.sealmail.app.dto.response.DlpEvidenceResponse;
 import com.sealmail.app.dto.response.QuarantineItemResponse;
 import com.sealmail.app.dto.response.QuarantineStatsResponse;
 import com.sealmail.app.security.UserContext;
+import com.sealmail.app.usecase.dlp.DlpOperationsUseCase;
 import com.sealmail.app.usecase.quarantine.QueryQuarantineUseCase;
 import com.sealmail.app.usecase.quarantine.RejectQuarantineUseCase;
 import com.sealmail.app.usecase.quarantine.RepairQuarantineReleaseUseCase;
@@ -35,6 +38,7 @@ public class DlpQuarantineController {
     private final ReleaseQuarantineUseCase releaseQuarantineUseCase;
     private final RejectQuarantineUseCase rejectQuarantineUseCase;
     private final RepairQuarantineReleaseUseCase repairQuarantineReleaseUseCase;
+    private final DlpOperationsUseCase dlpOperationsUseCase;
 
     @GetMapping("/stats")
     @Operation(summary = "DLP 隔离队列统计")
@@ -51,6 +55,15 @@ public class DlpQuarantineController {
             @AuthenticationPrincipal UserContext user) {
 
         return ApiResponse.ok(queryQuarantineUseCase.findById(id, user));
+    }
+
+    @GetMapping("/{id}/evidence")
+    @Operation(summary = "查询 DLP 隔离邮件证据")
+    public ApiResponse<List<DlpEvidenceResponse>> evidence(
+            @Parameter(description = "DLP 隔离队列邮件 ID") @PathVariable String id,
+            @AuthenticationPrincipal UserContext user) {
+
+        return ApiResponse.ok(dlpOperationsUseCase.quarantineEvidence(id, user));
     }
 
     @GetMapping
@@ -96,6 +109,17 @@ public class DlpQuarantineController {
                 id,
                 request != null ? request : new RejectQuarantineRequest(),
                 user));
+    }
+
+    @PostMapping("/{id}/false-positive")
+    @Operation(summary = "标记 DLP 隔离邮件为误报")
+    public ApiResponse<Void> falsePositive(
+            @Parameter(description = "DLP 隔离队列邮件 ID") @PathVariable String id,
+            @RequestBody(required = false) DlpFalsePositiveRequest request,
+            @AuthenticationPrincipal UserContext user) {
+
+        dlpOperationsUseCase.markFalsePositive(id, request, user);
+        return ApiResponse.ok();
     }
 
     @PostMapping("/{id}/release/complete")

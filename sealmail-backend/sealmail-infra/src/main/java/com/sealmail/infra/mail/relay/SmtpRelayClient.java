@@ -1,12 +1,12 @@
 package com.sealmail.infra.mail.relay;
 
 import com.sealmail.domain.mail.spi.SmtpRelayProbe;
+import com.sealmail.infra.tls.TransportTlsContextFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 import javax.net.ssl.SSLSocket;
-import javax.net.ssl.SSLSocketFactory;
 import java.io.BufferedInputStream;
 import java.io.BufferedOutputStream;
 import java.io.ByteArrayOutputStream;
@@ -18,6 +18,7 @@ import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.nio.charset.StandardCharsets;
+import java.security.GeneralSecurityException;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.LinkedHashSet;
@@ -32,6 +33,12 @@ import java.util.Set;
 public class SmtpRelayClient implements SmtpRelayProbe {
 
     private static final Logger log = LoggerFactory.getLogger(SmtpRelayClient.class);
+
+    private final TransportTlsContextFactory transportTlsContextFactory;
+
+    public SmtpRelayClient(TransportTlsContextFactory transportTlsContextFactory) {
+        this.transportTlsContextFactory = transportTlsContextFactory;
+    }
 
     public void send(SmtpRelayRequest request) throws SmtpRelayException {
         try (SmtpSession session = openSession(request.connection())) {
@@ -188,9 +195,8 @@ public class SmtpRelayClient implements SmtpRelayProbe {
     }
 
     private SmtpSession openSession(SmtpRelayConnectionSettings connection) throws IOException {
-        SSLSocketFactory sslSocketFactory = (SSLSocketFactory) SSLSocketFactory.getDefault();
         Socket socket = connection.useImplicitTls()
-                ? sslSocketFactory.createSocket()
+                ? createTlsSocket()
                 : new Socket();
         socket.connect(new InetSocketAddress(connection.host(), connection.port()), connection.timeoutMillis());
         socket.setSoTimeout(connection.timeoutMillis());
@@ -201,6 +207,14 @@ public class SmtpRelayClient implements SmtpRelayProbe {
         }
 
         return new SmtpSession(socket);
+    }
+
+    private SSLSocket createTlsSocket() throws IOException {
+        try {
+            return transportTlsContextFactory.createClientSocket();
+        } catch (GeneralSecurityException e) {
+            throw new IOException("Failed to create TLS socket: " + e.getMessage(), e);
+        }
     }
 
     private static void ensureExpected(SmtpResponse response, String operation, int... expectedCodes)
@@ -261,7 +275,7 @@ public class SmtpRelayClient implements SmtpRelayProbe {
         }
     }
 
-    private static final class SmtpSession implements AutoCloseable {
+    private final class SmtpSession implements AutoCloseable {
 
         private Socket socket;
         private InputStream input;
@@ -350,10 +364,12 @@ public class SmtpRelayClient implements SmtpRelayProbe {
         }
 
         private void upgradeToTls(String host, int port, int timeoutMillis) throws IOException {
-            SSLSocketFactory sslSocketFactory = (SSLSocketFactory) SSLSocketFactory.getDefault();
-            SSLSocket sslSocket = (SSLSocket) sslSocketFactory.createSocket(socket, host, port, true);
-            sslSocket.setUseClientMode(true);
-            sslSocket.setSoTimeout(timeoutMillis);
+            SSLSocket sslSocket;
+            try {
+                sslSocket = transportTlsContextFactory.wrapClientSocket(socket, host, port, timeoutMillis);
+            } catch (GeneralSecurityException e) {
+                throw new IOException("Failed to create TLS socket: " + e.getMessage(), e);
+            }
             sslSocket.startHandshake();
             socket = sslSocket;
             input = new BufferedInputStream(socket.getInputStream());

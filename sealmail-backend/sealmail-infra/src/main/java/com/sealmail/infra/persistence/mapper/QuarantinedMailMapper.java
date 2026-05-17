@@ -41,6 +41,11 @@ public class QuarantinedMailMapper {
         entity.setResolvedAt(quarantinedMail.getResolvedAt());
         entity.setProcessedBy(quarantinedMail.getProcessedBy());
         entity.setProcessComment(quarantinedMail.getProcessComment());
+        entity.setDlpEventId(quarantinedMail.getDlpEventId());
+        entity.setFalsePositive(quarantinedMail.isFalsePositive());
+        entity.setFalsePositiveAt(quarantinedMail.getFalsePositiveAt());
+        entity.setFalsePositiveBy(quarantinedMail.getFalsePositiveBy());
+        entity.setFalsePositiveComment(quarantinedMail.getFalsePositiveComment());
         return entity;
     }
 
@@ -63,7 +68,12 @@ public class QuarantinedMailMapper {
                 entity.getResolvedAt(),
                 entity.getProcessedBy(),
                 entity.getProcessComment(),
-                decodeRawContent(entity.getRawContent())
+                decodeRawContent(entity.getRawContent()),
+                entity.getDlpEventId(),
+                entity.isFalsePositive(),
+                entity.getFalsePositiveAt(),
+                entity.getFalsePositiveBy(),
+                entity.getFalsePositiveComment()
         );
     }
 

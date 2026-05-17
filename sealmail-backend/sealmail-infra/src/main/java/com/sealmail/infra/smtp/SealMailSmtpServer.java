@@ -9,13 +9,16 @@ import com.sealmail.domain.policy.DomainConfig;
 import com.sealmail.domain.policy.DomainConfigRepository;
 import com.sealmail.domain.shared.model.EmailAddress;
 import com.sealmail.infra.config.properties.SmtpServerProperties;
+import com.sealmail.infra.config.properties.TransportTlsProperties;
 import com.sealmail.infra.crypto.util.PemUtils;
 import com.sealmail.infra.mail.pipeline.MailFlowErrorHandlingState;
 import com.sealmail.infra.mail.pipeline.MailProcessingHeaders;
+import com.sealmail.infra.tls.TransportTlsContextFactory;
 import jakarta.annotation.PreDestroy;
 import org.bouncycastle.jce.provider.BouncyCastleProvider;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.event.EventListener;
@@ -29,8 +32,9 @@ import org.subethamail.smtp.server.SMTPServer;
 
 import javax.net.ssl.KeyManagerFactory;
 import javax.net.ssl.SSLContext;
-import javax.net.ssl.SSLSocketFactory;
+import javax.net.ssl.SSLSocket;
 import java.io.*;
+import java.net.Socket;
 import java.net.InetSocketAddress;
 import java.nio.file.Files;
 import java.nio.file.Paths;
@@ -51,6 +55,8 @@ public class SealMailSmtpServer {
     private final DomainConfigRepository domainConfigRepository;
     private final SecretReferenceResolver secretReferenceResolver;
     private final MailFlowErrorHandlingState errorHandlingState;
+    private final TransportTlsContextFactory transportTlsContextFactory;
+    private SSLContext smtpServerSslContext;
     private final AtomicBoolean running = new AtomicBoolean(false);
 
     public SealMailSmtpServer(SmtpServerProperties properties,
@@ -59,12 +65,30 @@ public class SealMailSmtpServer {
                               DomainConfigRepository domainConfigRepository,
                               SecretReferenceResolver secretReferenceResolver,
                               MailFlowErrorHandlingState errorHandlingState) {
+        this(properties,
+                mailInboundChannel,
+                mailOutboundChannel,
+                domainConfigRepository,
+                secretReferenceResolver,
+                errorHandlingState,
+                new TransportTlsContextFactory(new TransportTlsProperties()));
+    }
+
+    @Autowired
+    public SealMailSmtpServer(SmtpServerProperties properties,
+                              @Qualifier("mailInboundChannel") MessageChannel mailInboundChannel,
+                              @Qualifier("mailOutboundChannel") MessageChannel mailOutboundChannel,
+                              DomainConfigRepository domainConfigRepository,
+                              SecretReferenceResolver secretReferenceResolver,
+                              MailFlowErrorHandlingState errorHandlingState,
+                              TransportTlsContextFactory transportTlsContextFactory) {
         this.mailInboundChannel = mailInboundChannel;
         this.mailOutboundChannel = mailOutboundChannel;
         this.domainConfigRepository = domainConfigRepository;
         this.secretReferenceResolver = secretReferenceResolver;
         this.errorHandlingState = errorHandlingState;
-        this.smtpServer = new SMTPServer(new SealMailMessageHandlerFactory());
+        this.transportTlsContextFactory = transportTlsContextFactory;
+        this.smtpServer = new SealMailSubEthaServer(new SealMailMessageHandlerFactory());
         this.smtpServer.setPort(properties.getPort());
         try {
             this.smtpServer.setBindAddress(java.net.InetAddress.getByName(properties.getBindAddress()));
@@ -83,21 +107,11 @@ public class SealMailSmtpServer {
 
     private void configureTLS(SmtpServerProperties properties) {
         try {
-            if (properties.getKeystorePath() != null) {
-                // Set system properties for SubEtha SMTP which uses JVM default SSL context
-                System.setProperty("javax.net.ssl.keyStore", properties.getKeystorePath());
-                System.setProperty("javax.net.ssl.keyStorePassword", requireSecret(
-                        properties.getKeystorePasswordSecretRef(),
-                        "sealmail.smtp.server.keystore-password-secret-ref"));
-                System.setProperty("javax.net.ssl.keyStoreType", "PKCS12");
-            } else if (properties.getCertificatePath() != null && properties.getPrivateKeyPath() != null) {
-                // Create and set default SSL context for PEM certificates
-                SSLContext sslContext = createSSLContext(properties);
-                SSLContext.setDefault(sslContext);
-            }
+            SSLContext sslContext = createSSLContext(properties);
+            this.smtpServerSslContext = sslContext;
 
             this.smtpServer.setEnableTLS(true);
-            log.info("STARTTLS enabled for SMTP server");
+            log.info("STARTTLS enabled for SMTP server using {} transport TLS", transportTlsContextFactory.engine());
         } catch (Exception e) {
             log.warn("Failed to configure TLS for SMTP server: {} - TLS will not be available", e.getMessage());
         }
@@ -137,27 +151,25 @@ public class SealMailSmtpServer {
         PrivateKey privateKey = PemUtils.parsePrivateKey(keyPem, keyPassword);
 
         // Create in-memory keystore
-        KeyStore keyStore = KeyStore.getInstance("PKCS12");
+        KeyStore keyStore = transportTlsContextFactory.createKeyStore();
         keyStore.load(null, null);
         keyStore.setKeyEntry("smtp", privateKey, new char[0], new java.security.cert.Certificate[]{cert});
 
-        KeyManagerFactory kmf = KeyManagerFactory.getInstance(KeyManagerFactory.getDefaultAlgorithm());
+        KeyManagerFactory kmf = transportTlsContextFactory.createKeyManagerFactory();
         kmf.init(keyStore, new char[0]);
 
-        SSLContext sslContext = SSLContext.getInstance("TLS");
-        sslContext.init(kmf.getKeyManagers(), null, null);
-        return sslContext;
+        return transportTlsContextFactory.createServerContext(kmf.getKeyManagers());
     }
 
     private SSLContext createSSLContextFromKeystore(SmtpServerProperties properties) throws Exception {
-        KeyStore keyStore = KeyStore.getInstance("PKCS12");
+        KeyStore keyStore = transportTlsContextFactory.createKeyStore();
         try (FileInputStream fis = new FileInputStream(properties.getKeystorePath())) {
             keyStore.load(fis, requireSecret(
                     properties.getKeystorePasswordSecretRef(),
                     "sealmail.smtp.server.keystore-password-secret-ref").toCharArray());
         }
 
-        KeyManagerFactory kmf = KeyManagerFactory.getInstance(KeyManagerFactory.getDefaultAlgorithm());
+        KeyManagerFactory kmf = transportTlsContextFactory.createKeyManagerFactory();
         String keystorePassword = requireSecret(
                 properties.getKeystorePasswordSecretRef(),
                 "sealmail.smtp.server.keystore-password-secret-ref");
@@ -167,9 +179,7 @@ public class SealMailSmtpServer {
                 : keystorePassword.toCharArray();
         kmf.init(keyStore, keyPassword);
 
-        SSLContext sslContext = SSLContext.getInstance("TLS");
-        sslContext.init(kmf.getKeyManagers(), null, null);
-        return sslContext;
+        return transportTlsContextFactory.createServerContext(kmf.getKeyManagers());
     }
 
     @EventListener(ApplicationReadyEvent.class)
@@ -194,6 +204,21 @@ public class SealMailSmtpServer {
         @Override
         public MessageHandler create(MessageContext ctx) {
             return new SealMailMessageHandler(ctx);
+        }
+    }
+
+    private class SealMailSubEthaServer extends SMTPServer {
+
+        private SealMailSubEthaServer(MessageHandlerFactory handlerFactory) {
+            super(handlerFactory);
+        }
+
+        @Override
+        public SSLSocket createSSLSocket(Socket socket) throws IOException {
+            if (smtpServerSslContext == null) {
+                throw new IOException("SMTP server TLS context is not configured");
+            }
+            return transportTlsContextFactory.wrapServerSocket(socket, smtpServerSslContext);
         }
     }
 

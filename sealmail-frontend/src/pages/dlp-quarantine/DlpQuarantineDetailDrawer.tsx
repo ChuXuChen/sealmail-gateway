@@ -1,6 +1,7 @@
 import type React from 'react';
-import { Descriptions, Space } from 'antd';
-import type { QuarantineItem } from '../../types';
+import { Button, Descriptions, Space, Table, Tag } from 'antd';
+import { FlagOutlined } from '@ant-design/icons';
+import type { DlpEvidence, QuarantineItem } from '../../types';
 import {
   DetailDrawer,
   EnabledTag,
@@ -12,16 +13,27 @@ import { canRelease } from './dlpQuarantineUtils';
 
 interface DlpQuarantineDetailDrawerProps {
   item: QuarantineItem | null;
+  evidence?: DlpEvidence[];
   open: boolean;
   onClose: () => void;
+  onFalsePositive?: (item: QuarantineItem) => void;
 }
 
 const DlpQuarantineDetailDrawer: React.FC<DlpQuarantineDetailDrawerProps> = ({
   item,
+  evidence = [],
   open,
   onClose,
+  onFalsePositive,
 }) => (
-  <DetailDrawer title="DLP 隔离邮件详情" open={open} onClose={onClose}>
+  <DetailDrawer
+    title="DLP 隔离邮件详情"
+    open={open}
+    onClose={onClose}
+    extra={item && onFalsePositive && !item.falsePositive ? (
+      <Button icon={<FlagOutlined />} onClick={() => onFalsePositive(item)}>标记误报</Button>
+    ) : undefined}
+  >
     {item && (
       <Descriptions column={1} bordered size="small">
         <Descriptions.Item label="主题">{item.subject}</Descriptions.Item>
@@ -34,6 +46,16 @@ const DlpQuarantineDetailDrawer: React.FC<DlpQuarantineDetailDrawerProps> = ({
         <Descriptions.Item label="来源地址">{item.remoteAddress || '-'}</Descriptions.Item>
         <Descriptions.Item label="隔离原因"><ReasonTag reason={item.reason} /></Descriptions.Item>
         <Descriptions.Item label="详情说明">{item.detail || '-'}</Descriptions.Item>
+        <Descriptions.Item label="DLP 事件">{item.dlpEventId || '-'}</Descriptions.Item>
+        <Descriptions.Item label="误报标记">
+          {item.falsePositive ? (
+            <Space direction="vertical" size={4}>
+              <Tag color="green">误报</Tag>
+              <span>{item.falsePositiveBy || '-'} {item.falsePositiveAt ? formatDateTime(item.falsePositiveAt) : ''}</span>
+              <span>{item.falsePositiveComment || '-'}</span>
+            </Space>
+          ) : '-'}
+        </Descriptions.Item>
         <Descriptions.Item label="状态"><QuarantineStatusTag status={item.status} /></Descriptions.Item>
         <Descriptions.Item label="可放行">
           {canRelease(item) ? (
@@ -57,6 +79,20 @@ const DlpQuarantineDetailDrawer: React.FC<DlpQuarantineDetailDrawerProps> = ({
           </Descriptions.Item>
         )}
       </Descriptions>
+    )}
+    {item && (
+      <Table<DlpEvidence>
+        style={{ marginTop: 16 }}
+        rowKey="id"
+        size="small"
+        dataSource={evidence}
+        pagination={false}
+        columns={[
+          { title: '规则', dataIndex: 'ruleName', key: 'ruleName', width: 150 },
+          { title: '位置', dataIndex: 'partKind', key: 'partKind', width: 120, render: (value, record) => record.fileName ? `${value} / ${record.fileName}` : value },
+          { title: '脱敏证据', dataIndex: 'maskedSnippet', key: 'maskedSnippet', ellipsis: true },
+        ]}
+      />
     )}
   </DetailDrawer>
 );

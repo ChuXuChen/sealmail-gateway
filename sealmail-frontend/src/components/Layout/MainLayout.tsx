@@ -99,17 +99,22 @@ const MainLayout: React.FC = () => {
         canManageDlp(user) ? {
           key: '/dlp/patterns',
           icon: <FileTextOutlined />,
-          label: '检测规则',
+          label: '规则库',
         } : null,
         canManageDlp(user) ? {
           key: '/dlp/selection',
           icon: <PartitionOutlined />,
-          label: '生效范围',
+          label: '策略集',
+        } : null,
+        canViewQuarantine(user) ? {
+          key: '/dlp/events',
+          icon: <AuditOutlined />,
+          label: '命中事件',
         } : null,
         canViewQuarantine(user) ? {
           key: '/dlp/quarantine',
           icon: <InboxOutlined />,
-          label: '隔离邮件',
+          label: '隔离复核',
         } : null,
       ].filter(Boolean),
     } : null,

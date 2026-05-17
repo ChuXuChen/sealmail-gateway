@@ -30,6 +30,11 @@ public class QuarantinedMail extends AggregateRoot<String> {
     private Instant resolvedAt;
     private String processedBy;
     private String processComment;
+    private String dlpEventId;
+    private boolean falsePositive;
+    private Instant falsePositiveAt;
+    private String falsePositiveBy;
+    private String falsePositiveComment;
 
     private QuarantinedMail(String id, String messageId, String subject, EmailAddress sender,
                             List<EmailAddress> recipients, MailDirection direction, String remoteAddress,
@@ -87,6 +92,19 @@ public class QuarantinedMail extends AggregateRoot<String> {
                                           QuarantineReason reason, String detail,
                                           QuarantineStatus status, Instant createdAt, Instant resolvedAt,
                                           String processedBy, String processComment, byte[] rawContent) {
+        return restore(id, messageId, subject, sender, recipients, direction, remoteAddress, reason, detail,
+                status, createdAt, resolvedAt, processedBy, processComment, rawContent, null,
+                false, null, null, null);
+    }
+
+    public static QuarantinedMail restore(String id, String messageId, String subject,
+                                          EmailAddress sender, List<EmailAddress> recipients,
+                                          MailDirection direction, String remoteAddress,
+                                          QuarantineReason reason, String detail,
+                                          QuarantineStatus status, Instant createdAt, Instant resolvedAt,
+                                          String processedBy, String processComment, byte[] rawContent,
+                                          String dlpEventId, boolean falsePositive, Instant falsePositiveAt,
+                                          String falsePositiveBy, String falsePositiveComment) {
         validateRequired(messageId, sender, recipients, reason);
         if (status == null) {
             throw new IllegalArgumentException("Quarantine status cannot be null");
@@ -106,6 +124,11 @@ public class QuarantinedMail extends AggregateRoot<String> {
         mail.resolvedAt = resolvedAt;
         mail.processedBy = processedBy;
         mail.processComment = processComment;
+        mail.dlpEventId = dlpEventId;
+        mail.falsePositive = falsePositive;
+        mail.falsePositiveAt = falsePositiveAt;
+        mail.falsePositiveBy = falsePositiveBy;
+        mail.falsePositiveComment = falsePositiveComment;
         return mail;
     }
 
@@ -269,5 +292,25 @@ public class QuarantinedMail extends AggregateRoot<String> {
 
     public String getProcessComment() {
         return processComment;
+    }
+
+    public String getDlpEventId() {
+        return dlpEventId;
+    }
+
+    public boolean isFalsePositive() {
+        return falsePositive;
+    }
+
+    public Instant getFalsePositiveAt() {
+        return falsePositiveAt;
+    }
+
+    public String getFalsePositiveBy() {
+        return falsePositiveBy;
+    }
+
+    public String getFalsePositiveComment() {
+        return falsePositiveComment;
     }
 }

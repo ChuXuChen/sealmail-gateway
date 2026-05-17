@@ -43,7 +43,12 @@ public class QuerySystemSettingsUseCase {
                                 snapshot.smtpServer().tls().tlsRequired(),
                                 snapshot.smtpServer().tls().keystoreConfigured(),
                                 snapshot.smtpServer().tls().pemConfigured(),
-                                snapshot.smtpServer().tls().keyAlias()
+                                snapshot.smtpServer().tls().keyAlias(),
+                                snapshot.smtpServer().tls().engine(),
+                                snapshot.smtpServer().tls().provider(),
+                                snapshot.smtpServer().tls().protocol(),
+                                snapshot.smtpServer().tls().enabledProtocols(),
+                                snapshot.smtpServer().tls().enabledCipherSuites()
                         )
                 ),
                 new SystemSettingsResponse.DeliveryResponse(

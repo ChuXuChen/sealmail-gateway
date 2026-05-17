@@ -10,6 +10,7 @@ import com.sealmail.domain.mailsecurity.MailProcessingErrorType;
 import com.sealmail.domain.mailsecurity.MailProcessingException;
 import com.sealmail.domain.mailsecurity.MailRecordDisposition;
 import com.sealmail.domain.config.QuarantinePolicyPort;
+import com.sealmail.domain.dlp.spi.DlpEventRepository;
 import com.sealmail.domain.quarantine.QuarantineReason;
 import com.sealmail.domain.quarantine.QuarantineRepository;
 import com.sealmail.domain.quarantine.QuarantinedMail;
@@ -36,13 +37,23 @@ public class QuarantineStep {
     private final QuarantinePolicyPort quarantinePolicyPort;
     private final QuarantineNotificationPort quarantineNotificationPort;
     private final DomainEventPublisher domainEventPublisher;
+    private final DlpEventRepository dlpEventRepository;
 
     public QuarantineStep(QuarantineRepository quarantineRepository,
                           ExceptionMailRepository exceptionMailRepository,
                           QuarantinePolicyPort quarantinePolicyPort,
                           QuarantineNotificationPort quarantineNotificationPort) {
         this(quarantineRepository, exceptionMailRepository, quarantinePolicyPort,
-                quarantineNotificationPort, null);
+                quarantineNotificationPort, null, null);
+    }
+
+    public QuarantineStep(QuarantineRepository quarantineRepository,
+                          ExceptionMailRepository exceptionMailRepository,
+                          QuarantinePolicyPort quarantinePolicyPort,
+                          QuarantineNotificationPort quarantineNotificationPort,
+                          DomainEventPublisher domainEventPublisher) {
+        this(quarantineRepository, exceptionMailRepository, quarantinePolicyPort,
+                quarantineNotificationPort, domainEventPublisher, null);
     }
 
     @Autowired
@@ -50,12 +61,14 @@ public class QuarantineStep {
                           ExceptionMailRepository exceptionMailRepository,
                           QuarantinePolicyPort quarantinePolicyPort,
                           QuarantineNotificationPort quarantineNotificationPort,
-                          DomainEventPublisher domainEventPublisher) {
+                          DomainEventPublisher domainEventPublisher,
+                          DlpEventRepository dlpEventRepository) {
         this.quarantineRepository = quarantineRepository;
         this.exceptionMailRepository = exceptionMailRepository;
         this.quarantinePolicyPort = quarantinePolicyPort;
         this.quarantineNotificationPort = quarantineNotificationPort;
         this.domainEventPublisher = domainEventPublisher;
+        this.dlpEventRepository = dlpEventRepository;
     }
 
     public Message<byte[]> execute(Message<byte[]> message) {
@@ -85,6 +98,7 @@ public class QuarantineStep {
                         message.getPayload()
                 );
                 quarantineRepository.save(quarantined);
+                linkDlpEvent(context, quarantined.getId());
                 notifyIfEnabled(quarantined);
                 recordQuarantineAudit(context, quarantined.getId(), disposition, quarantineReason, detail(message, reason));
             } else {
@@ -102,6 +116,7 @@ public class QuarantineStep {
                         message.getPayload()
                 );
                 exceptionMailRepository.save(exceptionMail);
+                linkDlpEvent(context, exceptionMail.getId());
                 recordQuarantineAudit(context, exceptionMail.getId(), disposition, quarantineReason, detail(message, reason));
             }
 
@@ -125,6 +140,21 @@ public class QuarantineStep {
         } catch (Exception e) {
             log.warn("Failed to send quarantine notification for {}: {}",
                     quarantined.getId(), e.getMessage());
+        }
+    }
+
+    private void linkDlpEvent(MailProcessingContext context, String quarantineId) {
+        try {
+            if (dlpEventRepository == null
+                    || context == null
+                    || context.decision() == null
+                    || context.decision().dlpDecision() == null
+                    || context.decision().dlpDecision().eventId() == null) {
+                return;
+            }
+            dlpEventRepository.linkQuarantine(context.decision().dlpDecision().eventId(), quarantineId);
+        } catch (Exception e) {
+            log.warn("Failed to link DLP event to quarantine {}: {}", quarantineId, e.getMessage());
         }
     }
 

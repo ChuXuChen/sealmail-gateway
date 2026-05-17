@@ -1,17 +1,14 @@
 package com.sealmail.infra.mail.pipeline.step;
 
 import com.sealmail.domain.audit.AuditLogType;
-import com.sealmail.domain.dlp.DlpScanResult;
-import com.sealmail.domain.dlp.DlpViolation;
+import com.sealmail.domain.dlp.DlpEvaluationResult;
 import com.sealmail.domain.mailsecurity.DlpDecision;
-import com.sealmail.domain.mailsecurity.MailEnvelope;
 import com.sealmail.domain.mailsecurity.MailProcessingContext;
 import com.sealmail.domain.mailsecurity.MailProcessingDecision;
 import com.sealmail.domain.mailsecurity.MailProcessingErrorType;
 import com.sealmail.domain.mailsecurity.MailProcessingException;
 import com.sealmail.domain.mailsecurity.MailRecordDisposition;
-import com.sealmail.infra.dlp.DlpService;
-import com.sealmail.infra.dlp.MimeContentExtractor;
+import com.sealmail.domain.dlp.spi.DlpEvaluationPort;
 import com.sealmail.infra.events.DomainEventPublisher;
 import com.sealmail.infra.mail.pipeline.MailProcessingHeaders;
 import com.sealmail.infra.mail.pipeline.MailProcessingAuditEvents;
@@ -30,15 +27,12 @@ import java.util.List;
 @Component
 public class DlpStep {
 
-    private final DlpService dlpService;
-    private final MimeContentExtractor contentExtractor;
+    private final DlpEvaluationPort dlpEvaluationPort;
     private final DomainEventPublisher domainEventPublisher;
 
-    public DlpStep(DlpService dlpService,
-                   MimeContentExtractor contentExtractor,
+    public DlpStep(DlpEvaluationPort dlpEvaluationPort,
                    DomainEventPublisher domainEventPublisher) {
-        this.dlpService = dlpService;
-        this.contentExtractor = contentExtractor;
+        this.dlpEvaluationPort = dlpEvaluationPort;
         this.domainEventPublisher = domainEventPublisher;
     }
 
@@ -46,47 +40,41 @@ public class DlpStep {
         byte[] payload = message.getPayload();
 
         try {
-            MimeContentExtractor.ExtractedContent content = contentExtractor.extract(payload);
             MailProcessingContext context = context(message);
-            MailEnvelope envelope = context != null ? context.envelope() : null;
-            DlpScanResult result = dlpService.scan(content.subject(), content.body(), payload, envelope);
+            DlpEvaluationResult result = dlpEvaluationPort.evaluate(payload, context, true);
 
-            if (!result.hasViolations()) {
+            if (!result.hasMatches()) {
                 log.debug("DLP scan passed, no violations found");
                 return message;
             }
 
-            List<DlpViolation> violations = result.getViolations();
             log.warn("DLP scan found {} violations, highest severity: {}, final action: {}",
-                    violations.size(), result.getMaxSeverity(), result.getFinalAction());
+                    result.matches().size(), result.maxSeverity(), result.action());
 
-            for (DlpViolation violation : violations) {
+            for (var match : result.matches()) {
                 log.warn("  - [{}] {} (severity: {})",
-                        violation.getRuleName(),
-                        violation.getDescription(),
-                        violation.getSeverity());
+                        match.rule().name(),
+                        description(match.rule().name(), match.rule().description()),
+                        match.rule().severity());
             }
             recordViolation(context, result);
 
-            return switch (result.getFinalAction()) {
+            return switch (result.action()) {
                 case BLOCK -> MailProcessingMessages.quarantine(
-                        message,
+                        withDlpDecision(message, context, result),
                         "POLICY_VIOLATION",
-                        "DLP BLOCK: " + formatViolationSummary(violations),
+                        "DLP BLOCK: " + formatViolationSummary(result),
                         MailRecordDisposition.EXCEPTION);
                 case QUARANTINE -> MailProcessingMessages.quarantine(
-                        message,
+                        withDlpDecision(message, context, result),
                         "POLICY_VIOLATION",
-                        "DLP QUARANTINE: " + formatViolationSummary(violations),
+                        "DLP QUARANTINE: " + formatViolationSummary(result),
                         MailRecordDisposition.DLP_QUARANTINE);
                 case MUST_ENCRYPT -> {
                     if (context != null) {
                         MailProcessingDecision decision = context.decision()
                                 .withMustEncrypt(true)
-                                .withDlpDecision(new DlpDecision(
-                                        result.getFinalAction(),
-                                        result.getMaxSeverity(),
-                                        result.getViolations().stream().map(DlpViolation::getRuleName).toList()));
+                                .withDlpDecision(decision(result));
                         MailProcessingContext updatedContext = context.withDecision(decision);
                         yield MailProcessingMessages.withContext(message, updatedContext);
                     }
@@ -105,42 +93,67 @@ public class DlpStep {
         }
     }
 
-    private String formatViolationSummary(List<DlpViolation> violations) {
-        if (violations.size() <= 3) {
-            return violations.stream()
-                    .map(DlpViolation::getDescription)
+    private Message<byte[]> withDlpDecision(Message<byte[]> message,
+                                            MailProcessingContext context,
+                                            DlpEvaluationResult result) {
+        if (context == null) {
+            return message;
+        }
+        return MailProcessingMessages.withContext(
+                message,
+                context.withDecision(context.decision().withDlpDecision(decision(result))));
+    }
+
+    private DlpDecision decision(DlpEvaluationResult result) {
+        return new DlpDecision(
+                result.action(),
+                result.maxSeverity(),
+                ruleNames(result),
+                result.eventId());
+    }
+
+    private String formatViolationSummary(DlpEvaluationResult result) {
+        if (result.matches().size() <= 3) {
+            return result.matches().stream()
+                    .map(match -> description(match.rule().name(), match.rule().description()))
                     .reduce((a, b) -> a + "; " + b)
                     .orElse("");
         }
-        return violations.stream()
+        return result.matches().stream()
                 .limit(3)
-                .map(DlpViolation::getDescription)
+                .map(match -> description(match.rule().name(), match.rule().description()))
                 .reduce((a, b) -> a + "; " + b)
-                .orElse("") + " and " + (violations.size() - 3) + " more";
+                .orElse("") + " and " + (result.matches().size() - 3) + " more";
     }
 
     private void recordViolation(MailProcessingContext context,
-                                 DlpScanResult result) {
+                                 DlpEvaluationResult result) {
         try {
             MailProcessingAuditEvents.publish(
                     domainEventPublisher,
                     AuditLogType.DLP_VIOLATION,
                     context,
-                    "DLP_" + result.getFinalAction().name(),
-                    "action=" + result.getFinalAction()
-                            + ", severity=" + result.getMaxSeverity()
-                            + ", rules=" + ruleSummary(result.getViolations()));
+                    "DLP_" + result.action().name(),
+                    "action=" + result.action()
+                            + ", recommendedAction=" + result.recommendedAction()
+                            + ", severity=" + result.maxSeverity()
+                            + ", eventId=" + result.eventId()
+                            + ", rules=" + String.join(",", ruleNames(result)));
         } catch (Exception e) {
             log.warn("Failed to record DLP audit log: {}", e.getMessage());
         }
     }
 
-    private String ruleSummary(List<DlpViolation> violations) {
-        return violations.stream()
+    private List<String> ruleNames(DlpEvaluationResult result) {
+        return result.matches().stream()
                 .limit(5)
-                .map(DlpViolation::getRuleName)
-                .reduce((a, b) -> a + "," + b)
-                .orElse("");
+                .map(match -> match.rule().name())
+                .distinct()
+                .toList();
+    }
+
+    private String description(String name, String description) {
+        return description != null && !description.isBlank() ? description : "DLP rule matched: " + name;
     }
 
     public String getStepName() {

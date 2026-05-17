@@ -7,7 +7,8 @@ import java.util.List;
 public record DlpDecision(
         DispositionAction action,
         int maxSeverity,
-        List<String> ruleNames
+        List<String> ruleNames,
+        String eventId
 ) {
 
     public DlpDecision {
@@ -18,8 +19,12 @@ public record DlpDecision(
         ruleNames = ruleNames == null ? List.of() : List.copyOf(ruleNames);
     }
 
+    public DlpDecision(DispositionAction action, int maxSeverity, List<String> ruleNames) {
+        this(action, maxSeverity, ruleNames, null);
+    }
+
     public static DlpDecision none() {
-        return new DlpDecision(DispositionAction.WARN, 0, List.of());
+        return new DlpDecision(DispositionAction.WARN, 0, List.of(), null);
     }
 
     public boolean requiresEncryption() {

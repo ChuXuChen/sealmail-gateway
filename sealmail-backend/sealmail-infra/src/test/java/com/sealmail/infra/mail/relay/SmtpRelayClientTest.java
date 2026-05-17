@@ -1,6 +1,8 @@
 package com.sealmail.infra.mail.relay;
 
 import com.sealmail.domain.mailsecurity.SmtpTransportSecurity;
+import com.sealmail.infra.config.properties.TransportTlsProperties;
+import com.sealmail.infra.tls.TransportTlsContextFactory;
 import org.junit.jupiter.api.Test;
 
 import java.io.BufferedReader;
@@ -28,7 +30,8 @@ class SmtpRelayClientTest {
         try (FakeSmtpServer fakeServer = new FakeSmtpServer()) {
             fakeServer.start();
 
-            SmtpRelayClient smtpRelayClient = new SmtpRelayClient();
+            SmtpRelayClient smtpRelayClient = new SmtpRelayClient(
+                    new TransportTlsContextFactory(new TransportTlsProperties()));
             byte[] message = "Subject: Test\n\n.leading line\nsecond line".getBytes(StandardCharsets.UTF_8);
 
             smtpRelayClient.send(new SmtpRelayRequest(

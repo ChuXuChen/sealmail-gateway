@@ -28,6 +28,7 @@ const ExceptionMails = React.lazy(() => import('../pages/ExceptionMails'));
 const DlpQuarantine = React.lazy(() => import('../pages/DlpQuarantine'));
 const DlpPatterns = React.lazy(() => import('../pages/DlpPatterns'));
 const DlpSelection = React.lazy(() => import('../pages/DlpSelection'));
+const DlpEvents = React.lazy(() => import('../pages/DlpEvents'));
 const Settings = React.lazy(() => import('../pages/Settings'));
 const AuditLogs = React.lazy(() => import('../pages/AuditLogs'));
 const DomainConfigs = React.lazy(() => import('../pages/DomainConfigs'));
@@ -169,6 +170,14 @@ const router = createBrowserRouter([
         element: withSuspense(
           <RoleRoute check={canViewQuarantine}>
             <DlpQuarantine />
+          </RoleRoute>,
+        ),
+      },
+      {
+        path: 'dlp/events',
+        element: withSuspense(
+          <RoleRoute check={canViewQuarantine}>
+            <DlpEvents />
           </RoleRoute>,
         ),
       },

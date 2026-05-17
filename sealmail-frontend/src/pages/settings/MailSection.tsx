@@ -8,6 +8,7 @@ import {
   configuredTag,
   formatBytes,
   getSettingsSummary,
+  transportTlsEngineLabel,
   transportSecurityTag,
 } from './settingsUtils';
 
@@ -44,6 +45,25 @@ const MailSection: React.FC<MailSectionProps> = ({
           <Descriptions.Item label="单封邮件上限">{formatBytes(settings?.smtpServer.maxMessageSizeBytes || 0)}</Descriptions.Item>
           <Descriptions.Item label="STARTTLS">{booleanTag(settings?.smtpServer.tls.startTlsEnabled || false)}</Descriptions.Item>
           <Descriptions.Item label="强制 TLS">{booleanTag(settings?.smtpServer.tls.tlsRequired || false)}</Descriptions.Item>
+          <Descriptions.Item label="TLS 引擎">
+            <Space wrap>
+              <Tag color={settings?.smtpServer.tls.engine === 'JDK' ? 'default' : 'processing'} className="settings-tag">
+                {transportTlsEngineLabel(settings?.smtpServer.tls.engine)}
+              </Tag>
+              <Text>{settings?.smtpServer.tls.provider || '-'}</Text>
+            </Space>
+          </Descriptions.Item>
+          <Descriptions.Item label="协议">{settings?.smtpServer.tls.protocol || '-'}</Descriptions.Item>
+          <Descriptions.Item label="启用协议">
+            {settings?.smtpServer.tls.enabledProtocols?.length
+              ? settings.smtpServer.tls.enabledProtocols.join(', ')
+              : '默认'}
+          </Descriptions.Item>
+          <Descriptions.Item label="启用套件">
+            {settings?.smtpServer.tls.enabledCipherSuites?.length
+              ? settings.smtpServer.tls.enabledCipherSuites.join(', ')
+              : '默认'}
+          </Descriptions.Item>
         </Descriptions>
       </Card>
       <Card title="投递链路">

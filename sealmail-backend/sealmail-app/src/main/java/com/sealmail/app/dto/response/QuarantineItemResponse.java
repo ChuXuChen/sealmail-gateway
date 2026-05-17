@@ -33,4 +33,9 @@ public class QuarantineItemResponse {
     private Instant resolvedAt;
     private String resolvedBy;
     private String resolutionComment;
+    private String dlpEventId;
+    private boolean falsePositive;
+    private Instant falsePositiveAt;
+    private String falsePositiveBy;
+    private String falsePositiveComment;
 }
