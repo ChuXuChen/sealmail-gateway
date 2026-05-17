@@ -1,0 +1,99 @@
+* {
+  box-sizing: border-box;
+}
+
+:root {
+  --font-sans: "Inter", "MiSans", "PingFang SC", "Microsoft YaHei UI", "Microsoft YaHei", "Noto Sans CJK SC", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-display: "Inter", "MiSans", "PingFang SC", "Microsoft YaHei UI", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif;
+  --font-mono: "JetBrains Mono", "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+  --text-xs: 12px;
+  --text-sm: 13px;
+  --text-md: 14px;
+  --text-lg: 16px;
+  --text-xl: 20px;
+  --text-title: 24px;
+  --text-display: 40px;
+  --weight-regular: 400;
+  --weight-medium: 520;
+  --weight-semibold: 650;
+  --weight-bold: 760;
+  color: #202827;
+  background: #f5f6f2;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+  background:
+    linear-gradient(135deg, rgba(47, 111, 100, 0.08) 0%, transparent 34%),
+    linear-gradient(180deg, #f7f8f4 0%, #eef2ec 100%);
+  font-family: var(--font-sans);
+  font-size: var(--text-md);
+  font-weight: var(--weight-regular);
+  line-height: 1.58;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
+
+strong,
+b {
+  font-weight: var(--weight-semibold);
+}
+
+.ant-typography,
+.ant-btn,
+.ant-input,
+.ant-select,
+.ant-dropdown-menu,
+.ant-menu,
+.ant-form,
+.ant-table,
+.ant-modal,
+.ant-drawer,
+.ant-card,
+.ant-descriptions {
+  font-family: var(--font-sans);
+}
+
+.ant-typography code,
+.ant-typography kbd,
+.ant-typography pre,
+.ant-input-code,
+.ant-input-data-count,
+.ant-statistic-content,
+.mono-small,
+.settings-probe-result {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+#root {
+  min-height: 100vh;
+}
+
+.full-width {
+  width: 100%;
+}
+
+.min-width-zero {
+  min-width: 0;
+}
+
+.mono-small {
+  font-size: var(--text-xs);
+}
+
+.text-micro {
+  font-size: var(--text-xs);
+  line-height: 1.45;
+}
