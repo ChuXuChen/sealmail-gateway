@@ -1,8 +1,8 @@
 import type React from 'react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Spin, message } from 'antd';
-import { dlpQuarantineApi, exceptionMailApi } from '../api/client';
-import type { ExceptionMailStats, QuarantineStats } from '../types';
+import { dlpQuarantineApi, exceptionMailApi, systemSettingsApi } from '../api/client';
+import type { ExceptionMailStats, QuarantineStats, SystemSettings } from '../types';
 import { PageShell } from '../components/Page';
 import DashboardHero from './dashboard/DashboardHero';
 import DashboardMetrics from './dashboard/DashboardMetrics';
@@ -12,18 +12,26 @@ import { buildDashboardViewModel } from './dashboard/dashboardModel';
 const Dashboard: React.FC = () => {
   const [stats, setStats] = useState<QuarantineStats | null>(null);
   const [exceptionStats, setExceptionStats] = useState<ExceptionMailStats | null>(null);
+  const [settings, setSettings] = useState<SystemSettings | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
   const loadStats = useCallback(async () => {
     setRefreshing(true);
     try {
-      const [quarantineResponse, exceptionResponse] = await Promise.all([
+      const [quarantineResponse, exceptionResponse, settingsResponse] = await Promise.allSettled([
         dlpQuarantineApi.getStats(),
         exceptionMailApi.getStats(),
+        systemSettingsApi.get(),
       ]);
-      setStats(quarantineResponse.data.data);
-      setExceptionStats(exceptionResponse.data.data);
+      if (quarantineResponse.status === 'rejected' || exceptionResponse.status === 'rejected') {
+        throw new Error('failed to load dashboard statistics');
+      }
+      setStats(quarantineResponse.value.data.data);
+      setExceptionStats(exceptionResponse.value.data.data);
+      if (settingsResponse.status === 'fulfilled' && settingsResponse.value.data.success) {
+        setSettings(settingsResponse.value.data.data);
+      }
     } catch {
       message.error('加载统计数据失败');
     } finally {
@@ -54,14 +62,14 @@ const Dashboard: React.FC = () => {
   }
 
   return (
-    <PageShell>
+    <PageShell className="dashboard-page">
       <DashboardHero
         refreshing={refreshing}
         viewModel={viewModel}
         onRefresh={loadStats}
       />
       <DashboardMetrics metrics={viewModel.metrics} />
-      <DashboardPanels viewModel={viewModel} />
+      <DashboardPanels cryptoCapabilities={settings?.cryptoCapabilities} viewModel={viewModel} />
     </PageShell>
   );
 };

@@ -10,7 +10,6 @@ import com.sealmail.app.usecase.certificate.CreateIntermediateCaUseCase;
 import com.sealmail.app.usecase.certificate.CreateRootCaUseCase;
 import com.sealmail.app.usecase.certificate.IssueEndEntityUseCase;
 import jakarta.annotation.PostConstruct;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
@@ -19,16 +18,25 @@ import java.util.List;
 
 @Slf4j
 @Component
-@RequiredArgsConstructor
 public class CertificateInitializer {
 
     private final CertificateStoreStatusUseCase certificateStoreStatusUseCase;
     private final CreateRootCaUseCase createRootCaUseCase;
     private final CreateIntermediateCaUseCase createIntermediateCaUseCase;
     private final IssueEndEntityUseCase issueEndEntityUseCase;
+    private final boolean initCertsEnabled;
 
-    @Value("${sealmail.init.certs.enabled:true}")
-    private boolean initCertsEnabled;
+    public CertificateInitializer(CertificateStoreStatusUseCase certificateStoreStatusUseCase,
+                                  CreateRootCaUseCase createRootCaUseCase,
+                                  CreateIntermediateCaUseCase createIntermediateCaUseCase,
+                                  IssueEndEntityUseCase issueEndEntityUseCase,
+                                  @Value("${sealmail.init.certs.enabled:true}") boolean initCertsEnabled) {
+        this.certificateStoreStatusUseCase = certificateStoreStatusUseCase;
+        this.createRootCaUseCase = createRootCaUseCase;
+        this.createIntermediateCaUseCase = createIntermediateCaUseCase;
+        this.issueEndEntityUseCase = issueEndEntityUseCase;
+        this.initCertsEnabled = initCertsEnabled;
+    }
 
     @PostConstruct
     public void init() {

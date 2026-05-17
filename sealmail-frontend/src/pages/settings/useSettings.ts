@@ -7,12 +7,14 @@ import type {
   GmEdgePolicy,
   QuarantinePolicy,
   RelayPolicy,
+  SmimeSuitePolicy,
   SystemSettings as SystemSettingsSnapshot,
 } from '../../types';
 import type {
   GmEdgePolicyFormValues,
   QuarantinePolicyFormValues,
   RelayPolicyFormValues,
+  SmimeSuitePolicyFormValues,
   TestMailValues,
 } from './settingsUtils';
 import { applyGmEdgeDefaults, splitRecipients } from './settingsUtils';
@@ -21,28 +23,41 @@ interface UseSettingsParams {
   gmEdgeForm: FormInstance<GmEdgePolicyFormValues>;
   quarantineForm: FormInstance<QuarantinePolicyFormValues>;
   relayForm: FormInstance<RelayPolicyFormValues>;
+  smimeSuiteForm?: FormInstance<SmimeSuitePolicyFormValues>;
   testForm: FormInstance<TestMailValues>;
 }
 
-export const useSettings = ({ gmEdgeForm, quarantineForm, relayForm, testForm }: UseSettingsParams) => {
+export const useSettings = ({ gmEdgeForm, quarantineForm, relayForm, smimeSuiteForm, testForm }: UseSettingsParams) => {
   const [settings, setSettings] = useState<SystemSettingsSnapshot | null>(null);
   const [gmEdgePolicy, setGmEdgePolicy] = useState<GmEdgePolicy | null>(null);
   const [relayPolicy, setRelayPolicy] = useState<RelayPolicy | null>(null);
   const [quarantinePolicy, setQuarantinePolicy] = useState<QuarantinePolicy | null>(null);
+  const [smimeSuitePolicy, setSmimeSuitePolicy] = useState<SmimeSuitePolicy | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [probeLoading, setProbeLoading] = useState(false);
   const [probeResult, setProbeResult] = useState('');
   const [testLoading, setTestLoading] = useState(false);
 
-  const applyPolicyForms = useCallback((relay: RelayPolicy, quarantine: QuarantinePolicy, gmEdge: GmEdgePolicy) => {
+  const applyPolicyForms = useCallback((
+    relay: RelayPolicy,
+    quarantine: QuarantinePolicy,
+    gmEdge: GmEdgePolicy,
+    smimeSuite?: SmimeSuitePolicy | null,
+  ) => {
     relayForm.setFieldsValue({
       ...relay,
       clearPasswordSecretRef: false,
     });
     quarantineForm.setFieldsValue(quarantine);
     gmEdgeForm.setFieldsValue(applyGmEdgeDefaults(gmEdge));
-  }, [gmEdgeForm, quarantineForm, relayForm]);
+    if (smimeSuite && smimeSuiteForm) {
+      smimeSuiteForm.setFieldsValue({
+        defaultStandardSuite: smimeSuite.defaultStandardSuite,
+        defaultGmSuite: smimeSuite.defaultGmSuite,
+      });
+    }
+  }, [gmEdgeForm, quarantineForm, relayForm, smimeSuiteForm]);
 
   const loadSettings = useCallback(async (initial = false) => {
     if (initial) {
@@ -52,11 +67,12 @@ export const useSettings = ({ gmEdgeForm, quarantineForm, relayForm, testForm }:
     }
 
     try {
-      const [response, relayResponse, quarantineResponse, gmEdgeResponse] = await Promise.all([
+      const [response, relayResponse, quarantineResponse, gmEdgeResponse, smimeSuiteResponse] = await Promise.all([
         systemSettingsApi.get(),
         runtimePolicyApi.getRelay(),
         runtimePolicyApi.getQuarantine(),
         runtimePolicyApi.getGmEdge(),
+        runtimePolicyApi.getSmimeSuite(),
       ]);
       if (!response.data.success) {
         throw new Error(response.data.message);
@@ -65,7 +81,13 @@ export const useSettings = ({ gmEdgeForm, quarantineForm, relayForm, testForm }:
       setRelayPolicy(relayResponse.data.data);
       setQuarantinePolicy(quarantineResponse.data.data);
       setGmEdgePolicy(gmEdgeResponse.data.data);
-      applyPolicyForms(relayResponse.data.data, quarantineResponse.data.data, gmEdgeResponse.data.data);
+      setSmimeSuitePolicy(smimeSuiteResponse.data.data);
+      applyPolicyForms(
+        relayResponse.data.data,
+        quarantineResponse.data.data,
+        gmEdgeResponse.data.data,
+        smimeSuiteResponse.data.data,
+      );
     } catch (error) {
       message.error(getApiErrorMessage(error, '加载系统设置失败'));
     } finally {
@@ -79,11 +101,12 @@ export const useSettings = ({ gmEdgeForm, quarantineForm, relayForm, testForm }:
 
     const loadInitialSettings = async () => {
       try {
-        const [response, relayResponse, quarantineResponse, gmEdgeResponse] = await Promise.all([
+        const [response, relayResponse, quarantineResponse, gmEdgeResponse, smimeSuiteResponse] = await Promise.all([
           systemSettingsApi.get(),
           runtimePolicyApi.getRelay(),
           runtimePolicyApi.getQuarantine(),
           runtimePolicyApi.getGmEdge(),
+          runtimePolicyApi.getSmimeSuite(),
         ]);
         if (!response.data.success) throw new Error(response.data.message);
         if (mounted) {
@@ -91,7 +114,13 @@ export const useSettings = ({ gmEdgeForm, quarantineForm, relayForm, testForm }:
           setRelayPolicy(relayResponse.data.data);
           setQuarantinePolicy(quarantineResponse.data.data);
           setGmEdgePolicy(gmEdgeResponse.data.data);
-          applyPolicyForms(relayResponse.data.data, quarantineResponse.data.data, gmEdgeResponse.data.data);
+          setSmimeSuitePolicy(smimeSuiteResponse.data.data);
+          applyPolicyForms(
+            relayResponse.data.data,
+            quarantineResponse.data.data,
+            gmEdgeResponse.data.data,
+            smimeSuiteResponse.data.data,
+          );
         }
       } catch (error) {
         if (mounted) {
@@ -212,6 +241,25 @@ export const useSettings = ({ gmEdgeForm, quarantineForm, relayForm, testForm }:
     }
   }, [gmEdgeForm]);
 
+  const handleSmimeSuitePolicySave = useCallback(async (values: SmimeSuitePolicyFormValues) => {
+    try {
+      const response = await runtimePolicyApi.updateSmimeSuite(values);
+      if (!response.data.success) throw new Error(response.data.message);
+      setSmimeSuitePolicy(response.data.data);
+      smimeSuiteForm?.setFieldsValue({
+        defaultStandardSuite: response.data.data.defaultStandardSuite,
+        defaultGmSuite: response.data.data.defaultGmSuite,
+      });
+      const settingsResponse = await systemSettingsApi.get();
+      if (settingsResponse.data.success) {
+        setSettings(settingsResponse.data.data);
+      }
+      message.success('S/MIME 套件策略已保存');
+    } catch (error) {
+      message.error(getApiErrorMessage(error, 'S/MIME 套件策略保存失败'));
+    }
+  }, [smimeSuiteForm]);
+
   return {
     gmEdgePolicy,
     handleGmEdgePolicySave,
@@ -219,6 +267,7 @@ export const useSettings = ({ gmEdgeForm, quarantineForm, relayForm, testForm }:
     handleQuarantinePolicySave,
     handleRelayPolicySave,
     handleSendTest,
+    handleSmimeSuitePolicySave,
     loadSettings,
     loading,
     probeLoading,
@@ -226,6 +275,7 @@ export const useSettings = ({ gmEdgeForm, quarantineForm, relayForm, testForm }:
     quarantinePolicy,
     refreshing,
     relayPolicy,
+    smimeSuitePolicy,
     settings,
     testLoading,
   };

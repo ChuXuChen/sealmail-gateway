@@ -8,6 +8,7 @@ public record SystemSettingsResponse(
         SmtpServerResponse smtpServer,
         DeliveryResponse delivery,
         GmEdgeResponse gmEdge,
+        SmimeSuitePolicyResponse smimeSuitePolicy,
         QuarantinePolicyResponse quarantinePolicy,
         CertificateValidationResponse certificateValidation,
         InternalCaResponse internalCa,
@@ -144,6 +145,25 @@ public record SystemSettingsResponse(
             int maxRetentionDays,
             boolean notificationEnabled,
             boolean releaseRequiresEncryption
+    ) {
+    }
+
+    public record SmimeSuitePolicyResponse(
+            String defaultStandardSuite,
+            String defaultGmSuite,
+            List<SmimeSuiteOptionResponse> standardSuites,
+            List<SmimeSuiteOptionResponse> gmSuites
+    ) {
+        public SmimeSuitePolicyResponse {
+            standardSuites = standardSuites == null ? List.of() : List.copyOf(standardSuites);
+            gmSuites = gmSuites == null ? List.of() : List.copyOf(gmSuites);
+        }
+    }
+
+    public record SmimeSuiteOptionResponse(
+            String id,
+            String displayName,
+            String profile
     ) {
     }
 

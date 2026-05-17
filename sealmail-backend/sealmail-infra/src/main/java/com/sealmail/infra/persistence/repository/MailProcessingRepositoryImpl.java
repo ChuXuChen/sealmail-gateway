@@ -10,7 +10,6 @@ import com.sealmail.infra.events.DomainEventPublisher;
 import com.sealmail.infra.persistence.entity.MailProcessingEntity;
 import com.sealmail.infra.persistence.mapper.MailProcessingMapper;
 import jakarta.persistence.EntityManager;
-import jakarta.persistence.PersistenceContext;
 import jakarta.persistence.TypedQuery;
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Propagation;
@@ -24,16 +23,16 @@ import java.util.Optional;
 @Transactional(propagation = Propagation.REQUIRES_NEW)
 public class MailProcessingRepositoryImpl implements MailProcessingRepository {
 
-    @PersistenceContext
-    private EntityManager entityManager;
-
+    private final EntityManager entityManager;
     private final MailProcessingMapper mapper;
     private final ObjectMapper objectMapper;
     private final DomainEventPublisher domainEventPublisher;
 
-    public MailProcessingRepositoryImpl(MailProcessingMapper mapper,
+    public MailProcessingRepositoryImpl(EntityManager entityManager,
+                                        MailProcessingMapper mapper,
                                         ObjectMapper objectMapper,
                                         DomainEventPublisher domainEventPublisher) {
+        this.entityManager = entityManager;
         this.mapper = mapper;
         this.objectMapper = objectMapper;
         this.domainEventPublisher = domainEventPublisher;

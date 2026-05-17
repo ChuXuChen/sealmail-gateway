@@ -21,6 +21,8 @@ public class DomainDtoMapper {
                 .preferredAlgorithmDisplayName(getAlgorithmDisplayName(config.getPreferredAlgorithm().name()))
                 .signingEnabled(config.isSigningEnabled())
                 .dkimEnabled(config.isDkimEnabled())
+                .deliveryHost(config.getDeliveryHost())
+                .deliveryPort(config.getDeliveryPort())
                 .active(config.isActive())
                 .build();
     }

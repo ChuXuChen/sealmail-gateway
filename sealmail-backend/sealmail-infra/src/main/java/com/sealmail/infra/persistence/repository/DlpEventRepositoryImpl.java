@@ -14,7 +14,6 @@ import com.sealmail.infra.persistence.entity.DlpScanEventEntity;
 import com.sealmail.infra.persistence.entity.DlpScanEvidenceEntity;
 import com.sealmail.infra.persistence.entity.QuarantinedMailEntity;
 import jakarta.persistence.EntityManager;
-import jakarta.persistence.PersistenceContext;
 import jakarta.persistence.Query;
 import jakarta.persistence.TypedQuery;
 import org.springframework.stereotype.Repository;
@@ -32,12 +31,11 @@ public class DlpEventRepositoryImpl implements DlpEventRepository {
     private static final TypeReference<List<String>> STRING_LIST = new TypeReference<>() {
     };
 
-    @PersistenceContext
-    private EntityManager entityManager;
-
+    private final EntityManager entityManager;
     private final ObjectMapper objectMapper;
 
-    public DlpEventRepositoryImpl(ObjectMapper objectMapper) {
+    public DlpEventRepositoryImpl(EntityManager entityManager, ObjectMapper objectMapper) {
+        this.entityManager = entityManager;
         this.objectMapper = objectMapper;
     }
 

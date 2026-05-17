@@ -15,6 +15,7 @@ import org.springframework.messaging.support.MessageBuilder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
@@ -219,7 +220,7 @@ public class RoutingService {
         CryptoProfile cryptoProfile = resolveCryptoProfile(baseContext, domainConfig);
         MailProcessingDecision processingDecision = baseContext.decision();
         CertificateSelection certificates = baseContext.certificateSelection();
-        RelayProfile relayProfile = relayProfile(direction);
+        RelayProfile relayProfile = relayProfile(direction, envelope);
 
         if (isOutboundCryptoProfileFailure(direction, decision)) {
             MailProcessingContext failedContext = routedContext(
@@ -372,7 +373,13 @@ public class RoutingService {
                 : java.util.UUID.randomUUID().toString();
     }
 
-    private RelayProfile relayProfile(MailDirection direction) {
+    private RelayProfile relayProfile(MailDirection direction, MailEnvelope envelope) {
+        if (direction == MailDirection.OUTBOUND) {
+            Optional<RelayProfile> deliveryRoute = outboundDeliveryRoute(envelope);
+            if (deliveryRoute.isPresent()) {
+                return deliveryRoute.get();
+            }
+        }
         if (!postfixProperties.isEnabled()) {
             return null;
         }
@@ -386,6 +393,49 @@ public class RoutingService {
                 "",
                 postfixProperties.getTimeout(),
                 postfixProperties.getEnvelopeFrom());
+    }
+
+    private Optional<RelayProfile> outboundDeliveryRoute(MailEnvelope envelope) {
+        if (envelope == null || envelope.getRecipients().isEmpty()) {
+            return Optional.empty();
+        }
+
+        List<String> recipientDomains = envelope.getRecipients().stream()
+                .map(EmailAddress::getDomain)
+                .distinct()
+                .toList();
+        List<DomainDeliveryRoute> routes = new ArrayList<>();
+        for (String recipientDomain : recipientDomains) {
+            Optional<DomainDeliveryRoute> route = findActiveDomainConfig(recipientDomain)
+                    .filter(config -> !config.isLocalDomain())
+                    .filter(DomainConfig::hasDeliveryRoute)
+                    .map(config -> new DomainDeliveryRoute(config.getDeliveryHost(), config.getDeliveryPort()));
+            if (route.isEmpty()) {
+                return Optional.empty();
+            }
+            routes.add(route.get());
+        }
+
+        DomainDeliveryRoute first = routes.get(0);
+        boolean sameTarget = routes.stream().allMatch(first::sameTarget);
+        if (!sameTarget) {
+            log.warn("Skip domain delivery route because recipients target multiple delivery routes: {}", recipientDomains);
+            return Optional.empty();
+        }
+        return Optional.of(new RelayProfile(
+                first.host(),
+                first.port(),
+                "",
+                "",
+                postfixProperties.getTimeout(),
+                postfixProperties.getEnvelopeFrom()));
+    }
+
+    private record DomainDeliveryRoute(String host, int port) {
+
+        private boolean sameTarget(DomainDeliveryRoute other) {
+            return port == other.port && host.equalsIgnoreCase(other.host);
+        }
     }
 
 }

@@ -4,7 +4,7 @@ import { domainConfigApi } from '../../api/client';
 import { getApiErrorMessage } from '../../api/errors';
 import type { DomainConfig } from '../../types';
 import type { DomainConfigFormValues } from './domainConfigUtils';
-import { normalizeDomain } from './domainConfigUtils';
+import { normalizeDeliveryHost, normalizeDomain } from './domainConfigUtils';
 
 export const useDomainConfigs = () => {
   const [data, setData] = useState<DomainConfig[]>([]);
@@ -23,6 +23,7 @@ export const useDomainConfigs = () => {
   }, []);
 
   const createDomain = useCallback(async (values: DomainConfigFormValues) => {
+    const deliveryHost = values.localDomain ? undefined : normalizeDeliveryHost(values.deliveryHost);
     try {
       await domainConfigApi.create({
         domain: normalizeDomain(values.domain),
@@ -31,6 +32,8 @@ export const useDomainConfigs = () => {
         preferredAlgorithm: values.preferredAlgorithm,
         signingEnabled: values.signingEnabled || false,
         dkimEnabled: values.dkimEnabled || false,
+        deliveryHost,
+        deliveryPort: deliveryHost ? values.deliveryPort : undefined,
         active: values.active ?? true,
       });
       message.success('域名配置创建成功');
@@ -46,12 +49,15 @@ export const useDomainConfigs = () => {
     id: string,
     values: Omit<DomainConfigFormValues, 'domain' | 'localDomain'>,
   ) => {
+    const deliveryHost = normalizeDeliveryHost(values.deliveryHost);
     try {
       await domainConfigApi.update(id, {
         encryptionPolicy: values.encryptionPolicy,
         preferredAlgorithm: values.preferredAlgorithm,
         signingEnabled: values.signingEnabled,
         dkimEnabled: values.dkimEnabled,
+        deliveryHost: deliveryHost || '',
+        deliveryPort: deliveryHost ? values.deliveryPort : undefined,
         active: values.active,
       });
       message.success('域名配置更新成功');

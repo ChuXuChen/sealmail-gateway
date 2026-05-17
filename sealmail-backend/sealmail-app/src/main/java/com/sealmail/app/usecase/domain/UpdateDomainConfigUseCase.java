@@ -65,6 +65,10 @@ public class UpdateDomainConfigUseCase {
             config.setDkimEnabled(request.getDkimEnabled());
         }
 
+        if (request.getDeliveryHost() != null || request.getDeliveryPort() != null) {
+            configureDeliveryRoute(config, request.getDeliveryHost(), request.getDeliveryPort());
+        }
+
         if (request.getActive() != null) {
             if (request.getActive()) {
                 config.activate();
@@ -78,6 +82,14 @@ public class UpdateDomainConfigUseCase {
         log.info("Domain config updated: {} by {}", config.getDomain(), currentUser.getEmail());
 
         return mapper.toResponse(config);
+    }
+
+    private void configureDeliveryRoute(DomainConfig config, String deliveryHost, Integer deliveryPort) {
+        try {
+            config.configureDeliveryRoute(deliveryHost, deliveryPort);
+        } catch (IllegalArgumentException e) {
+            throw BusinessException.badRequest(e.getMessage());
+        }
     }
 
     private static <E extends Enum<E>> E parseEnum(Class<E> enumClass, String value, String messagePrefix) {

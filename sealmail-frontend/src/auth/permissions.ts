@@ -28,6 +28,9 @@ export const canManageDlp = (user: UserContext | null): boolean =>
 export const canViewAuditLogs = (user: UserContext | null): boolean =>
   canManageCa(user) || hasRole(user, 'AUDITOR');
 
+export const canViewSystemStatus = (user: UserContext | null): boolean =>
+  canManageCa(user) || canViewAuditLogs(user);
+
 export const canManageDomains = (user: UserContext | null): boolean =>
   canManageCa(user);
 
@@ -43,6 +46,7 @@ export const getPermissionSummary = (user: UserContext | null): string[] => {
     canManageMailAuth(user) ? '邮件认证' : null,
     canViewQuarantine(user) ? '隔离查看' : null,
     canViewAuditLogs(user) ? '审计查看' : null,
+    canViewSystemStatus(user) ? '状态查看' : null,
   ].filter(Boolean) as string[];
 
   return summary.length ? summary : ['基础访问'];

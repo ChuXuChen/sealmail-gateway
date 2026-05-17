@@ -8,7 +8,6 @@ import com.sealmail.domain.policy.event.GmEdgePolicyChanged;
 import com.sealmail.infra.events.DomainEventPublisher;
 import com.sealmail.infra.persistence.entity.GmEdgePolicyEntity;
 import jakarta.persistence.EntityManager;
-import jakarta.persistence.PersistenceContext;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.TransactionDefinition;
@@ -31,16 +30,16 @@ public class GmEdgePolicyService implements GmEdgePolicyPort {
     private static final TypeReference<List<RouteRecord>> ROUTE_LIST = new TypeReference<>() {
     };
 
-    @PersistenceContext
-    private EntityManager entityManager;
-
+    private final EntityManager entityManager;
     private final DomainEventPublisher domainEventPublisher;
     private final ObjectMapper objectMapper;
     private final TransactionTemplate initializationTransaction;
 
-    public GmEdgePolicyService(DomainEventPublisher domainEventPublisher,
+    public GmEdgePolicyService(EntityManager entityManager,
+                               DomainEventPublisher domainEventPublisher,
                                ObjectMapper objectMapper,
                                PlatformTransactionManager transactionManager) {
+        this.entityManager = entityManager;
         this.domainEventPublisher = domainEventPublisher;
         this.objectMapper = objectMapper;
         this.initializationTransaction = new TransactionTemplate(transactionManager);

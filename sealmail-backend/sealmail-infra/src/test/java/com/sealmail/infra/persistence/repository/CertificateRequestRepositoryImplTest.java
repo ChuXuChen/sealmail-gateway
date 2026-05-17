@@ -1,18 +1,20 @@
 package com.sealmail.infra.persistence.repository;
 
 import com.sealmail.domain.certificate.CertificateRequest;
+import jakarta.persistence.EntityManager;
 import org.junit.jupiter.api.Test;
 
 import java.lang.reflect.Method;
 import java.time.Instant;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.mockito.Mockito.mock;
 
 class CertificateRequestRepositoryImplTest {
 
     @Test
     void toDomainPreservesSubmittedAt() throws Exception {
-        CertificateRequestRepositoryImpl repository = new CertificateRequestRepositoryImpl();
+        CertificateRequestRepositoryImpl repository = new CertificateRequestRepositoryImpl(mock(EntityManager.class));
         com.sealmail.infra.persistence.entity.CertificateRequestEntity entity =
                 new com.sealmail.infra.persistence.entity.CertificateRequestEntity();
         Instant submittedAt = Instant.parse("2026-05-14T12:34:56Z");

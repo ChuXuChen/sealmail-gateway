@@ -5,7 +5,6 @@ import com.sealmail.domain.user.UserAccountRepository;
 import com.sealmail.infra.persistence.entity.UserAccountEntity;
 import com.sealmail.infra.persistence.mapper.UserAccountMapper;
 import jakarta.persistence.EntityManager;
-import jakarta.persistence.PersistenceContext;
 import jakarta.persistence.TypedQuery;
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
@@ -19,12 +18,11 @@ import java.util.Optional;
 @Transactional
 public class UserAccountRepositoryImpl implements UserAccountRepository {
 
-    @PersistenceContext
-    private EntityManager entityManager;
-
+    private final EntityManager entityManager;
     private final UserAccountMapper mapper;
 
-    public UserAccountRepositoryImpl(UserAccountMapper mapper) {
+    public UserAccountRepositoryImpl(EntityManager entityManager, UserAccountMapper mapper) {
+        this.entityManager = entityManager;
         this.mapper = mapper;
     }
 

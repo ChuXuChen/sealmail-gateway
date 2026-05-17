@@ -12,7 +12,6 @@ import com.sealmail.infra.events.DomainEventPublisher;
 import com.sealmail.infra.persistence.entity.CertificateEntity;
 import com.sealmail.infra.persistence.mapper.CertificateMapper;
 import jakarta.persistence.EntityManager;
-import jakarta.persistence.PersistenceContext;
 import jakarta.persistence.TypedQuery;
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
@@ -25,16 +24,16 @@ import java.util.Optional;
 @Transactional
 public class CertificateRepositoryImpl implements CertificateRepository {
 
-    @PersistenceContext
-    private EntityManager entityManager;
-
+    private final EntityManager entityManager;
     private final CertificateMapper mapper;
     private final DomainEventPublisher domainEventPublisher;
     private final CertificateBindingRepository certificateBindingRepository;
 
-    public CertificateRepositoryImpl(CertificateMapper mapper,
+    public CertificateRepositoryImpl(EntityManager entityManager,
+                                     CertificateMapper mapper,
                                      DomainEventPublisher domainEventPublisher,
                                      CertificateBindingRepository certificateBindingRepository) {
+        this.entityManager = entityManager;
         this.mapper = mapper;
         this.domainEventPublisher = domainEventPublisher;
         this.certificateBindingRepository = certificateBindingRepository;

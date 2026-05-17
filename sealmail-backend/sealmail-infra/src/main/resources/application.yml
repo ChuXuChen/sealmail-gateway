@@ -88,22 +88,8 @@ sealmail:
 
   smime:
     crypto:
-      standard:
-        recipient-key-algorithm-oid: 1.2.840.113549.1.1.1
-        recipient-key-cipher: RSA/ECB/PKCS1Padding
-        content-encryption-algorithm-oid: 2.16.840.1.101.3.4.1.42
-        content-cipher: AES/CBC/PKCS5Padding
-        content-key-algorithm: AES
-        content-key-size-bits: 256
-        signature-algorithm: SHA256withRSA
-      gm:
-        recipient-key-algorithm-oid: 1.2.156.10197.1.301.3.2.1
-        recipient-key-cipher: SM2WITHSM3
-        content-encryption-algorithm-oid: 1.2.156.10197.1.104.2
-        content-cipher: SM4/CBC/PKCS7Padding
-        content-key-algorithm: SM4
-        content-key-size-bits: 128
-        signature-algorithm: SM3withSM2
+      default-standard-suite: STANDARD_AES_256_CBC
+      default-gm-suite: GM_SM4_CBC
 
   # Internal CA Settings
   ca:

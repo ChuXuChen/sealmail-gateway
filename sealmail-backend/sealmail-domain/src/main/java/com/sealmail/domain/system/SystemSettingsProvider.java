@@ -12,6 +12,7 @@ public interface SystemSettingsProvider {
             SmtpServerSettings smtpServer,
             DeliverySettings delivery,
             GmEdgeSettings gmEdge,
+            SmimeSuitePolicySettings smimeSuitePolicy,
             QuarantinePolicySettings quarantinePolicy,
             CertificateValidationSettings certificateValidation,
             InternalCaSettings internalCa,
@@ -77,6 +78,25 @@ public interface SystemSettingsProvider {
             int maxRetentionDays,
             boolean notificationEnabled,
             boolean releaseRequiresEncryption
+    ) {
+    }
+
+    record SmimeSuitePolicySettings(
+            String defaultStandardSuite,
+            String defaultGmSuite,
+            List<SmimeSuiteOption> standardSuites,
+            List<SmimeSuiteOption> gmSuites
+    ) {
+        public SmimeSuitePolicySettings {
+            standardSuites = standardSuites == null ? List.of() : List.copyOf(standardSuites);
+            gmSuites = gmSuites == null ? List.of() : List.copyOf(gmSuites);
+        }
+    }
+
+    record SmimeSuiteOption(
+            String id,
+            String displayName,
+            String profile
     ) {
     }
 

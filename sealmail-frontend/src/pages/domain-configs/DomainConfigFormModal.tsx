@@ -1,5 +1,5 @@
 import React from 'react';
-import { Button, Form, Input, Modal, Select, Space, Switch } from 'antd';
+import { Button, Form, Input, InputNumber, Modal, Select, Space, Switch } from 'antd';
 import type { FormInstance } from 'antd';
 import type { DomainConfigFormValues } from './domainConfigUtils';
 import { domainPattern } from './domainConfigUtils';
@@ -32,6 +32,8 @@ const DomainConfigFormModal: React.FC<DomainConfigFormModalProps> = ({
   onFinish,
 }) => {
   const isCreate = mode === 'create';
+  const localDomain = Form.useWatch('localDomain', form);
+  const deliveryRouteDisabled = Boolean(localDomain);
 
   return (
     <Modal
@@ -58,6 +60,9 @@ const DomainConfigFormModal: React.FC<DomainConfigFormModalProps> = ({
               <Switch
                 onChange={(checked) => {
                   form.setFieldValue('encryptionPolicy', checked ? 'MANDATORY' : 'ALLOW');
+                  if (checked) {
+                    form.setFieldsValue({ deliveryHost: undefined, deliveryPort: undefined });
+                  }
                 }}
               />
             </Form.Item>
@@ -84,6 +89,44 @@ const DomainConfigFormModal: React.FC<DomainConfigFormModalProps> = ({
         <Form.Item name="dkimEnabled" label="启用DKIM签名" valuePropName="checked">
           <Switch />
         </Form.Item>
+        <Space size={12} align="start" className="full-width">
+          <Form.Item
+            name="deliveryHost"
+            label="外部发送主机"
+            extra="非本地域名可配置固定投递目标，留空则使用默认出站投递。"
+            className="full-width"
+            rules={[
+              { max: 255, message: '主机长度不能超过 255 个字符' },
+              { pattern: /^\S*$/, message: '主机不能包含空白字符' },
+            ]}
+          >
+            <Input disabled={deliveryRouteDisabled} placeholder="例如: 10.0.0.12 或 smtp.example.com" />
+          </Form.Item>
+          <Form.Item
+            name="deliveryPort"
+            label="端口"
+            rules={[
+              ({ getFieldValue }) => ({
+                validator: (_, value) => {
+                  const host = getFieldValue('deliveryHost');
+                  if (!host) {
+                    return Promise.resolve();
+                  }
+                  return value ? Promise.resolve() : Promise.reject(new Error('请输入外部发送端口'));
+                },
+              }),
+            ]}
+          >
+            <InputNumber
+              disabled={deliveryRouteDisabled}
+              min={1}
+              max={65535}
+              precision={0}
+              placeholder="25"
+              style={{ width: 128 }}
+            />
+          </Form.Item>
+        </Space>
         <Form.Item name="active" label="启用配置" valuePropName="checked">
           <Switch />
         </Form.Item>

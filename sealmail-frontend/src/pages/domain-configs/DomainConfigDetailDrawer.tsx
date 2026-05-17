@@ -41,6 +41,15 @@ const DomainConfigDetailDrawer: React.FC<DomainConfigDetailDrawerProps> = ({
         <Descriptions.Item label="DKIM签名">
           {domain.dkimEnabled ? <Tag color="success">已启用</Tag> : <Tag color="default">未启用</Tag>}
         </Descriptions.Item>
+        <Descriptions.Item label="外部发送地址">
+          {domain.localDomain ? (
+            <Tag color="default">本地域名不使用</Tag>
+          ) : domain.deliveryHost && domain.deliveryPort ? (
+            <Tag color="processing">{domain.deliveryHost}:{domain.deliveryPort}</Tag>
+          ) : (
+            <Tag color="default">默认出站投递</Tag>
+          )}
+        </Descriptions.Item>
         <Descriptions.Item label="配置状态">
           {domain.active ? <Tag color="green">启用</Tag> : <Tag color="red">禁用</Tag>}
         </Descriptions.Item>

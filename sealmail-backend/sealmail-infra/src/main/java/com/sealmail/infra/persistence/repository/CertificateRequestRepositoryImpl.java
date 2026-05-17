@@ -4,7 +4,6 @@ import com.sealmail.domain.certificate.CertificateRequest;
 import com.sealmail.domain.certificate.CertificateRequestRepository;
 import com.sealmail.infra.persistence.entity.CertificateRequestEntity;
 import jakarta.persistence.EntityManager;
-import jakarta.persistence.PersistenceContext;
 import jakarta.persistence.TypedQuery;
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
@@ -16,8 +15,11 @@ import java.util.Optional;
 @Transactional
 public class CertificateRequestRepositoryImpl implements CertificateRequestRepository {
 
-    @PersistenceContext
-    private EntityManager em;
+    private final EntityManager em;
+
+    public CertificateRequestRepositoryImpl(EntityManager em) {
+        this.em = em;
+    }
 
     @Override
     public CertificateRequest save(CertificateRequest req) {

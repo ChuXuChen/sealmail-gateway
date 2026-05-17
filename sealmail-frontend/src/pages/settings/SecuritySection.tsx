@@ -1,7 +1,7 @@
 import React from 'react';
 import { Card, Descriptions, Space, Tag, Typography } from 'antd';
-import { FileProtectOutlined, LockOutlined } from '@ant-design/icons';
 import type { SystemSettings } from '../../types';
+import CryptoCapabilityTags from './CryptoCapabilityTags';
 import { booleanTag } from './settingsUtils';
 
 const { Text } = Typography;
@@ -23,20 +23,7 @@ const SecuritySection: React.FC<SecuritySectionProps> = ({ settings }) => (
       </Descriptions>
     </Card>
     <Card title="算法能力">
-      <Space size={8} wrap>
-        {settings?.cryptoCapabilities.flatMap((capability) =>
-          capability.algorithms.map((algorithm) => (
-            <Tag
-              key={`${capability.category}-${algorithm}`}
-              color={algorithm.startsWith('SM') ? 'error' : 'processing'}
-              icon={capability.category === '内容加密' ? <LockOutlined /> : <FileProtectOutlined />}
-              className="settings-tag"
-            >
-              {capability.category}: {algorithm}
-            </Tag>
-          )),
-        )}
-      </Space>
+      <CryptoCapabilityTags capabilities={settings?.cryptoCapabilities} />
     </Card>
     <Card title="国密 TLS Edge">
       <Descriptions column={1} bordered className="settings-descriptions">

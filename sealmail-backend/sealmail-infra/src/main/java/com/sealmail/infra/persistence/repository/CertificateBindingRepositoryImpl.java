@@ -10,7 +10,6 @@ import com.sealmail.domain.shared.model.EmailAddress;
 import com.sealmail.infra.events.DomainEventPublisher;
 import com.sealmail.infra.persistence.entity.CertificateBindingEntity;
 import jakarta.persistence.EntityManager;
-import jakarta.persistence.PersistenceContext;
 import jakarta.persistence.TypedQuery;
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
@@ -23,12 +22,12 @@ import java.util.Optional;
 @Transactional
 public class CertificateBindingRepositoryImpl implements CertificateBindingRepository {
 
-    @PersistenceContext
-    private EntityManager entityManager;
-
+    private final EntityManager entityManager;
     private final DomainEventPublisher domainEventPublisher;
 
-    public CertificateBindingRepositoryImpl(DomainEventPublisher domainEventPublisher) {
+    public CertificateBindingRepositoryImpl(EntityManager entityManager,
+                                            DomainEventPublisher domainEventPublisher) {
+        this.entityManager = entityManager;
         this.domainEventPublisher = domainEventPublisher;
     }
 

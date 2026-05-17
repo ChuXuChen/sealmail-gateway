@@ -5,6 +5,8 @@ export interface DomainConfigFormValues {
   preferredAlgorithm?: string;
   signingEnabled?: boolean;
   dkimEnabled?: boolean;
+  deliveryHost?: string;
+  deliveryPort?: number;
   active?: boolean;
 }
 
@@ -12,3 +14,8 @@ export const domainPattern = /^([a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)+[
 
 export const normalizeDomain = (value: string) =>
   value.trim().toLowerCase().replace(/\.+$/, '');
+
+export const normalizeDeliveryHost = (value?: string) => {
+  const normalized = value?.trim();
+  return normalized || undefined;
+};

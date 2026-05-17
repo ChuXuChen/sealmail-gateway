@@ -23,5 +23,7 @@ public class DomainConfigResponse {
     private String preferredAlgorithmDisplayName;
     private boolean signingEnabled;
     private boolean dkimEnabled;
+    private String deliveryHost;
+    private Integer deliveryPort;
     private boolean active;
 }

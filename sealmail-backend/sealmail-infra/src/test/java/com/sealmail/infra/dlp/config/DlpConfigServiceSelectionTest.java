@@ -12,7 +12,6 @@ import jakarta.persistence.EntityManager;
 import jakarta.persistence.TypedQuery;
 import org.junit.jupiter.api.Test;
 
-import java.lang.reflect.Field;
 import java.time.Instant;
 import java.util.List;
 
@@ -63,11 +62,7 @@ class DlpConfigServiceSelectionTest {
                 "SELECT s FROM DlpSelectionEntity s ORDER BY s.scopeType ASC, s.scopeValue ASC",
                 DlpSelectionEntity.class)).thenReturn(selectionQuery);
 
-        DlpConfigService service = new DlpConfigService(mock(DomainEventPublisher.class), new ObjectMapper());
-        Field field = DlpConfigService.class.getDeclaredField("entityManager");
-        field.setAccessible(true);
-        field.set(service, entityManager);
-        return service;
+        return new DlpConfigService(entityManager, mock(DomainEventPublisher.class), new ObjectMapper());
     }
 
     private static DlpPatternEntity pattern(String id, DispositionAction action) {

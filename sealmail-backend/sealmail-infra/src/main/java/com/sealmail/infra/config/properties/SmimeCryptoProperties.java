@@ -1,60 +1,76 @@
 package com.sealmail.infra.config.properties;
 
+import com.sealmail.infra.crypto.ContentParameterEncoding;
 import org.springframework.boot.context.properties.ConfigurationProperties;
+
+import java.util.Map;
 
 @ConfigurationProperties(prefix = "sealmail.smime.crypto")
 public class SmimeCryptoProperties {
 
-    private Suite standard = Suite.standardDefaults();
-    private Suite gm = Suite.gmDefaults();
+    private String defaultStandardSuite = "STANDARD_AES_256_CBC";
+    private String defaultGmSuite = "GM_SM4_CBC";
+    private Map<String, Suite> suites = Map.of();
 
-    public Suite getStandard() {
-        return standard;
+    public String getDefaultStandardSuite() {
+        return defaultStandardSuite;
     }
 
-    public void setStandard(Suite standard) {
-        this.standard = standard;
+    public void setDefaultStandardSuite(String defaultStandardSuite) {
+        this.defaultStandardSuite = defaultStandardSuite;
     }
 
-    public Suite getGm() {
-        return gm;
+    public String getDefaultGmSuite() {
+        return defaultGmSuite;
     }
 
-    public void setGm(Suite gm) {
-        this.gm = gm;
+    public void setDefaultGmSuite(String defaultGmSuite) {
+        this.defaultGmSuite = defaultGmSuite;
+    }
+
+    public Map<String, Suite> getSuites() {
+        return suites;
+    }
+
+    public void setSuites(Map<String, Suite> suites) {
+        this.suites = suites;
     }
 
     public static class Suite {
+        private String id;
+        private String displayName;
+        private String profile;
         private String recipientKeyAlgorithmOid;
         private String recipientKeyCipher;
         private String contentEncryptionAlgorithmOid;
         private String contentCipher;
         private String contentKeyAlgorithm;
         private int contentKeySizeBits;
+        private ContentParameterEncoding contentParameterEncoding;
         private String signatureAlgorithm;
 
-        static Suite standardDefaults() {
-            Suite suite = new Suite();
-            suite.setRecipientKeyAlgorithmOid("1.2.840.113549.1.1.1");
-            suite.setRecipientKeyCipher("RSA/ECB/PKCS1Padding");
-            suite.setContentEncryptionAlgorithmOid("2.16.840.1.101.3.4.1.42");
-            suite.setContentCipher("AES/CBC/PKCS5Padding");
-            suite.setContentKeyAlgorithm("AES");
-            suite.setContentKeySizeBits(256);
-            suite.setSignatureAlgorithm("SHA256withRSA");
-            return suite;
+        public String getId() {
+            return id;
         }
 
-        static Suite gmDefaults() {
-            Suite suite = new Suite();
-            suite.setRecipientKeyAlgorithmOid("1.2.156.10197.1.301.3.2.1");
-            suite.setRecipientKeyCipher("SM2WITHSM3");
-            suite.setContentEncryptionAlgorithmOid("1.2.156.10197.1.104.2");
-            suite.setContentCipher("SM4/CBC/PKCS7Padding");
-            suite.setContentKeyAlgorithm("SM4");
-            suite.setContentKeySizeBits(128);
-            suite.setSignatureAlgorithm("SM3withSM2");
-            return suite;
+        public void setId(String id) {
+            this.id = id;
+        }
+
+        public String getDisplayName() {
+            return displayName;
+        }
+
+        public void setDisplayName(String displayName) {
+            this.displayName = displayName;
+        }
+
+        public String getProfile() {
+            return profile;
+        }
+
+        public void setProfile(String profile) {
+            this.profile = profile;
         }
 
         public String getRecipientKeyAlgorithmOid() {
@@ -103,6 +119,14 @@ public class SmimeCryptoProperties {
 
         public void setContentKeySizeBits(int contentKeySizeBits) {
             this.contentKeySizeBits = contentKeySizeBits;
+        }
+
+        public ContentParameterEncoding getContentParameterEncoding() {
+            return contentParameterEncoding;
+        }
+
+        public void setContentParameterEncoding(ContentParameterEncoding contentParameterEncoding) {
+            this.contentParameterEncoding = contentParameterEncoding;
         }
 
         public String getSignatureAlgorithm() {

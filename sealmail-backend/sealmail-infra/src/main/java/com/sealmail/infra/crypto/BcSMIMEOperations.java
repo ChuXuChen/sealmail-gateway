@@ -4,13 +4,13 @@ import com.sealmail.domain.certificate.spi.SMIMEOperations;
 import com.sealmail.domain.certificate.spi.SMIMEEncryptionSuite;
 import com.sealmail.domain.certificate.spi.SignatureValidationResult;
 import com.sealmail.domain.mailsecurity.CryptoProfile;
+import com.sealmail.infra.config.SmimeSuitePolicyService;
 import com.sealmail.infra.config.properties.SmimeCryptoProperties;
 import com.sealmail.infra.crypto.util.PemUtils;
 import org.bouncycastle.asn1.ASN1ObjectIdentifier;
 import org.bouncycastle.asn1.gm.GMObjectIdentifiers;
 import org.bouncycastle.asn1.pkcs.PKCSObjectIdentifiers;
 import org.bouncycastle.asn1.smime.SMIMECapabilitiesAttribute;
-import org.bouncycastle.asn1.smime.SMIMECapability;
 import org.bouncycastle.asn1.smime.SMIMECapabilityVector;
 import org.bouncycastle.asn1.x509.AlgorithmIdentifier;
 import org.bouncycastle.cert.jcajce.JcaCertStore;
@@ -22,6 +22,7 @@ import org.bouncycastle.cms.RecipientInformation;
 import org.bouncycastle.cms.SignerInformation;
 import org.bouncycastle.cms.jcajce.JcaSimpleSignerInfoGeneratorBuilder;
 import org.bouncycastle.cms.jcajce.JcaSimpleSignerInfoVerifierBuilder;
+import org.bouncycastle.cms.jcajce.JceCMSContentEncryptorBuilder;
 import org.bouncycastle.cms.jcajce.JceKeyAgreeEnvelopedRecipient;
 import org.bouncycastle.cms.jcajce.JceKeyTransEnvelopedRecipient;
 import org.bouncycastle.cms.jcajce.JceKeyTransRecipientInfoGenerator;
@@ -72,6 +73,7 @@ public class BcSMIMEOperations implements SMIMEOperations {
     public static final ASN1ObjectIdentifier SM2_OID = GMObjectIdentifiers.sm2p256v1;
     public static final ASN1ObjectIdentifier SM3_OID = GMObjectIdentifiers.sm3;
     public static final ASN1ObjectIdentifier SM4_CBC_OID = GMObjectIdentifiers.sms4_cbc;
+    public static final ASN1ObjectIdentifier SM4_GCM_OID = GMObjectIdentifiers.sms4_gcm;
 
     static {
         // 注册 SM4 OID Provider（必须在 BC 之前，用于 CMS/SMIME 解密时解析 SM4 OID）
@@ -88,19 +90,23 @@ public class BcSMIMEOperations implements SMIMEOperations {
         bc.put("Alg.Alias.SecretKeyFactory.2.16.840.1.101.3.4.1.45", "AES");
         bc.put("Alg.Alias.SecretKeyFactory.2.16.840.1.101.3.4.1.25", "AES");
         bc.put("Alg.Alias.SecretKeyFactory.2.16.840.1.101.3.4.1.5",  "AES");
-        // 在 BC Provider 中注册 SM4 CBC OID 的 AlgorithmParameters 别名，
-        // 使 CMS/SMIME 解密时 DefaultJcaJceHelper 能通过 BC 解析 SM4 IV 参数
+        // 在 BC Provider 中注册 SM4 OID 的 AlgorithmParameters 别名，
+        // 使 CMS/SMIME 解密时 DefaultJcaJceHelper 能通过 BC 解析 SM4 参数
         bc.put("Alg.Alias.AlgorithmParameters.1.2.156.10197.1.104.2", "SM4");
+        bc.put("Alg.Alias.AlgorithmParameters.1.2.156.10197.1.104.8", "GCM");
         // 配置 JavaMail 支持 S/MIME
         setupMailcap();
     }
 
-    private final SmimeAlgorithmSuites algorithmSuites;
+    private final SmimeAlgorithmSuites configuredSuites;
+    private final SmimeSuitePolicyService smimeSuitePolicyService;
     private final X509CryptoProfileResolver profileResolver;
     private final SecureRandom secureRandom;
 
-    public BcSMIMEOperations(SmimeCryptoProperties cryptoProperties) {
-        this.algorithmSuites = new SmimeAlgorithmSuites(cryptoProperties);
+    public BcSMIMEOperations(SmimeCryptoProperties cryptoProperties,
+                             SmimeSuitePolicyService smimeSuitePolicyService) {
+        this.configuredSuites = new SmimeAlgorithmSuites(cryptoProperties);
+        this.smimeSuitePolicyService = smimeSuitePolicyService;
         this.profileResolver = new X509CryptoProfileResolver();
         this.secureRandom = new SecureRandom();
     }
@@ -138,7 +144,7 @@ public class BcSMIMEOperations implements SMIMEOperations {
                                   List<String> recipientPemCerts,
                                   CryptoProfile profile) {
         try {
-            SmimeAlgorithmSuite algorithmSuite = algorithmSuites.get(profile);
+            SmimeAlgorithmSuite algorithmSuite = algorithmSuites().get(profile);
             RawMimeSections originalMessage = splitMessage(mimeMessage);
             MimeBodyPart msg = extractMimeEntity(mimeMessage);
             SMIMEEnvelopedGenerator gen = new SMIMEEnvelopedGenerator();
@@ -157,9 +163,10 @@ public class BcSMIMEOperations implements SMIMEOperations {
                 gen.addRecipientInfoGenerator(createKeyTransRecipientInfoGenerator(cert, algorithmSuite));
             }
 
-            OutputEncryptor encryptor = new ConfigurableContentOutputEncryptor(algorithmSuite, secureRandom);
-            log.info("使用 {} profile 加密邮件，收件人: {}, keyAlg={}, contentAlg={}",
+            OutputEncryptor encryptor = contentEncryptor(algorithmSuite);
+            log.info("使用 {} profile / {} suite 加密邮件，收件人: {}, keyAlg={}, contentAlg={}",
                     profile,
+                    algorithmSuite.id(),
                     certificates.size(),
                     algorithmSuite.recipientKeyAlgorithm().getId(),
                     algorithmSuite.contentEncryptionAlgorithm().getId());
@@ -262,8 +269,7 @@ public class BcSMIMEOperations implements SMIMEOperations {
         JceKeyTransEnvelopedRecipient recipient = new JceKeyTransEnvelopedRecipient(privateKey);
         recipient.setProvider(BouncyCastleProvider.PROVIDER_NAME);
         recipient.setContentProvider((Provider) null);
-        for (CryptoProfile profile : List.of(CryptoProfile.STANDARD, CryptoProfile.GM)) {
-            SmimeAlgorithmSuite algorithmSuite = algorithmSuites.get(profile);
+        for (SmimeAlgorithmSuite algorithmSuite : algorithmSuites().all()) {
             recipient.setAlgorithmMapping(
                     algorithmSuite.recipientKeyAlgorithm(),
                     algorithmSuite.recipientKeyCipher());
@@ -277,13 +283,29 @@ public class BcSMIMEOperations implements SMIMEOperations {
     }
 
     private SmimeAlgorithmSuite algorithmSuiteForRecipientKeyAlgorithm(ASN1ObjectIdentifier keyAlgorithm) {
-        for (CryptoProfile profile : List.of(CryptoProfile.STANDARD, CryptoProfile.GM)) {
-            SmimeAlgorithmSuite algorithmSuite = algorithmSuites.get(profile);
+        for (SmimeAlgorithmSuite algorithmSuite : algorithmSuites().all()) {
             if (algorithmSuite.recipientKeyAlgorithm().equals(keyAlgorithm)) {
                 return algorithmSuite;
             }
         }
         return null;
+    }
+
+    private OutputEncryptor contentEncryptor(SmimeAlgorithmSuite suite) throws Exception {
+        if (suite.contentParameterEncoding() == ContentParameterEncoding.CBC_IV
+                || suite.contentParameterEncoding() == ContentParameterEncoding.GCM_PARAMETERS) {
+            return new ConfigurableContentOutputEncryptor(suite, secureRandom);
+        }
+        return new JceCMSContentEncryptorBuilder(
+                suite.contentEncryptionAlgorithm(),
+                suite.contentKeySizeBits())
+                .setProvider(BouncyCastleProvider.PROVIDER_NAME)
+                .setSecureRandom(secureRandom)
+                .build();
+    }
+
+    private SmimeAlgorithmSuites algorithmSuites() {
+        return smimeSuitePolicyService == null ? configuredSuites : smimeSuitePolicyService.effectiveSuites();
     }
 
     @Override
@@ -296,15 +318,12 @@ public class BcSMIMEOperations implements SMIMEOperations {
 
             SMIMESignedGenerator gen = new SMIMESignedGenerator();
 
-            // 添加签名能力声明 - 国密算法优先
             SMIMECapabilityVector capabilities = new SMIMECapabilityVector();
-            capabilities.addCapability(algorithmSuites.get(CryptoProfile.GM).contentEncryptionAlgorithm());
-            capabilities.addCapability(SM3_OID);            // SM3哈希
-            capabilities.addCapability(algorithmSuites.get(CryptoProfile.STANDARD).contentEncryptionAlgorithm());
-            capabilities.addCapability(SMIMECapability.aES128_CBC);
+            algorithmSuites().all().forEach(suite -> capabilities.addCapability(suite.contentEncryptionAlgorithm()));
+            capabilities.addCapability(SM3_OID);
 
             CryptoProfile signingProfile = profileResolver.requireProfile(cert);
-            String sigAlg = algorithmSuites.get(signingProfile).signatureAlgorithm();
+            String sigAlg = algorithmSuites().get(signingProfile).signatureAlgorithm();
             log.info("使用签名算法: {}, profile: {}, 密钥类型: {}", sigAlg, signingProfile, privateKey.getAlgorithm());
 
             gen.addSignerInfoGenerator(

@@ -11,7 +11,6 @@ import com.sealmail.domain.certificate.CertificateId;
 import com.sealmail.domain.certificate.CertificateRepository;
 import com.sealmail.domain.certificate.spi.CertificateCryptoPort;
 import com.sealmail.domain.shared.model.EmailAddress;
-import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -19,7 +18,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
-@RequiredArgsConstructor
 @Transactional
 public class CreateRootCaUseCase {
 
@@ -30,9 +28,21 @@ public class CreateRootCaUseCase {
     private final CertificateCryptoPort certificateCryptoPort;
     private final CertificateMaterialAssembler certificateMaterialAssembler;
     private final PermissionChecker permissionChecker;
+    private final int defaultRootValidityDays;
 
-    @Value("${sealmail.ca.default-root-validity-days:3650}")
-    private int defaultRootValidityDays;
+    public CreateRootCaUseCase(CertificateRepository certificateRepository,
+                               CertificateDtoMapper mapper,
+                               CertificateCryptoPort certificateCryptoPort,
+                               CertificateMaterialAssembler certificateMaterialAssembler,
+                               PermissionChecker permissionChecker,
+                               @Value("${sealmail.ca.default-root-validity-days:3650}") int defaultRootValidityDays) {
+        this.certificateRepository = certificateRepository;
+        this.mapper = mapper;
+        this.certificateCryptoPort = certificateCryptoPort;
+        this.certificateMaterialAssembler = certificateMaterialAssembler;
+        this.permissionChecker = permissionChecker;
+        this.defaultRootValidityDays = defaultRootValidityDays;
+    }
 
     public CertificateResponse execute(CreateRootCaRequest request, UserContext user) {
         permissionChecker.checkCanManageCa(user);

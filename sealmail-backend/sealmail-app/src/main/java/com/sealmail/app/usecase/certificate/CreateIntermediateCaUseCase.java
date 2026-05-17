@@ -12,7 +12,6 @@ import com.sealmail.domain.certificate.CertificateId;
 import com.sealmail.domain.certificate.CertificateRepository;
 import com.sealmail.domain.certificate.spi.CertificateCryptoPort;
 import com.sealmail.domain.shared.model.EmailAddress;
-import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -20,7 +19,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
-@RequiredArgsConstructor
 @Transactional
 public class CreateIntermediateCaUseCase {
 
@@ -32,9 +30,24 @@ public class CreateIntermediateCaUseCase {
     private final CertificateMaterialAssembler certificateMaterialAssembler;
     private final PermissionChecker permissionChecker;
     private final CertificateChainService certificateChainService;
+    private final int defaultIntermediateValidityDays;
 
-    @Value("${sealmail.ca.default-intermediate-validity-days:1825}")
-    private int defaultIntermediateValidityDays;
+    public CreateIntermediateCaUseCase(CertificateRepository certificateRepository,
+                                       CertificateDtoMapper mapper,
+                                       CertificateCryptoPort certificateCryptoPort,
+                                       CertificateMaterialAssembler certificateMaterialAssembler,
+                                       PermissionChecker permissionChecker,
+                                       CertificateChainService certificateChainService,
+                                       @Value("${sealmail.ca.default-intermediate-validity-days:1825}")
+                                       int defaultIntermediateValidityDays) {
+        this.certificateRepository = certificateRepository;
+        this.mapper = mapper;
+        this.certificateCryptoPort = certificateCryptoPort;
+        this.certificateMaterialAssembler = certificateMaterialAssembler;
+        this.permissionChecker = permissionChecker;
+        this.certificateChainService = certificateChainService;
+        this.defaultIntermediateValidityDays = defaultIntermediateValidityDays;
+    }
 
     public CertificateResponse execute(CreateIntermediateCaRequest request, UserContext user) {
         permissionChecker.checkCanManageCa(user);

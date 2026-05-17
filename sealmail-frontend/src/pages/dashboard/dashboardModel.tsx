@@ -2,26 +2,18 @@ import type React from 'react';
 import {
   CheckCircleOutlined,
   ClockCircleOutlined,
-  FileProtectOutlined,
+  CloseCircleOutlined,
   InboxOutlined,
-  KeyOutlined,
-  LockOutlined,
   StopOutlined,
 } from '@ant-design/icons';
 import type { ExceptionMailStats, QuarantineStats } from '../../types';
-
-export interface AlgorithmInfo {
-  icon: React.ReactNode;
-  title: string;
-  description: string;
-  tags: { label: string; color: string }[];
-}
 
 export interface MetricItem {
   title: string;
   value: number;
   hint: string;
   icon: React.ReactNode;
+  tone: 'danger' | 'info' | 'neutral' | 'success' | 'warning';
 }
 
 export interface DistributionItem {
@@ -45,41 +37,13 @@ export interface DashboardViewModel {
   quarantineTotal: number;
   rejected: number;
   rejectedRate: number;
+  releasing: number;
+  releasingRate: number;
   released: number;
   releasedRate: number;
   systemState: string;
   systemTone: 'success' | 'warning';
 }
-
-export const algorithmList: AlgorithmInfo[] = [
-  {
-    icon: <FileProtectOutlined />,
-    title: '签名算法',
-    description: '出站签名 / 入站验签',
-    tags: [
-      { label: 'SM3withSM2', color: 'red' },
-      { label: 'SHA256withRSA', color: 'blue' },
-    ],
-  },
-  {
-    icon: <LockOutlined />,
-    title: '内容加密',
-    description: 'S/MIME 内容加密',
-    tags: [
-      { label: 'SM4-CBC', color: 'red' },
-      { label: 'AES-256-CBC', color: 'blue' },
-    ],
-  },
-  {
-    icon: <KeyOutlined />,
-    title: '密钥交换',
-    description: '收件人密钥封装',
-    tags: [
-      { label: 'SM2 KeyAgreement', color: 'red' },
-      { label: 'RSA KeyTransport', color: 'blue' },
-    ],
-  },
-];
 
 const emptyQuarantineStats: QuarantineStats = {
   total: 0,
@@ -107,6 +71,7 @@ export const buildDashboardViewModel = (
 
   const total = quarantineStats.total;
   const pending = quarantineStats.pending;
+  const releasing = quarantineStats.releasing;
   const released = quarantineStats.released;
   const rejected = quarantineStats.rejected;
   const exceptionTotal = blockedStats.total;
@@ -114,6 +79,7 @@ export const buildDashboardViewModel = (
   const allRecords = total + exceptionTotal;
 
   const pendingRate = formatPercent(pending, total);
+  const releasingRate = formatPercent(releasing, total);
   const releasedRate = formatPercent(released, total);
   const rejectedRate = formatPercent(rejected, total);
   const completionRate = formatPercent(handled, total);
@@ -147,30 +113,35 @@ export const buildDashboardViewModel = (
       value: allRecords,
       hint: topReason ? `主要原因：${topReason[0]}` : '暂无异常或隔离记录',
       icon: <InboxOutlined />,
+      tone: 'info',
     },
     {
       title: '待处理',
       value: pending,
       hint: `${pendingRate}% DLP 隔离待处置`,
       icon: <ClockCircleOutlined />,
+      tone: pending > 0 ? 'warning' : 'success',
     },
     {
       title: '已放行',
       value: released,
       hint: `${releasedRate}% 已恢复投递`,
       icon: <CheckCircleOutlined />,
+      tone: 'success',
     },
     {
       title: '异常阻断',
       value: exceptionTotal,
       hint: `${exceptionRate}% 自动阻断`,
       icon: <StopOutlined />,
+      tone: exceptionTotal > 0 ? 'danger' : 'neutral',
     },
     {
       title: '已拒绝',
       value: rejected,
       hint: `${rejectedRate}% 人工拒绝`,
-      icon: <StopOutlined />,
+      icon: <CloseCircleOutlined />,
+      tone: rejected > 0 ? 'danger' : 'neutral',
     },
   ];
 
@@ -188,6 +159,8 @@ export const buildDashboardViewModel = (
     quarantineTotal: total,
     rejected,
     rejectedRate,
+    releasing,
+    releasingRate,
     released,
     releasedRate,
     systemState: pending > 0 ? '待处理' : '运行正常',

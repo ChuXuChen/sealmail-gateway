@@ -13,7 +13,6 @@ import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.TransactionStatus;
 import org.springframework.transaction.support.SimpleTransactionStatus;
 
-import java.lang.reflect.Field;
 import java.time.Instant;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -99,14 +98,11 @@ class RelayPolicyServiceTest {
     private static RelayPolicyService service(EntityManager entityManager,
                                               DomainEventPublisher eventPublisher,
                                               SecretReferenceResolver secretResolver) throws Exception {
-        RelayPolicyService service = new RelayPolicyService(
+        return new RelayPolicyService(
+                entityManager,
                 eventPublisher,
                 secretResolver,
                 new NoopTransactionManager());
-        Field field = RelayPolicyService.class.getDeclaredField("entityManager");
-        field.setAccessible(true);
-        field.set(service, entityManager);
-        return service;
     }
 
     private static RelayPolicyEntity entity() {

@@ -1,53 +1,31 @@
-import React, { useState } from 'react';
-import { Button, Col, Form, Row, Spin } from 'antd';
+import React from 'react';
+import { Button, Col, Row, Space, Spin } from 'antd';
 import { ReloadOutlined } from '@ant-design/icons';
 import { PageHeader, PageShell } from '../components/Page';
-import MailSection from './settings/MailSection';
-import RuntimeSection from './settings/RuntimeSection';
-import SecuritySection from './settings/SecuritySection';
-import SettingsNavigation from './settings/SettingsNavigation';
 import SettingsSummary from './settings/SettingsSummary';
-import { ProbeModal, TestMailModal } from './settings/SettingsModals';
-import ToolsSection from './settings/ToolsSection';
-import type {
-  GmEdgePolicyFormValues,
-  QuarantinePolicyFormValues,
-  RelayPolicyFormValues,
-  SectionKey,
-  TestMailValues,
-} from './settings/settingsUtils';
-import { useSettings } from './settings/useSettings';
+import {
+  CertificateValidationPanel,
+  CryptoCapabilitiesPanel,
+  DeliveryChainPanel,
+  GmEdgePolicySummaryPanel,
+  GmTlsEdgePanel,
+  QuarantinePolicySummaryPanel,
+  RelayPolicySummaryPanel,
+  RuntimeStatusPanel,
+  SmtpEntryPanel,
+} from './settings/SettingsReadOnlyPanels';
+import { useSettingsSnapshot } from './settings/useSettingsSnapshot';
 
 const Settings: React.FC = () => {
-  const [activeSection, setActiveSection] = useState<SectionKey>('runtime');
-  const [probeOpen, setProbeOpen] = useState(false);
-  const [testOpen, setTestOpen] = useState(false);
-  const [testForm] = Form.useForm<TestMailValues>();
-  const [relayForm] = Form.useForm<RelayPolicyFormValues>();
-  const [quarantineForm] = Form.useForm<QuarantinePolicyFormValues>();
-  const [gmEdgeForm] = Form.useForm<GmEdgePolicyFormValues>();
   const {
     gmEdgePolicy,
-    handleGmEdgePolicySave,
-    handleProbe,
-    handleQuarantinePolicySave,
-    handleRelayPolicySave,
-    handleSendTest,
     loadSettings,
     loading,
-    probeLoading,
-    probeResult,
     quarantinePolicy,
     refreshing,
     relayPolicy,
     settings,
-    testLoading,
-  } = useSettings({
-    gmEdgeForm,
-    quarantineForm,
-    relayForm,
-    testForm,
-  });
+  } = useSettingsSnapshot();
 
   if (loading) {
     return (
@@ -59,44 +37,11 @@ const Settings: React.FC = () => {
     );
   }
 
-  const renderActiveSection = () => {
-    switch (activeSection) {
-      case 'runtime':
-        return <RuntimeSection settings={settings} />;
-      case 'mail':
-        return (
-          <MailSection
-            quarantineForm={quarantineForm}
-            quarantinePolicy={quarantinePolicy}
-            gmEdgeForm={gmEdgeForm}
-            gmEdgePolicy={gmEdgePolicy}
-            relayForm={relayForm}
-            relayPolicy={relayPolicy}
-            settings={settings}
-            onQuarantinePolicySave={handleQuarantinePolicySave}
-            onGmEdgePolicySave={handleGmEdgePolicySave}
-            onRelayPolicySave={handleRelayPolicySave}
-          />
-        );
-      case 'security':
-        return <SecuritySection settings={settings} />;
-      case 'tools':
-        return (
-          <ToolsSection
-            onOpenProbe={() => setProbeOpen(true)}
-            onOpenTest={() => setTestOpen(true)}
-          />
-        );
-      default:
-        return <RuntimeSection settings={settings} />;
-    }
-  };
-
   return (
     <PageShell>
       <PageHeader
-        title="系统设置"
-        description="当前运行配置与调试入口。"
+        title="配置总览"
+        description="当前运行配置、邮件链路、策略摘要与证书信任状态快照。"
         actions={(
           <Button icon={<ReloadOutlined />} onClick={() => loadSettings()} loading={refreshing}>
             刷新
@@ -104,36 +49,39 @@ const Settings: React.FC = () => {
         )}
       />
 
-      <SettingsSummary settings={settings} />
+      <Space direction="vertical" size={16} className="full-width">
+        <SettingsSummary settings={settings} />
 
-      <Row gutter={[16, 16]}>
-        <Col xs={24} lg={5}>
-          <SettingsNavigation activeSection={activeSection} onChange={setActiveSection} />
-        </Col>
-        <Col xs={24} lg={19}>
-          {renderActiveSection()}
-        </Col>
-      </Row>
-
-      <ProbeModal
-        loading={probeLoading}
-        open={probeOpen}
-        result={probeResult}
-        onCancel={() => setProbeOpen(false)}
-        onProbe={handleProbe}
-      />
-      <TestMailModal
-        form={testForm}
-        loading={testLoading}
-        open={testOpen}
-        onCancel={() => setTestOpen(false)}
-        onFinish={async (values) => {
-          const ok = await handleSendTest(values);
-          if (ok) {
-            setTestOpen(false);
-          }
-        }}
-      />
+        <Row gutter={[16, 16]}>
+          <Col xs={24} xl={12}>
+            <RuntimeStatusPanel settings={settings} />
+          </Col>
+          <Col xs={24} xl={12}>
+            <SmtpEntryPanel settings={settings} />
+          </Col>
+          <Col xs={24} xl={12}>
+            <DeliveryChainPanel settings={settings} />
+          </Col>
+          <Col xs={24} xl={12}>
+            <RelayPolicySummaryPanel relayPolicy={relayPolicy} settings={settings} />
+          </Col>
+          <Col xs={24} xl={12}>
+            <QuarantinePolicySummaryPanel quarantinePolicy={quarantinePolicy} settings={settings} />
+          </Col>
+          <Col xs={24} xl={12}>
+            <GmEdgePolicySummaryPanel gmEdgePolicy={gmEdgePolicy} settings={settings} />
+          </Col>
+          <Col xs={24} xl={12}>
+            <CertificateValidationPanel settings={settings} />
+          </Col>
+          <Col xs={24} xl={12}>
+            <GmTlsEdgePanel settings={settings} />
+          </Col>
+          <Col xs={24}>
+            <CryptoCapabilitiesPanel settings={settings} />
+          </Col>
+        </Row>
+      </Space>
     </PageShell>
   );
 };

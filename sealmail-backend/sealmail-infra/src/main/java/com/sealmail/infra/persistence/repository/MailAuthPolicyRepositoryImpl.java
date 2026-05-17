@@ -22,7 +22,6 @@ import com.sealmail.infra.persistence.entity.MailAuthDnsProbeEntity;
 import com.sealmail.infra.persistence.entity.MailAuthDomainPolicyEntity;
 import com.sealmail.infra.persistence.entity.MailAuthPolicyEntity;
 import jakarta.persistence.EntityManager;
-import jakarta.persistence.PersistenceContext;
 import jakarta.persistence.TypedQuery;
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
@@ -40,12 +39,11 @@ public class MailAuthPolicyRepositoryImpl implements MailAuthPolicyRepository {
     private static final TypeReference<List<String>> STRING_LIST = new TypeReference<>() {
     };
 
-    @PersistenceContext
-    private EntityManager entityManager;
-
+    private final EntityManager entityManager;
     private final ObjectMapper objectMapper;
 
-    public MailAuthPolicyRepositoryImpl(ObjectMapper objectMapper) {
+    public MailAuthPolicyRepositoryImpl(EntityManager entityManager, ObjectMapper objectMapper) {
+        this.entityManager = entityManager;
         this.objectMapper = objectMapper;
     }
 

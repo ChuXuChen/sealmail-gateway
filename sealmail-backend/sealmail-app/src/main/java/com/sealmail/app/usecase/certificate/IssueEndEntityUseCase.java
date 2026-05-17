@@ -12,7 +12,6 @@ import com.sealmail.domain.certificate.CertificateId;
 import com.sealmail.domain.certificate.CertificateRepository;
 import com.sealmail.domain.certificate.spi.CertificateCryptoPort;
 import com.sealmail.domain.shared.model.EmailAddress;
-import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -31,7 +30,6 @@ import java.util.Set;
  *   - CRL DP pointing at the Intermediate's CRL URL
  */
 @Service
-@RequiredArgsConstructor
 @Transactional
 public class IssueEndEntityUseCase {
 
@@ -43,12 +41,28 @@ public class IssueEndEntityUseCase {
     private final CertificateCryptoPort certificateCryptoPort;
     private final CertificateMaterialAssembler certificateMaterialAssembler;
     private final CertificateChainService certificateChainService;
+    private final String crlBaseUrl;
+    private final int defaultEndEntityValidityDays;
 
-    @Value("${sealmail.ca.crl-base-url:http://localhost:8080/api/v1/crl/}")
-    private String crlBaseUrl;
-
-    @Value("${sealmail.ca.default-end-entity-validity-days:365}")
-    private int defaultEndEntityValidityDays;
+    public IssueEndEntityUseCase(CertificateRepository certificateRepository,
+                                 CertificateDtoMapper mapper,
+                                 PermissionChecker permissionChecker,
+                                 CertificateCryptoPort certificateCryptoPort,
+                                 CertificateMaterialAssembler certificateMaterialAssembler,
+                                 CertificateChainService certificateChainService,
+                                 @Value("${sealmail.ca.crl-base-url:http://localhost:8080/api/v1/crl/}")
+                                 String crlBaseUrl,
+                                 @Value("${sealmail.ca.default-end-entity-validity-days:365}")
+                                 int defaultEndEntityValidityDays) {
+        this.certificateRepository = certificateRepository;
+        this.mapper = mapper;
+        this.permissionChecker = permissionChecker;
+        this.certificateCryptoPort = certificateCryptoPort;
+        this.certificateMaterialAssembler = certificateMaterialAssembler;
+        this.certificateChainService = certificateChainService;
+        this.crlBaseUrl = crlBaseUrl;
+        this.defaultEndEntityValidityDays = defaultEndEntityValidityDays;
+    }
 
     public CertificateResponse execute(IssueEndEntityRequest request, UserContext user) {
         EmailAddress owner = new EmailAddress(request.getOwnerEmail());

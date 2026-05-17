@@ -12,7 +12,6 @@ import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.TransactionStatus;
 import org.springframework.transaction.support.SimpleTransactionStatus;
 
-import java.lang.reflect.Field;
 import java.time.Instant;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -66,11 +65,7 @@ class QuarantinePolicyServiceTest {
 
     private static QuarantinePolicyService service(EntityManager entityManager,
                                                    DomainEventPublisher eventPublisher) throws Exception {
-        QuarantinePolicyService service = new QuarantinePolicyService(eventPublisher, new NoopTransactionManager());
-        Field field = QuarantinePolicyService.class.getDeclaredField("entityManager");
-        field.setAccessible(true);
-        field.set(service, entityManager);
-        return service;
+        return new QuarantinePolicyService(entityManager, eventPublisher, new NoopTransactionManager());
     }
 
     private static QuarantinePolicyEntity entity() {

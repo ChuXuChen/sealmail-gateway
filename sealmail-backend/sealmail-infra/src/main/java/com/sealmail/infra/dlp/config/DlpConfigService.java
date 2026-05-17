@@ -26,7 +26,6 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.persistence.EntityManager;
-import jakarta.persistence.PersistenceContext;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -45,16 +44,17 @@ import java.util.regex.PatternSyntaxException;
 @Transactional
 public class DlpConfigService implements DlpConfigPort {
 
-    @PersistenceContext
-    private EntityManager entityManager;
-
     private static final TypeReference<List<String>> STRING_LIST = new TypeReference<>() {
     };
 
+    private final EntityManager entityManager;
     private final DomainEventPublisher domainEventPublisher;
     private final ObjectMapper objectMapper;
 
-    public DlpConfigService(DomainEventPublisher domainEventPublisher, ObjectMapper objectMapper) {
+    public DlpConfigService(EntityManager entityManager,
+                            DomainEventPublisher domainEventPublisher,
+                            ObjectMapper objectMapper) {
+        this.entityManager = entityManager;
         this.domainEventPublisher = domainEventPublisher;
         this.objectMapper = objectMapper;
     }

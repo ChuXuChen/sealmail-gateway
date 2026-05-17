@@ -75,8 +75,17 @@ public class CreateDomainConfigUseCase {
         if (request.getDkimEnabled() != null) {
             config.setDkimEnabled(request.getDkimEnabled());
         }
+        configureDeliveryRoute(config, request.getDeliveryHost(), request.getDeliveryPort());
         if (Boolean.FALSE.equals(request.getActive())) {
             config.deactivate();
+        }
+    }
+
+    private void configureDeliveryRoute(DomainConfig config, String deliveryHost, Integer deliveryPort) {
+        try {
+            config.configureDeliveryRoute(deliveryHost, deliveryPort);
+        } catch (IllegalArgumentException e) {
+            throw BusinessException.badRequest(e.getMessage());
         }
     }
 

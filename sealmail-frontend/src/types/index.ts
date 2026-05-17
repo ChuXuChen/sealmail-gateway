@@ -320,6 +320,8 @@ export interface DomainConfig {
   preferredAlgorithmDisplayName?: string;
   signingEnabled: boolean;
   dkimEnabled: boolean;
+  deliveryHost?: string;
+  deliveryPort?: number;
   active: boolean;
 }
 
@@ -330,6 +332,8 @@ export interface CreateDomainConfigRequest {
   preferredAlgorithm?: string;
   signingEnabled?: boolean;
   dkimEnabled?: boolean;
+  deliveryHost?: string;
+  deliveryPort?: number;
   active?: boolean;
 }
 
@@ -338,6 +342,8 @@ export interface UpdateDomainConfigRequest {
   preferredAlgorithm?: string;
   signingEnabled?: boolean;
   dkimEnabled?: boolean;
+  deliveryHost?: string;
+  deliveryPort?: number;
   active?: boolean;
 }
 
@@ -580,6 +586,7 @@ export interface SystemSettings {
       security: string;
     }[];
   };
+  smimeSuitePolicy: SmimeSuitePolicy;
   quarantinePolicy: {
     maxRetentionDays: number;
     notificationEnabled: boolean;
@@ -601,6 +608,22 @@ export interface SystemSettings {
     algorithms: string[];
   }[];
 }
+
+export interface SmimeSuiteOption {
+  id: string;
+  displayName: string;
+  profile: 'STANDARD' | 'GM' | string;
+}
+
+export interface SmimeSuitePolicy {
+  defaultStandardSuite: string;
+  defaultGmSuite: string;
+  standardSuites: SmimeSuiteOption[];
+  gmSuites: SmimeSuiteOption[];
+  updatedAt?: string;
+}
+
+export type SmimeSuitePolicyRequest = Pick<SmimeSuitePolicy, 'defaultStandardSuite' | 'defaultGmSuite'>;
 
 export interface RelayPolicy {
   enabled: boolean;

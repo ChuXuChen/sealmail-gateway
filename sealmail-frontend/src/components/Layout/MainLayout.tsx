@@ -1,7 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { Layout, Menu, Avatar, Dropdown, Grid, Button, Drawer, Space, Tag, Typography, theme } from 'antd';
 import {
-  DashboardOutlined,
   SafetyOutlined,
   InboxOutlined,
   SettingOutlined,
@@ -17,6 +16,10 @@ import {
   MailOutlined,
   MenuFoldOutlined,
   MenuUnfoldOutlined,
+  CloudServerOutlined,
+  ToolOutlined,
+  ThunderboltOutlined,
+  SendOutlined,
 } from '@ant-design/icons';
 import type { ItemType } from 'antd/es/menu/interface';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
@@ -30,10 +33,12 @@ import {
   canViewAuditLogs,
   canViewCrl,
   canViewQuarantine,
+  canViewSystemStatus,
   getPermissionSummary,
   getPrimaryRole,
 } from '../../auth/permissions';
 import SealMailLogo from '../Brand/SealMailLogo';
+import { ROUTES } from '../../router/routes';
 
 const { Header, Sider, Content } = Layout;
 const { useBreakpoint } = Grid;
@@ -56,91 +61,172 @@ const MainLayout: React.FC = () => {
   const role = getPrimaryRole(user);
   const permissionSummary = getPermissionSummary(user);
 
-  const smimeChildren = useMemo<ItemType[]>(() => [
-    canManageCa(user) ? {
-      key: '/smime/cas',
-      icon: <AuditOutlined />,
-      label: 'CA 证书',
-    } : null,
-    canManageCertificates(user) ? {
-      key: '/smime/certificates',
-      icon: <FileProtectOutlined />,
-      label: '终端证书',
-    } : null,
-    canViewCrl(user) ? {
-      key: '/smime/crl',
-      icon: <StopOutlined />,
-      label: 'CRL 吊销列表',
-    } : null,
-  ].filter(Boolean) as ItemType[], [user]);
-
-  const menuItems = useMemo<ItemType[]>(() => [
-    {
-      key: '/dashboard',
-      icon: <DashboardOutlined />,
-      label: '仪表盘',
-    },
-    smimeChildren.length > 0 ? {
-      key: 'smime',
-      icon: <SafetyOutlined />,
-      label: 'S/MIME',
-      children: smimeChildren,
-    } : null,
+  const dispositionChildren = useMemo<ItemType[]>(() => [
     canViewQuarantine(user) ? {
-      key: '/exception-mails',
+      key: ROUTES.dispositionExceptionMails,
       icon: <WarningOutlined />,
       label: '异常邮件',
     } : null,
-    (canManageDlp(user) || canViewQuarantine(user)) ? {
-      key: 'dlp',
+    canViewQuarantine(user) ? {
+      key: ROUTES.dispositionDlpQuarantine,
       icon: <InboxOutlined />,
-      label: 'DLP',
-      children: [
-        canManageDlp(user) ? {
-          key: '/dlp/patterns',
-          icon: <FileTextOutlined />,
-          label: '规则库',
-        } : null,
-        canManageDlp(user) ? {
-          key: '/dlp/selection',
-          icon: <PartitionOutlined />,
-          label: '策略集',
-        } : null,
-        canViewQuarantine(user) ? {
-          key: '/dlp/events',
-          icon: <AuditOutlined />,
-          label: '命中事件',
-        } : null,
-        canViewQuarantine(user) ? {
-          key: '/dlp/quarantine',
-          icon: <InboxOutlined />,
-          label: '隔离复核',
-        } : null,
-      ].filter(Boolean),
+      label: 'DLP 隔离复核',
     } : null,
+    canViewQuarantine(user) ? {
+      key: ROUTES.dispositionDlpEvents,
+      icon: <AuditOutlined />,
+      label: 'DLP 命中事件',
+    } : null,
+  ].filter(Boolean) as ItemType[], [user]);
+
+  const policyChildren = useMemo<ItemType[]>(() => [
     canManageDomains(user) ? {
-      key: '/domains',
+      key: ROUTES.policiesDomains,
       icon: <GlobalOutlined />,
       label: '域名配置',
     } : null,
     canManageMailAuth(user) ? {
-      key: '/mail-auth',
+      key: ROUTES.policiesMailAuth,
       icon: <MailOutlined />,
       label: '邮件认证',
     } : null,
+    canManageDlp(user) ? {
+      key: ROUTES.policiesDlpRules,
+      icon: <FileTextOutlined />,
+      label: 'DLP 规则库',
+    } : null,
+    canManageDlp(user) ? {
+      key: ROUTES.policiesDlpPolicies,
+      icon: <PartitionOutlined />,
+      label: 'DLP 策略集',
+    } : null,
+    canManageCa(user) ? {
+      key: ROUTES.policiesGmEdge,
+      icon: <SafetyOutlined />,
+      label: '国密 Edge',
+    } : null,
+    canManageCa(user) ? {
+      key: ROUTES.policiesSmimeSuite,
+      icon: <FileProtectOutlined />,
+      label: 'S/MIME 套件',
+    } : null,
+    canManageCa(user) ? {
+      key: ROUTES.policiesRelay,
+      icon: <MailOutlined />,
+      label: 'Relay 策略',
+    } : null,
+    canManageCa(user) ? {
+      key: ROUTES.policiesQuarantine,
+      icon: <InboxOutlined />,
+      label: '隔离策略',
+    } : null,
+    canViewSystemStatus(user) ? {
+      key: ROUTES.policiesSmtpEntry,
+      icon: <CloudServerOutlined />,
+      label: 'SMTP 入口',
+    } : null,
+    canViewSystemStatus(user) ? {
+      key: ROUTES.policiesDelivery,
+      icon: <PartitionOutlined />,
+      label: '投递链路',
+    } : null,
+  ].filter(Boolean) as ItemType[], [user]);
+
+  const trustChildren = useMemo<ItemType[]>(() => [
+    canManageCa(user) ? {
+      key: ROUTES.trustCas,
+      icon: <AuditOutlined />,
+      label: 'CA 证书',
+    } : null,
+    canManageCertificates(user) ? {
+      key: ROUTES.trustCertificates,
+      icon: <FileProtectOutlined />,
+      label: '终端证书',
+    } : null,
+    canViewCrl(user) ? {
+      key: ROUTES.trustCrl,
+      icon: <StopOutlined />,
+      label: 'CRL 吊销列表',
+    } : null,
+    canViewSystemStatus(user) ? {
+      key: ROUTES.trustCertificateValidation,
+      icon: <SafetyOutlined />,
+      label: '证书校验',
+    } : null,
+    canViewSystemStatus(user) ? {
+      key: ROUTES.trustCryptoCapabilities,
+      icon: <FileProtectOutlined />,
+      label: '算法能力',
+    } : null,
+    canViewSystemStatus(user) ? {
+      key: ROUTES.trustGmTlsEdge,
+      icon: <SafetyOutlined />,
+      label: '国密 TLS Edge',
+    } : null,
+  ].filter(Boolean) as ItemType[], [user]);
+
+  const opsChildren = useMemo<ItemType[]>(() => [
+    canViewSystemStatus(user) ? {
+      key: ROUTES.opsRuntime,
+      icon: <CloudServerOutlined />,
+      label: '运行状态',
+    } : null,
+    canViewSystemStatus(user) ? {
+      key: ROUTES.opsConfigOverview,
+      icon: <SettingOutlined />,
+      label: '配置总览',
+    } : null,
+    canManageCa(user) ? {
+      key: ROUTES.opsTools,
+      icon: <ToolOutlined />,
+      label: '运维工具',
+    } : null,
+    canManageCa(user) ? {
+      key: ROUTES.opsSmtpProbe,
+      icon: <ThunderboltOutlined />,
+      label: 'SMTP 探测',
+    } : null,
+    canManageCa(user) ? {
+      key: ROUTES.opsProtectedTestMail,
+      icon: <SendOutlined />,
+      label: '受保护测试邮件',
+    } : null,
     canViewAuditLogs(user) ? {
-      key: '/audit-logs',
+      key: ROUTES.opsAuditLogs,
       icon: <FileTextOutlined />,
       label: '审计日志',
     } : null,
-    canManageCa(user) ? {
-      key: '/settings',
-      icon: <SettingOutlined />,
-      label: '系统设置',
+  ].filter(Boolean) as ItemType[], [user]);
+
+  const menuItems = useMemo<ItemType[]>(() => [
+    dispositionChildren.length > 0 ? {
+      key: 'disposition',
+      icon: <InboxOutlined />,
+      label: '处置中心',
+      children: dispositionChildren,
     } : null,
-  ].filter(Boolean) as ItemType[], [smimeChildren, user]);
+    policyChildren.length > 0 ? {
+      key: 'policies',
+      icon: <SettingOutlined />,
+      label: '策略中心',
+      children: policyChildren,
+    } : null,
+    trustChildren.length > 0 ? {
+      key: 'trust',
+      icon: <SafetyOutlined />,
+      label: '证书与信任',
+      children: trustChildren,
+    } : null,
+    opsChildren.length > 0 ? {
+      key: 'ops',
+      icon: <ToolOutlined />,
+      label: '系统运维',
+      children: opsChildren,
+    } : null,
+  ].filter(Boolean) as ItemType[], [dispositionChildren, opsChildren, policyChildren, trustChildren]);
 
   const handleMenuClick = ({ key }: { key: string }) => {
+    if (!key.startsWith('/')) return;
     navigate(key);
     setMobileNavOpen(false);
   };
@@ -184,7 +270,7 @@ const MainLayout: React.FC = () => {
       <Menu
         theme="dark"
         selectedKeys={[location.pathname]}
-        defaultOpenKeys={['smime', 'dlp']}
+        defaultOpenKeys={['disposition', 'policies', 'trust', 'ops']}
         mode="inline"
         items={menuItems}
         onClick={handleMenuClick}

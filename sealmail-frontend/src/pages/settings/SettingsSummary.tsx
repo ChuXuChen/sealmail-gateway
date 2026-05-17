@@ -27,7 +27,7 @@ const SettingsSummary: React.FC<SettingsSummaryProps> = ({ settings }) => {
       <Col xs={24} md={12} xl={6}>
         <Card className="settings-summary-card">
           <span className="settings-summary-label">单封邮件上限</span>
-          <div className="settings-summary-value">{formatBytes(settings?.smtpServer.maxMessageSizeBytes || 0)}</div>
+          <div className="settings-summary-value">{formatBytes(settings?.smtpServer.maxMessageSizeBytes ?? Number.NaN)}</div>
         </Card>
       </Col>
       <Col xs={24} md={12} xl={6}>

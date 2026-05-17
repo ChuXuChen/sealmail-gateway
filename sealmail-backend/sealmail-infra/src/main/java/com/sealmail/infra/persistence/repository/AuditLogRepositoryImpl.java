@@ -6,7 +6,6 @@ import com.sealmail.domain.audit.AuditLogType;
 import com.sealmail.infra.persistence.entity.AuditLogEntity;
 import com.sealmail.infra.persistence.mapper.AuditLogMapper;
 import jakarta.persistence.EntityManager;
-import jakarta.persistence.PersistenceContext;
 import jakarta.persistence.TypedQuery;
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Propagation;
@@ -20,12 +19,11 @@ import java.util.Optional;
 @Transactional
 public class AuditLogRepositoryImpl implements AuditLogRepository {
 
-    @PersistenceContext
-    private EntityManager entityManager;
-
+    private final EntityManager entityManager;
     private final AuditLogMapper mapper;
 
-    public AuditLogRepositoryImpl(AuditLogMapper mapper) {
+    public AuditLogRepositoryImpl(EntityManager entityManager, AuditLogMapper mapper) {
+        this.entityManager = entityManager;
         this.mapper = mapper;
     }
 

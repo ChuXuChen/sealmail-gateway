@@ -3,14 +3,17 @@ package com.sealmail.app.usecase.config;
 import com.sealmail.app.dto.request.QuarantinePolicyRequest;
 import com.sealmail.app.dto.request.GmEdgePolicyRequest;
 import com.sealmail.app.dto.request.RelayPolicyRequest;
+import com.sealmail.app.dto.request.SmimeSuitePolicyRequest;
 import com.sealmail.app.dto.response.GmEdgePolicyResponse;
 import com.sealmail.app.dto.response.QuarantinePolicyResponse;
 import com.sealmail.app.dto.response.RelayPolicyResponse;
+import com.sealmail.app.dto.response.SmimeSuitePolicyResponse;
 import com.sealmail.app.exception.BusinessException;
 import com.sealmail.app.security.UserContext;
 import com.sealmail.domain.config.GmEdgePolicyPort;
 import com.sealmail.domain.config.QuarantinePolicyPort;
 import com.sealmail.domain.config.RelayPolicyPort;
+import com.sealmail.domain.config.SmimeSuitePolicyPort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -22,13 +25,16 @@ public class ManageRuntimePolicyUseCase {
     private final RelayPolicyPort relayPolicyPort;
     private final QuarantinePolicyPort quarantinePolicyPort;
     private final GmEdgePolicyPort gmEdgePolicyPort;
+    private final SmimeSuitePolicyPort smimeSuitePolicyPort;
 
     public ManageRuntimePolicyUseCase(RelayPolicyPort relayPolicyPort,
                                       QuarantinePolicyPort quarantinePolicyPort,
-                                      GmEdgePolicyPort gmEdgePolicyPort) {
+                                      GmEdgePolicyPort gmEdgePolicyPort,
+                                      SmimeSuitePolicyPort smimeSuitePolicyPort) {
         this.relayPolicyPort = relayPolicyPort;
         this.quarantinePolicyPort = quarantinePolicyPort;
         this.gmEdgePolicyPort = gmEdgePolicyPort;
+        this.smimeSuitePolicyPort = smimeSuitePolicyPort;
     }
 
     @Transactional(readOnly = true)
@@ -65,6 +71,18 @@ public class ManageRuntimePolicyUseCase {
     public GmEdgePolicyResponse updateGmEdgePolicy(GmEdgePolicyRequest request, UserContext user) {
         requireAdmin(user, "只有管理员可以更新国密 Edge 策略");
         return toGmEdgeResponse(gmEdgePolicyPort.updateSettings(toGmEdgeUpdate(request)));
+    }
+
+    @Transactional(readOnly = true)
+    public SmimeSuitePolicyResponse getSmimeSuitePolicy(UserContext user) {
+        requireAdmin(user, "只有管理员可以查看 S/MIME 套件策略");
+        return toSmimeSuiteResponse(smimeSuitePolicyPort.getSettings());
+    }
+
+    @Transactional
+    public SmimeSuitePolicyResponse updateSmimeSuitePolicy(SmimeSuitePolicyRequest request, UserContext user) {
+        requireAdmin(user, "只有管理员可以更新 S/MIME 套件策略");
+        return toSmimeSuiteResponse(smimeSuitePolicyPort.updateSettings(toSmimeSuiteUpdate(request)));
     }
 
     private RelayPolicyPort.RelayPolicySettingsUpdate toRelayUpdate(RelayPolicyRequest request) {
@@ -142,6 +160,15 @@ public class ManageRuntimePolicyUseCase {
                         .toList());
     }
 
+    private SmimeSuitePolicyPort.SmimeSuitePolicySettingsUpdate toSmimeSuiteUpdate(SmimeSuitePolicyRequest request) {
+        if (request == null) {
+            return new SmimeSuitePolicyPort.SmimeSuitePolicySettingsUpdate(null, null);
+        }
+        return new SmimeSuitePolicyPort.SmimeSuitePolicySettingsUpdate(
+                request.defaultStandardSuite(),
+                request.defaultGmSuite());
+    }
+
     private RelayPolicyResponse toRelayResponse(RelayPolicyPort.RelayPolicySettings settings) {
         return new RelayPolicyResponse(
                 settings.enabled(),
@@ -210,6 +237,27 @@ public class ManageRuntimePolicyUseCase {
                                 route.security()))
                         .toList(),
                 settings.updatedAt());
+    }
+
+    private SmimeSuitePolicyResponse toSmimeSuiteResponse(SmimeSuitePolicyPort.SmimeSuitePolicySettings settings) {
+        return new SmimeSuitePolicyResponse(
+                settings.defaultStandardSuite(),
+                settings.defaultGmSuite(),
+                settings.standardSuites().stream()
+                        .map(this::toSmimeSuiteOptionResponse)
+                        .toList(),
+                settings.gmSuites().stream()
+                        .map(this::toSmimeSuiteOptionResponse)
+                        .toList(),
+                settings.updatedAt());
+    }
+
+    private SmimeSuitePolicyResponse.SmimeSuiteOptionResponse toSmimeSuiteOptionResponse(
+            SmimeSuitePolicyPort.SmimeSuiteOption option) {
+        return new SmimeSuitePolicyResponse.SmimeSuiteOptionResponse(
+                option.id(),
+                option.displayName(),
+                option.profile());
     }
 
     private void requireAdmin(UserContext user, String message) {

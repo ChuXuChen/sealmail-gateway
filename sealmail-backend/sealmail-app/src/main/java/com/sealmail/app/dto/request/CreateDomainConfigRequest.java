@@ -25,6 +25,8 @@ public class CreateDomainConfigRequest {
     private String preferredAlgorithm;
     private Boolean signingEnabled;
     private Boolean dkimEnabled;
+    private String deliveryHost;
+    private Integer deliveryPort;
     private Boolean active;
 
     public void setDomain(String domain) {

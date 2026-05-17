@@ -7,7 +7,6 @@ import com.sealmail.domain.policy.event.RelayPolicyChanged;
 import com.sealmail.infra.events.DomainEventPublisher;
 import com.sealmail.infra.persistence.entity.RelayPolicyEntity;
 import jakarta.persistence.EntityManager;
-import jakarta.persistence.PersistenceContext;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.PlatformTransactionManager;
@@ -24,16 +23,16 @@ public class RelayPolicyService implements RelayPolicyPort {
 
     private static final String DEFAULT_ID = "default";
 
-    @PersistenceContext
-    private EntityManager entityManager;
-
+    private final EntityManager entityManager;
     private final DomainEventPublisher domainEventPublisher;
     private final SecretReferenceResolver secretReferenceResolver;
     private final TransactionTemplate initializationTransaction;
 
-    public RelayPolicyService(DomainEventPublisher domainEventPublisher,
+    public RelayPolicyService(EntityManager entityManager,
+                              DomainEventPublisher domainEventPublisher,
                               SecretReferenceResolver secretReferenceResolver,
                               PlatformTransactionManager transactionManager) {
+        this.entityManager = entityManager;
         this.domainEventPublisher = domainEventPublisher;
         this.secretReferenceResolver = secretReferenceResolver;
         this.initializationTransaction = new TransactionTemplate(transactionManager);

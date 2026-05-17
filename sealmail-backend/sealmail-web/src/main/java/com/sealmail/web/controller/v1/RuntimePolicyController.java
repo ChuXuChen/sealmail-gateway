@@ -3,9 +3,11 @@ package com.sealmail.web.controller.v1;
 import com.sealmail.app.dto.request.GmEdgePolicyRequest;
 import com.sealmail.app.dto.request.QuarantinePolicyRequest;
 import com.sealmail.app.dto.request.RelayPolicyRequest;
+import com.sealmail.app.dto.request.SmimeSuitePolicyRequest;
 import com.sealmail.app.dto.response.GmEdgePolicyResponse;
 import com.sealmail.app.dto.response.QuarantinePolicyResponse;
 import com.sealmail.app.dto.response.RelayPolicyResponse;
+import com.sealmail.app.dto.response.SmimeSuitePolicyResponse;
 import com.sealmail.app.security.UserContext;
 import com.sealmail.app.usecase.config.ManageRuntimePolicyUseCase;
 import com.sealmail.web.util.ApiResponse;
@@ -69,5 +71,19 @@ public class RuntimePolicyController {
             @RequestBody GmEdgePolicyRequest request,
             @AuthenticationPrincipal UserContext user) {
         return ApiResponse.ok(manageRuntimePolicyUseCase.updateGmEdgePolicy(request, user));
+    }
+
+    @GetMapping("/smime-suite")
+    @Operation(summary = "查询 S/MIME 套件策略")
+    public ApiResponse<SmimeSuitePolicyResponse> smimeSuite(@AuthenticationPrincipal UserContext user) {
+        return ApiResponse.ok(manageRuntimePolicyUseCase.getSmimeSuitePolicy(user));
+    }
+
+    @PutMapping("/smime-suite")
+    @Operation(summary = "更新 S/MIME 套件策略")
+    public ApiResponse<SmimeSuitePolicyResponse> updateSmimeSuite(
+            @RequestBody SmimeSuitePolicyRequest request,
+            @AuthenticationPrincipal UserContext user) {
+        return ApiResponse.ok(manageRuntimePolicyUseCase.updateSmimeSuitePolicy(request, user));
     }
 }

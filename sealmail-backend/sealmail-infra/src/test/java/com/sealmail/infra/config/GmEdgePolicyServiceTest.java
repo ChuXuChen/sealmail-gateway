@@ -13,7 +13,6 @@ import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.TransactionStatus;
 import org.springframework.transaction.support.SimpleTransactionStatus;
 
-import java.lang.reflect.Field;
 import java.time.Instant;
 import java.util.List;
 
@@ -123,14 +122,11 @@ class GmEdgePolicyServiceTest {
 
     private static GmEdgePolicyService service(EntityManager entityManager,
                                                DomainEventPublisher eventPublisher) throws Exception {
-        GmEdgePolicyService service = new GmEdgePolicyService(
+        return new GmEdgePolicyService(
+                entityManager,
                 eventPublisher,
                 new ObjectMapper(),
                 new NoopTransactionManager());
-        Field field = GmEdgePolicyService.class.getDeclaredField("entityManager");
-        field.setAccessible(true);
-        field.set(service, entityManager);
-        return service;
     }
 
     private static GmEdgePolicyEntity entity() {

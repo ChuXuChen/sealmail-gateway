@@ -109,6 +109,22 @@ public class QuerySystemSettingsUseCase {
                                 ))
                                 .toList()
                 ),
+                new SystemSettingsResponse.SmimeSuitePolicyResponse(
+                        snapshot.smimeSuitePolicy().defaultStandardSuite(),
+                        snapshot.smimeSuitePolicy().defaultGmSuite(),
+                        snapshot.smimeSuitePolicy().standardSuites().stream()
+                                .map(option -> new SystemSettingsResponse.SmimeSuiteOptionResponse(
+                                        option.id(),
+                                        option.displayName(),
+                                        option.profile()))
+                                .toList(),
+                        snapshot.smimeSuitePolicy().gmSuites().stream()
+                                .map(option -> new SystemSettingsResponse.SmimeSuiteOptionResponse(
+                                        option.id(),
+                                        option.displayName(),
+                                        option.profile()))
+                                .toList()
+                ),
                 new SystemSettingsResponse.QuarantinePolicyResponse(
                         snapshot.quarantinePolicy().maxRetentionDays(),
                         snapshot.quarantinePolicy().notificationEnabled(),

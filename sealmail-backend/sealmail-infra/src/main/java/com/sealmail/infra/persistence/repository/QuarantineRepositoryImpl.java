@@ -8,7 +8,6 @@ import com.sealmail.infra.events.DomainEventPublisher;
 import com.sealmail.infra.persistence.entity.QuarantinedMailEntity;
 import com.sealmail.infra.persistence.mapper.QuarantinedMailMapper;
 import jakarta.persistence.EntityManager;
-import jakarta.persistence.PersistenceContext;
 import jakarta.persistence.TypedQuery;
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
@@ -21,13 +20,14 @@ import java.util.Optional;
 @Transactional
 public class QuarantineRepositoryImpl implements QuarantineRepository {
 
-    @PersistenceContext
-    private EntityManager entityManager;
-
+    private final EntityManager entityManager;
     private final QuarantinedMailMapper mapper;
     private final DomainEventPublisher domainEventPublisher;
 
-    public QuarantineRepositoryImpl(QuarantinedMailMapper mapper, DomainEventPublisher domainEventPublisher) {
+    public QuarantineRepositoryImpl(EntityManager entityManager,
+                                    QuarantinedMailMapper mapper,
+                                    DomainEventPublisher domainEventPublisher) {
+        this.entityManager = entityManager;
         this.mapper = mapper;
         this.domainEventPublisher = domainEventPublisher;
     }

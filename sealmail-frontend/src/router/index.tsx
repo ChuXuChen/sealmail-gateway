@@ -15,8 +15,10 @@ import {
   canViewAuditLogs,
   canViewCrl,
   canViewQuarantine,
+  canViewSystemStatus,
 } from '../auth/permissions';
 import { PageShell } from '../components/Page';
+import { ROUTES } from './routes';
 
 const MainLayout = React.lazy(() => import('../components/Layout/MainLayout'));
 const Login = React.lazy(() => import('../pages/Login'));
@@ -29,10 +31,23 @@ const DlpQuarantine = React.lazy(() => import('../pages/DlpQuarantine'));
 const DlpPatterns = React.lazy(() => import('../pages/DlpPatterns'));
 const DlpSelection = React.lazy(() => import('../pages/DlpSelection'));
 const DlpEvents = React.lazy(() => import('../pages/DlpEvents'));
-const Settings = React.lazy(() => import('../pages/Settings'));
+const ConfigOverview = React.lazy(() => import('../pages/Settings'));
 const AuditLogs = React.lazy(() => import('../pages/AuditLogs'));
 const DomainConfigs = React.lazy(() => import('../pages/DomainConfigs'));
 const MailAuth = React.lazy(() => import('../pages/MailAuth'));
+const GmEdgePolicyPage = React.lazy(() => import('../pages/policies/GmEdgePolicyPage'));
+const SmimeSuitePolicyPage = React.lazy(() => import('../pages/policies/SmimeSuitePolicyPage'));
+const RelayPolicyPage = React.lazy(() => import('../pages/policies/RelayPolicyPage'));
+const QuarantinePolicyPage = React.lazy(() => import('../pages/policies/QuarantinePolicyPage'));
+const SmtpEntryPolicyPage = React.lazy(() => import('../pages/policies/SmtpEntryPolicyPage'));
+const DeliveryPolicyPage = React.lazy(() => import('../pages/policies/DeliveryPolicyPage'));
+const RuntimeStatusPage = React.lazy(() => import('../pages/ops/RuntimeStatusPage'));
+const OpsToolsPage = React.lazy(() => import('../pages/ops/OpsToolsPage'));
+const SmtpProbePage = React.lazy(() => import('../pages/ops/SmtpProbePage'));
+const ProtectedTestMailPage = React.lazy(() => import('../pages/ops/ProtectedTestMailPage'));
+const CertificateValidationPage = React.lazy(() => import('../pages/trust/CertificateValidationPage'));
+const CryptoCapabilitiesPage = React.lazy(() => import('../pages/trust/CryptoCapabilitiesPage'));
+const GmTlsEdgePage = React.lazy(() => import('../pages/trust/GmTlsEdgePage'));
 const Forbidden = React.lazy(() => import('../pages/Forbidden'));
 
 interface ProtectedRouteProps {
@@ -83,6 +98,12 @@ const withSuspense = (element: React.ReactNode) => (
   </Suspense>
 );
 
+const roleElement = (check: RoleRouteProps['check'], element: React.ReactNode) => withSuspense(
+  <RoleRoute check={check}>
+    {element}
+  </RoleRoute>,
+);
+
 const router = createBrowserRouter([
   {
     path: '/login',
@@ -98,136 +119,233 @@ const router = createBrowserRouter([
     children: [
       {
         index: true,
-        element: <Navigate to="/dashboard" replace />,
+        element: <Navigate to={ROUTES.dashboard} replace />,
       },
       {
         path: 'dashboard',
         element: withSuspense(<Dashboard />),
       },
       {
-        path: 'smime',
+        path: 'disposition',
         children: [
           {
             index: true,
-            element: <Navigate to="/smime/cas" replace />,
+            element: <Navigate to={ROUTES.dispositionExceptionMails} replace />,
           },
           {
-            path: 'cas',
-            element: withSuspense(
-              <RoleRoute check={canManageCa}>
-                <CertificateAuthorities />
-              </RoleRoute>,
-            ),
+            path: 'exception-mails',
+            element: roleElement(canViewQuarantine, <ExceptionMails />),
           },
           {
-            path: 'certificates',
-            element: withSuspense(
-              <RoleRoute check={canManageCertificates}>
-                <Certificates />
-              </RoleRoute>,
-            ),
+            path: 'dlp-quarantine',
+            element: roleElement(canViewQuarantine, <DlpQuarantine />),
           },
           {
-            path: 'crl',
-            element: withSuspense(
-              <RoleRoute check={canViewCrl}>
-                <Crl />
-              </RoleRoute>,
-            ),
+            path: 'dlp-events',
+            element: roleElement(canViewQuarantine, <DlpEvents />),
           },
         ],
       },
       {
-        path: 'exception-mails',
-        element: withSuspense(
-          <RoleRoute check={canViewQuarantine}>
-            <ExceptionMails />
-          </RoleRoute>,
-        ),
+        path: 'policies',
+        children: [
+          {
+            index: true,
+            element: <Navigate to={ROUTES.policiesDomains} replace />,
+          },
+          {
+            path: 'domains',
+            element: roleElement(canManageDomains, <DomainConfigs />),
+          },
+          {
+            path: 'mail-auth',
+            element: roleElement(canManageMailAuth, <MailAuth />),
+          },
+          {
+            path: 'dlp-rules',
+            element: roleElement(canManageDlp, <DlpPatterns />),
+          },
+          {
+            path: 'dlp-policies',
+            element: roleElement(canManageDlp, <DlpSelection />),
+          },
+          {
+            path: 'gm-edge',
+            element: roleElement(canManageCa, <GmEdgePolicyPage />),
+          },
+          {
+            path: 'smime-suite',
+            element: roleElement(canManageCa, <SmimeSuitePolicyPage />),
+          },
+          {
+            path: 'relay',
+            element: roleElement(canManageCa, <RelayPolicyPage />),
+          },
+          {
+            path: 'quarantine',
+            element: roleElement(canManageCa, <QuarantinePolicyPage />),
+          },
+          {
+            path: 'smtp-entry',
+            element: roleElement(canViewSystemStatus, <SmtpEntryPolicyPage />),
+          },
+          {
+            path: 'delivery',
+            element: roleElement(canViewSystemStatus, <DeliveryPolicyPage />),
+          },
+        ],
       },
       {
-        path: 'quarantine',
-        element: <Navigate to="/exception-mails" replace />,
+        path: 'trust',
+        children: [
+          {
+            index: true,
+            element: <Navigate to={ROUTES.trustCas} replace />,
+          },
+          {
+            path: 'cas',
+            element: roleElement(canManageCa, <CertificateAuthorities />),
+          },
+          {
+            path: 'certificates',
+            element: roleElement(canManageCertificates, <Certificates />),
+          },
+          {
+            path: 'crl',
+            element: roleElement(canViewCrl, <Crl />),
+          },
+          {
+            path: 'certificate-validation',
+            element: roleElement(canViewSystemStatus, <CertificateValidationPage />),
+          },
+          {
+            path: 'crypto-capabilities',
+            element: roleElement(canViewSystemStatus, <CryptoCapabilitiesPage />),
+          },
+          {
+            path: 'gm-tls-edge',
+            element: roleElement(canViewSystemStatus, <GmTlsEdgePage />),
+          },
+        ],
       },
       {
-        path: 'dlp/patterns',
-        element: withSuspense(
-          <RoleRoute check={canManageDlp}>
-            <DlpPatterns />
-          </RoleRoute>,
-        ),
-      },
-      {
-        path: 'dlp/selection',
-        element: withSuspense(
-          <RoleRoute check={canManageDlp}>
-            <DlpSelection />
-          </RoleRoute>,
-        ),
-      },
-      {
-        path: 'dlp/quarantine',
-        element: withSuspense(
-          <RoleRoute check={canViewQuarantine}>
-            <DlpQuarantine />
-          </RoleRoute>,
-        ),
-      },
-      {
-        path: 'dlp/events',
-        element: withSuspense(
-          <RoleRoute check={canViewQuarantine}>
-            <DlpEvents />
-          </RoleRoute>,
-        ),
-      },
-      {
-        path: 'settings',
-        element: withSuspense(
-          <RoleRoute check={canManageCa}>
-            <Settings />
-          </RoleRoute>,
-        ),
-      },
-      {
-        path: 'audit-logs',
-        element: withSuspense(
-          <RoleRoute check={canViewAuditLogs}>
-            <AuditLogs />
-          </RoleRoute>,
-        ),
-      },
-      {
-        path: 'domains',
-        element: withSuspense(
-          <RoleRoute check={canManageDomains}>
-            <DomainConfigs />
-          </RoleRoute>,
-        ),
-      },
-      {
-        path: 'mail-auth',
-        element: withSuspense(
-          <RoleRoute check={canManageMailAuth}>
-            <MailAuth />
-          </RoleRoute>,
-        ),
+        path: 'ops',
+        children: [
+          {
+            index: true,
+            element: <Navigate to={ROUTES.opsConfigOverview} replace />,
+          },
+          {
+            path: 'runtime',
+            element: roleElement(canViewSystemStatus, <RuntimeStatusPage />),
+          },
+          {
+            path: 'config-overview',
+            element: roleElement(canViewSystemStatus, <ConfigOverview />),
+          },
+          {
+            path: 'tools',
+            element: roleElement(canManageCa, <OpsToolsPage />),
+          },
+          {
+            path: 'smtp-probe',
+            element: roleElement(canManageCa, <SmtpProbePage />),
+          },
+          {
+            path: 'protected-test-mail',
+            element: roleElement(canManageCa, <ProtectedTestMailPage />),
+          },
+          {
+            path: 'audit-logs',
+            element: roleElement(canViewAuditLogs, <AuditLogs />),
+          },
+        ],
       },
       {
         path: '403',
         element: withSuspense(<Forbidden />),
       },
       {
+        path: 'settings',
+        element: <Navigate to={ROUTES.opsConfigOverview} replace />,
+      },
+      {
+        path: 'exception-mails',
+        element: <Navigate to={ROUTES.dispositionExceptionMails} replace />,
+      },
+      {
+        path: 'quarantine',
+        element: <Navigate to={ROUTES.dispositionExceptionMails} replace />,
+      },
+      {
+        path: 'domains',
+        element: <Navigate to={ROUTES.policiesDomains} replace />,
+      },
+      {
+        path: 'mail-auth',
+        element: <Navigate to={ROUTES.policiesMailAuth} replace />,
+      },
+      {
+        path: 'audit-logs',
+        element: <Navigate to={ROUTES.opsAuditLogs} replace />,
+      },
+      {
+        path: 'dlp',
+        children: [
+          {
+            index: true,
+            element: <Navigate to={ROUTES.policiesDlpRules} replace />,
+          },
+          {
+            path: 'patterns',
+            element: <Navigate to={ROUTES.policiesDlpRules} replace />,
+          },
+          {
+            path: 'selection',
+            element: <Navigate to={ROUTES.policiesDlpPolicies} replace />,
+          },
+          {
+            path: 'quarantine',
+            element: <Navigate to={ROUTES.dispositionDlpQuarantine} replace />,
+          },
+          {
+            path: 'events',
+            element: <Navigate to={ROUTES.dispositionDlpEvents} replace />,
+          },
+        ],
+      },
+      {
+        path: 'smime',
+        children: [
+          {
+            index: true,
+            element: <Navigate to={ROUTES.trustCas} replace />,
+          },
+          {
+            path: 'cas',
+            element: <Navigate to={ROUTES.trustCas} replace />,
+          },
+          {
+            path: 'certificates',
+            element: <Navigate to={ROUTES.trustCertificates} replace />,
+          },
+          {
+            path: 'crl',
+            element: <Navigate to={ROUTES.trustCrl} replace />,
+          },
+        ],
+      },
+      {
         path: 'cas',
-        element: <Navigate to="/smime/cas" replace />,
+        element: <Navigate to={ROUTES.trustCas} replace />,
       },
       {
         path: 'certificates',
-        element: <Navigate to="/smime/certificates" replace />,
+        element: <Navigate to={ROUTES.trustCertificates} replace />,
       },
       {
         path: 'crl',
-        element: <Navigate to="/smime/crl" replace />,
+        element: <Navigate to={ROUTES.trustCrl} replace />,
       },
     ],
   },

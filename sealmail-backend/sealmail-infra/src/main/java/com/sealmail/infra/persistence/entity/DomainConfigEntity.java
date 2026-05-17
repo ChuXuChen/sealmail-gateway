@@ -29,6 +29,12 @@ public class DomainConfigEntity {
     @Column(name = "dkim_enabled", nullable = false)
     private boolean dkimEnabled;
 
+    @Column(name = "delivery_host", length = 255)
+    private String deliveryHost;
+
+    @Column(name = "delivery_port")
+    private Integer deliveryPort;
+
     @Column(name = "preferred_algorithm", length = 32)
     private String preferredAlgorithm;
 

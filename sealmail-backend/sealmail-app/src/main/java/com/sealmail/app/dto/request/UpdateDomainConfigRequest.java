@@ -16,5 +16,7 @@ public class UpdateDomainConfigRequest {
     private String preferredAlgorithm;
     private Boolean signingEnabled;
     private Boolean dkimEnabled;
+    private String deliveryHost;
+    private Integer deliveryPort;
     private Boolean active;
 }

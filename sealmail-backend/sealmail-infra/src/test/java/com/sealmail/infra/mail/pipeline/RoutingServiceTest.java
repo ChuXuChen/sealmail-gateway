@@ -198,6 +198,45 @@ class RoutingServiceTest {
     }
 
     @Test
+    void routeOutboundUsesRecipientDomainDeliveryRouteWhenConfigured() {
+        MailRouter mailRouter = mock(MailRouter.class);
+        DomainConfigRepository domainConfigRepository = mock(DomainConfigRepository.class);
+        CertificateRepository certificateRepository = mock(CertificateRepository.class);
+        MailProcessingRepository mailProcessingRepository = mock(MailProcessingRepository.class);
+        RoutingService routingService = new RoutingService(
+                mailRouter,
+                domainConfigRepository,
+                cryptoSelectionService(certificateRepository),
+                mailProcessingRepository,
+                postfixProperties(),
+                null,
+                null
+        );
+
+        EmailAddress sender = new EmailAddress("alice@example.com");
+        EmailAddress recipient = new EmailAddress("bob@partner.test");
+        MailEnvelope envelope = envelope(sender, recipient);
+        DomainConfig local = DomainConfig.create("domain-1", "example.com", true);
+        DomainConfig remote = DomainConfig.create("domain-2", "partner.test", false);
+        remote.configureDeliveryRoute("192.0.2.20", 2525);
+
+        when(domainConfigRepository.findByDomain("example.com")).thenReturn(Optional.of(local));
+        when(domainConfigRepository.findByDomain("partner.test")).thenReturn(Optional.of(remote));
+        when(mailRouter.route(any(), any(), any(), any(), any(), any(), any()))
+                .thenReturn(new RoutingDecision.PassThrough());
+        when(mailProcessingRepository.save(any(MailProcessing.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        Message<byte[]> routed = routingService.routeOutbound(MessageBuilder.withPayload("hello".getBytes())
+                .setHeader(MailProcessingHeaders.CONTEXT, MailProcessingContext.create(envelope))
+                .build());
+
+        MailProcessingContext context = (MailProcessingContext) routed.getHeaders().get(MailProcessingHeaders.CONTEXT);
+        assertEquals("192.0.2.20", context.relayProfile().host());
+        assertEquals(2525, context.relayProfile().port());
+        assertEquals("mailer@example.com", context.relayProfile().envelopeFrom());
+    }
+
+    @Test
     void routeOutboundEnablesDkimSigningFromMailAuthDomainPolicy() {
         MailRouter mailRouter = mock(MailRouter.class);
         DomainConfigRepository domainConfigRepository = mock(DomainConfigRepository.class);

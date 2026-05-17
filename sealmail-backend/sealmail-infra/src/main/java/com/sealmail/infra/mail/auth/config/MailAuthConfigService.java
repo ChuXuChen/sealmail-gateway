@@ -7,7 +7,6 @@ import com.sealmail.domain.policy.DomainName;
 import com.sealmail.infra.crypto.util.PemUtils;
 import com.sealmail.infra.persistence.entity.MailAuthConfigEntity;
 import jakarta.persistence.EntityManager;
-import jakarta.persistence.PersistenceContext;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.nio.file.Files;
@@ -29,14 +28,14 @@ public class MailAuthConfigService {
     private static final TypeReference<List<String>> STRING_LIST = new TypeReference<>() {
     };
 
-    @PersistenceContext
-    private EntityManager entityManager;
-
+    private final EntityManager entityManager;
     private final ObjectMapper objectMapper;
     private final SecretReferenceResolver secretReferenceResolver;
 
-    public MailAuthConfigService(ObjectMapper objectMapper,
+    public MailAuthConfigService(EntityManager entityManager,
+                                 ObjectMapper objectMapper,
                                  SecretReferenceResolver secretReferenceResolver) {
+        this.entityManager = entityManager;
         this.objectMapper = objectMapper;
         this.secretReferenceResolver = secretReferenceResolver;
     }

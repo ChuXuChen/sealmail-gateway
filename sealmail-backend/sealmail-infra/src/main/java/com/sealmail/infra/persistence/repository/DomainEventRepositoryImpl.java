@@ -33,6 +33,7 @@ import com.sealmail.domain.policy.event.QuarantinePolicyChanged;
 import com.sealmail.domain.policy.event.RelayPolicyChanged;
 import com.sealmail.domain.policy.event.SigningDisabled;
 import com.sealmail.domain.policy.event.SigningEnabled;
+import com.sealmail.domain.policy.event.SmimeSuitePolicyChanged;
 import com.sealmail.domain.quarantine.event.QuarantineCreated;
 import com.sealmail.domain.quarantine.event.QuarantineRejected;
 import com.sealmail.domain.quarantine.event.QuarantineReleaseRestored;
@@ -42,7 +43,6 @@ import com.sealmail.domain.shared.event.DomainEvent;
 import com.sealmail.domain.shared.repository.DomainEventRepository;
 import com.sealmail.infra.persistence.entity.DomainEventEntity;
 import jakarta.persistence.EntityManager;
-import jakarta.persistence.PersistenceContext;
 import jakarta.persistence.TypedQuery;
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
@@ -88,6 +88,7 @@ public class DomainEventRepositoryImpl implements DomainEventRepository {
             Map.entry(RelayPolicyChanged.class.getSimpleName(), RelayPolicyChanged.class),
             Map.entry(SigningDisabled.class.getSimpleName(), SigningDisabled.class),
             Map.entry(SigningEnabled.class.getSimpleName(), SigningEnabled.class),
+            Map.entry(SmimeSuitePolicyChanged.class.getSimpleName(), SmimeSuitePolicyChanged.class),
             Map.entry(QuarantineCreated.class.getSimpleName(), QuarantineCreated.class),
             Map.entry(QuarantineRejected.class.getSimpleName(), QuarantineRejected.class),
             Map.entry(QuarantineReleaseRestored.class.getSimpleName(), QuarantineReleaseRestored.class),
@@ -127,6 +128,7 @@ public class DomainEventRepositoryImpl implements DomainEventRepository {
             Map.entry(RelayPolicyChanged.class, event -> ((RelayPolicyChanged) event).getConfigId()),
             Map.entry(SigningDisabled.class, event -> ((SigningDisabled) event).getConfigId()),
             Map.entry(SigningEnabled.class, event -> ((SigningEnabled) event).getConfigId()),
+            Map.entry(SmimeSuitePolicyChanged.class, event -> ((SmimeSuitePolicyChanged) event).getConfigId()),
             Map.entry(QuarantineCreated.class, event -> ((QuarantineCreated) event).getQuarantineId()),
             Map.entry(QuarantineRejected.class, event -> ((QuarantineRejected) event).getQuarantineId()),
             Map.entry(QuarantineReleaseRestored.class, event -> ((QuarantineReleaseRestored) event).getQuarantineId()),
@@ -134,12 +136,11 @@ public class DomainEventRepositoryImpl implements DomainEventRepository {
             Map.entry(AuditEvent.class, event -> ((AuditEvent) event).getResourceId())
     );
 
-    @PersistenceContext
-    private EntityManager entityManager;
-
+    private final EntityManager entityManager;
     private final ObjectMapper objectMapper;
 
-    public DomainEventRepositoryImpl(ObjectMapper objectMapper) {
+    public DomainEventRepositoryImpl(EntityManager entityManager, ObjectMapper objectMapper) {
+        this.entityManager = entityManager;
         this.objectMapper = objectMapper;
     }
 

@@ -8,7 +8,6 @@ import com.sealmail.infra.events.DomainEventPublisher;
 import com.sealmail.infra.persistence.entity.DomainConfigEntity;
 import com.sealmail.infra.persistence.mapper.DomainConfigMapper;
 import jakarta.persistence.EntityManager;
-import jakarta.persistence.PersistenceContext;
 import jakarta.persistence.TypedQuery;
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
@@ -21,14 +20,14 @@ import java.util.Optional;
 @Transactional
 public class DomainConfigRepositoryImpl implements DomainConfigRepository {
 
-    @PersistenceContext
-    private EntityManager entityManager;
-
+    private final EntityManager entityManager;
     private final DomainConfigMapper mapper;
     private final DomainEventPublisher domainEventPublisher;
 
-    public DomainConfigRepositoryImpl(DomainConfigMapper mapper,
+    public DomainConfigRepositoryImpl(EntityManager entityManager,
+                                      DomainConfigMapper mapper,
                                       DomainEventPublisher domainEventPublisher) {
+        this.entityManager = entityManager;
         this.mapper = mapper;
         this.domainEventPublisher = domainEventPublisher;
     }

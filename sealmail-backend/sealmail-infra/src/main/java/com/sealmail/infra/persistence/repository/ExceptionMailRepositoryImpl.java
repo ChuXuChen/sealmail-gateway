@@ -7,7 +7,6 @@ import com.sealmail.infra.events.DomainEventPublisher;
 import com.sealmail.infra.persistence.entity.ExceptionMailEntity;
 import com.sealmail.infra.persistence.mapper.ExceptionMailMapper;
 import jakarta.persistence.EntityManager;
-import jakarta.persistence.PersistenceContext;
 import jakarta.persistence.TypedQuery;
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
@@ -19,13 +18,14 @@ import java.util.Optional;
 @Transactional
 public class ExceptionMailRepositoryImpl implements ExceptionMailRepository {
 
-    @PersistenceContext
-    private EntityManager entityManager;
-
+    private final EntityManager entityManager;
     private final ExceptionMailMapper mapper;
     private final DomainEventPublisher domainEventPublisher;
 
-    public ExceptionMailRepositoryImpl(ExceptionMailMapper mapper, DomainEventPublisher domainEventPublisher) {
+    public ExceptionMailRepositoryImpl(EntityManager entityManager,
+                                       ExceptionMailMapper mapper,
+                                       DomainEventPublisher domainEventPublisher) {
+        this.entityManager = entityManager;
         this.mapper = mapper;
         this.domainEventPublisher = domainEventPublisher;
     }

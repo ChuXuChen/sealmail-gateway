@@ -17,6 +17,8 @@ public class DomainConfig extends AggregateRoot<String> {
     private PreferredAlgorithm preferredAlgorithm;
     private boolean signingEnabled;
     private boolean dkimEnabled;
+    private String deliveryHost;
+    private Integer deliveryPort;
     private boolean active;
 
     private DomainConfig(String id, String domain, boolean localDomain) {
@@ -125,7 +127,47 @@ public class DomainConfig extends AggregateRoot<String> {
         registerEvent(new DkimSettingChanged(getId(), dkimEnabled));
     }
 
+    public void configureDeliveryRoute(String host, Integer port) {
+        String normalizedHost = normalizeDeliveryHost(host);
+        if (normalizedHost == null) {
+            this.deliveryHost = null;
+            this.deliveryPort = null;
+            return;
+        }
+        if (port == null || port < 1 || port > 65535) {
+            throw new IllegalArgumentException("外部投递端口必须在 1-65535 之间");
+        }
+        this.deliveryHost = normalizedHost;
+        this.deliveryPort = port;
+    }
+
+    public boolean hasDeliveryRoute() {
+        return deliveryHost != null && !deliveryHost.isBlank() && deliveryPort != null;
+    }
+
+    public String getDeliveryHost() {
+        return deliveryHost;
+    }
+
+    public Integer getDeliveryPort() {
+        return deliveryPort;
+    }
+
     public boolean isActive() {
         return active;
+    }
+
+    private String normalizeDeliveryHost(String host) {
+        if (host == null || host.isBlank()) {
+            return null;
+        }
+        String normalizedHost = host.trim();
+        if (normalizedHost.length() > 255) {
+            throw new IllegalArgumentException("外部投递主机长度不能超过 255 个字符");
+        }
+        if (normalizedHost.chars().anyMatch(Character::isWhitespace)) {
+            throw new IllegalArgumentException("外部投递主机不能包含空白字符");
+        }
+        return normalizedHost;
     }
 }

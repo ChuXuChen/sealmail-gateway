@@ -5,6 +5,7 @@ import type {
   GmEdgePolicyRequest,
   QuarantinePolicy,
   RelayPolicy,
+  SmimeSuitePolicyRequest,
   SystemSettings as SystemSettingsSnapshot,
 } from '../../types';
 
@@ -24,6 +25,8 @@ export type RelayPolicyFormValues = Partial<RelayPolicy> & {
 export type QuarantinePolicyFormValues = Partial<QuarantinePolicy>;
 
 export type GmEdgePolicyFormValues = GmEdgePolicyRequest;
+
+export type SmimeSuitePolicyFormValues = SmimeSuitePolicyRequest;
 
 export const defaultGmEdgePolicyValues: GmEdgePolicyFormValues = {
   enabled: false,

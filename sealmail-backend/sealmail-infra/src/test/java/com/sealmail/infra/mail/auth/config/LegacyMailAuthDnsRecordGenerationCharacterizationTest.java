@@ -5,7 +5,6 @@ import com.sealmail.domain.config.SecretReferenceResolver;
 import com.sealmail.infra.persistence.entity.MailAuthConfigEntity;
 import jakarta.persistence.EntityManager;
 import org.junit.jupiter.api.Test;
-import org.springframework.test.util.ReflectionTestUtils;
 
 import java.time.Instant;
 import java.util.List;
@@ -52,11 +51,10 @@ class LegacyMailAuthDnsRecordGenerationCharacterizationTest {
     }
 
     private static MailAuthConfigService service(EntityManager entityManager) {
-        MailAuthConfigService service = new MailAuthConfigService(
+        return new MailAuthConfigService(
+                entityManager,
                 new ObjectMapper(),
                 unresolvedSecrets());
-        ReflectionTestUtils.setField(service, "entityManager", entityManager);
-        return service;
     }
 
     private static MailAuthConfigEntity entity() {

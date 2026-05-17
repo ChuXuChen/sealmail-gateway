@@ -18,6 +18,8 @@ public class DomainConfigMapper {
         entity.setPreferredAlgorithm(domainConfig.getPreferredAlgorithm().name());
         entity.setSigningEnabled(domainConfig.isSigningEnabled());
         entity.setDkimEnabled(domainConfig.isDkimEnabled());
+        entity.setDeliveryHost(domainConfig.getDeliveryHost());
+        entity.setDeliveryPort(domainConfig.getDeliveryPort());
         entity.setActive(domainConfig.isActive());
         return entity;
     }
@@ -47,6 +49,7 @@ public class DomainConfigMapper {
             } catch (Exception ignored) {}
         }
         config.setDkimEnabled(entity.isDkimEnabled());
+        config.configureDeliveryRoute(entity.getDeliveryHost(), entity.getDeliveryPort());
 
         config.clearDomainEvents();
         return config;

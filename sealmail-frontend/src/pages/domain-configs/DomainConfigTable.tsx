@@ -92,6 +92,20 @@ const DomainConfigTable: React.FC<DomainConfigTableProps> = ({
       render: (enabled: boolean) => (enabled ? <Tag color="success">已启用</Tag> : <Tag color="default">未启用</Tag>),
     },
     {
+      title: '外部发送地址',
+      key: 'deliveryRoute',
+      render: (_, record) => {
+        if (record.localDomain) {
+          return <Tag color="default">本地</Tag>;
+        }
+        return record.deliveryHost && record.deliveryPort ? (
+          <Tag color="processing">{record.deliveryHost}:{record.deliveryPort}</Tag>
+        ) : (
+          <Tag color="default">默认</Tag>
+        );
+      },
+    },
+    {
       title: '状态',
       dataIndex: 'active',
       key: 'active',

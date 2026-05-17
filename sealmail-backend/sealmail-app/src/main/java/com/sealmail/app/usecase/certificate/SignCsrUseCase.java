@@ -12,7 +12,6 @@ import com.sealmail.domain.certificate.CertificateId;
 import com.sealmail.domain.certificate.CertificateRepository;
 import com.sealmail.domain.certificate.spi.CertificateCryptoPort;
 import com.sealmail.domain.shared.model.EmailAddress;
-import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -20,7 +19,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
-@RequiredArgsConstructor
 @Transactional
 public class SignCsrUseCase {
 
@@ -32,9 +30,24 @@ public class SignCsrUseCase {
     private final CertificateCryptoPort certificateCryptoPort;
     private final CertificateMaterialAssembler certificateMaterialAssembler;
     private final CertificateChainService certificateChainService;
+    private final String crlBaseUrl;
 
-    @Value("${sealmail.ca.crl-base-url:http://localhost:8080/api/v1/crl/}")
-    private String crlBaseUrl;
+    public SignCsrUseCase(CertificateRepository certificateRepository,
+                          CertificateDtoMapper mapper,
+                          PermissionChecker permissionChecker,
+                          CertificateCryptoPort certificateCryptoPort,
+                          CertificateMaterialAssembler certificateMaterialAssembler,
+                          CertificateChainService certificateChainService,
+                          @Value("${sealmail.ca.crl-base-url:http://localhost:8080/api/v1/crl/}")
+                          String crlBaseUrl) {
+        this.certificateRepository = certificateRepository;
+        this.mapper = mapper;
+        this.permissionChecker = permissionChecker;
+        this.certificateCryptoPort = certificateCryptoPort;
+        this.certificateMaterialAssembler = certificateMaterialAssembler;
+        this.certificateChainService = certificateChainService;
+        this.crlBaseUrl = crlBaseUrl;
+    }
 
     public CertificateResponse execute(SignCsrRequest request, UserContext user) {
         Certificate caCert = certificateRepository.findById(new CertificateId(request.getCaCertId()))

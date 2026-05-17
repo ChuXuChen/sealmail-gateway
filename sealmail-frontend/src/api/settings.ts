@@ -7,6 +7,8 @@ import type {
   RelayPolicy,
   RelayPolicyRequest,
   SendProtectedMailRequest,
+  SmimeSuitePolicy,
+  SmimeSuitePolicyRequest,
   SystemSettings,
 } from '../types';
 import apiClient from './http';
@@ -34,6 +36,12 @@ export const runtimePolicyApi = {
 
   updateGmEdge: (data: GmEdgePolicyRequest) =>
     apiClient.put<ApiResponse<GmEdgePolicy>>('/api/v1/runtime-policies/gm-edge', data),
+
+  getSmimeSuite: () =>
+    apiClient.get<ApiResponse<SmimeSuitePolicy>>('/api/v1/runtime-policies/smime-suite'),
+
+  updateSmimeSuite: (data: SmimeSuitePolicyRequest) =>
+    apiClient.put<ApiResponse<SmimeSuitePolicy>>('/api/v1/runtime-policies/smime-suite', data),
 };
 
 export const mailTestApi = {

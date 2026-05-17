@@ -37,6 +37,8 @@ const DomainConfigs: React.FC = () => {
       preferredAlgorithm: 'AUTO',
       signingEnabled: false,
       dkimEnabled: false,
+      deliveryHost: undefined,
+      deliveryPort: 25,
       active: true,
     });
     setCreateModalVisible(true);
@@ -49,6 +51,9 @@ const DomainConfigs: React.FC = () => {
       preferredAlgorithm: domain.preferredAlgorithm || 'AUTO',
       signingEnabled: domain.signingEnabled,
       dkimEnabled: domain.dkimEnabled,
+      localDomain: domain.localDomain,
+      deliveryHost: domain.deliveryHost,
+      deliveryPort: domain.deliveryPort || 25,
       active: domain.active,
     });
     setEditModalVisible(true);
@@ -80,7 +85,7 @@ const DomainConfigs: React.FC = () => {
     <PageShell>
       <PageHeader
         title="域名配置"
-        description="维护本地域和远程域的加密策略、签名开关与启用状态。"
+        description="维护本地域和远程域的加密策略、签名开关、固定投递目标与启用状态。"
         actions={(
           <Button type="primary" icon={<PlusOutlined />} onClick={openCreateModal}>
             添加域名

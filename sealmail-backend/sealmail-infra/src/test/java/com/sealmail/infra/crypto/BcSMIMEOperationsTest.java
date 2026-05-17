@@ -51,7 +51,7 @@ class BcSMIMEOperationsTest {
 
     @BeforeEach
     void setUp() {
-        smimeOperations = new BcSMIMEOperations(new SmimeCryptoProperties());
+        smimeOperations = new BcSMIMEOperations(new SmimeCryptoProperties(), null);
     }
 
     @Test
@@ -185,13 +185,15 @@ class BcSMIMEOperationsTest {
     @Test
     void testSM2EncryptAndDecrypt() throws Exception {
         // 确保 SM4OIDProvider 已注册
-        smimeOperations = new BcSMIMEOperations(new SmimeCryptoProperties());
+        smimeOperations = new BcSMIMEOperations(new SmimeCryptoProperties(), null);
         Provider sm4oid = Security.getProvider("SM4OID");
         assertNotNull(sm4oid, "SM4OIDProvider should be registered by BcSMIMEOperations");
 
         // 验证 SM4 OID 可被 Cipher.getInstance 解析
         Cipher sm4Cipher = Cipher.getInstance("1.2.156.10197.1.104.2");
         assertNotNull(sm4Cipher, "SM4 OID cipher should be resolvable");
+        Cipher sm4GcmCipher = Cipher.getInstance("1.2.156.10197.1.104.8");
+        assertNotNull(sm4GcmCipher, "SM4 GCM OID cipher should be resolvable");
 
         // 生成 SM2 密钥对和证书
         KeyPairGenerator sm2Kpg = KeyPairGenerator.getInstance("EC", "BC");
@@ -296,6 +298,33 @@ class BcSMIMEOperationsTest {
     }
 
     @Test
+    void gmSm4GcmSuiteCanBeConfigured() throws Exception {
+        KeyPairGenerator sm2Kpg = KeyPairGenerator.getInstance("EC", "BC");
+        sm2Kpg.initialize(new java.security.spec.ECGenParameterSpec("sm2p256v1"));
+        KeyPair sm2KeyPair = sm2Kpg.generateKeyPair();
+        X509Certificate sm2Cert = generateSm2SelfSignedCertificate(sm2KeyPair);
+        String sm2CertPem = convertCertToPem(sm2Cert);
+        String sm2PrivPem = convertPrivateKeyToPem(sm2KeyPair.getPrivate());
+
+        SmimeCryptoProperties properties = new SmimeCryptoProperties();
+        properties.setDefaultGmSuite(SmimeAlgorithmSuites.GM_SM4_GCM);
+        smimeOperations = new BcSMIMEOperations(properties, null);
+
+        byte[] encrypted = smimeOperations.encryptMultiple(
+                "From: sender@example.com\r\n\r\nsm4 gcm content".getBytes(),
+                List.of(sm2CertPem),
+                SMIMEEncryptionSuite.GM);
+
+        SMIMEEnveloped enveloped = parseEnvelope(encrypted);
+        assertEquals(
+                GMObjectIdentifiers.sms4_gcm.getId(),
+                enveloped.getContentEncryptionAlgorithm().getAlgorithm().getId());
+
+        byte[] decrypted = smimeOperations.decrypt(encrypted, sm2PrivPem, sm2CertPem);
+        assertTrue(new String(decrypted).contains("sm4 gcm content"));
+    }
+
+    @Test
     void standardEnvelopeUsesConfiguredRsaAesAlgorithms() throws Exception {
         byte[] encrypted = smimeOperations.encryptMultiple(
                 "From: sender@example.com\r\n\r\nstandard".getBytes(),
@@ -312,6 +341,43 @@ class BcSMIMEOperationsTest {
         assertEquals(
                 "1.2.840.113549.1.1.1",
                 recipients.iterator().next().getKeyEncryptionAlgOID());
+    }
+
+    @Test
+    void standardDefaultSuiteCanBeConfigured() throws Exception {
+        SmimeCryptoProperties properties = new SmimeCryptoProperties();
+        properties.setDefaultStandardSuite(SmimeAlgorithmSuites.STANDARD_AES_128_CBC);
+        smimeOperations = new BcSMIMEOperations(properties, null);
+
+        byte[] encrypted = smimeOperations.encryptMultiple(
+                "From: sender@example.com\r\n\r\nstandard aes128".getBytes(),
+                List.of(certPem),
+                SMIMEEncryptionSuite.STANDARD);
+
+        SMIMEEnveloped enveloped = parseEnvelope(encrypted);
+        assertEquals(
+                CMSAlgorithm.AES128_CBC.getId(),
+                enveloped.getContentEncryptionAlgorithm().getAlgorithm().getId());
+    }
+
+    @Test
+    void standardAesGcmSuiteCanBeConfigured() throws Exception {
+        SmimeCryptoProperties properties = new SmimeCryptoProperties();
+        properties.setDefaultStandardSuite(SmimeAlgorithmSuites.STANDARD_AES_256_GCM);
+        smimeOperations = new BcSMIMEOperations(properties, null);
+
+        byte[] encrypted = smimeOperations.encryptMultiple(
+                "From: sender@example.com\r\n\r\ngcm content".getBytes(),
+                List.of(certPem),
+                SMIMEEncryptionSuite.STANDARD);
+
+        SMIMEEnveloped enveloped = parseEnvelope(encrypted);
+        assertEquals(
+                CMSAlgorithm.AES256_GCM.getId(),
+                enveloped.getContentEncryptionAlgorithm().getAlgorithm().getId());
+
+        byte[] decrypted = smimeOperations.decrypt(encrypted, privateKeyPem, certPem);
+        assertTrue(new String(decrypted).contains("gcm content"));
     }
 
     // ========== 辅助方法 ==========

@@ -13,7 +13,6 @@ import com.sealmail.infra.persistence.mapper.CertificateMapper;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.TypedQuery;
 import org.junit.jupiter.api.Test;
-import org.springframework.test.util.ReflectionTestUtils;
 
 import java.math.BigInteger;
 import java.time.Instant;
@@ -85,18 +84,8 @@ class CertificateRepositoryImplTest {
 
         CertificateRepositoryImpl repository = repositoryBackedBy(
                 List.of(mapper.toEntity(first)),
-                List.of(mapper.toEntity(intermediate), mapper.toEntity(root)),
+                List.of(mapper.toEntity(bound), mapper.toEntity(intermediate), mapper.toEntity(root)),
                 bindingRepository);
-        EntityManager entityManager = entityManagerWith(List.of(
-                mapper.toEntity(bound),
-                mapper.toEntity(intermediate),
-                mapper.toEntity(root)));
-        @SuppressWarnings("unchecked")
-        TypedQuery<CertificateEntity> query = mock(TypedQuery.class);
-        when(query.setParameter(anyString(), org.mockito.ArgumentMatchers.any())).thenReturn(query);
-        when(query.getResultList()).thenReturn(List.of(mapper.toEntity(first)));
-        when(entityManager.createQuery(anyString(), eq(CertificateEntity.class))).thenReturn(query);
-        ReflectionTestUtils.setField(repository, "entityManager", entityManager);
 
         List<Certificate> result = repository.findTrustedForEncryption(bound.getOwner());
 
@@ -128,10 +117,10 @@ class CertificateRepositoryImplTest {
         when(entityManager.createQuery(anyString(), eq(CertificateEntity.class))).thenReturn(query);
 
         CertificateRepositoryImpl repository = new CertificateRepositoryImpl(
+                entityManager,
                 mapper,
                 mock(DomainEventPublisher.class),
                 bindingRepository);
-        ReflectionTestUtils.setField(repository, "entityManager", entityManager);
         return repository;
     }
 
