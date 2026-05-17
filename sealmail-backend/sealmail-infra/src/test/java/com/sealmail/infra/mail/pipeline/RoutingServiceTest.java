@@ -67,7 +67,9 @@ class RoutingServiceTest {
                 domainConfigRepository,
                 cryptoSelectionService(certificateRepository),
                 mailProcessingRepository,
-                postfixProperties
+                postfixProperties,
+                null,
+                null
         );
 
         EmailAddress sender = new EmailAddress("alice@example.com");
@@ -123,7 +125,9 @@ class RoutingServiceTest {
                 domainConfigRepository,
                 cryptoSelectionService(certificateRepository),
                 mailProcessingRepository,
-                postfixProperties
+                postfixProperties,
+                null,
+                null
         );
 
         EmailAddress sender = new EmailAddress("sender@example.com");
@@ -169,7 +173,9 @@ class RoutingServiceTest {
                 domainConfigRepository,
                 cryptoSelectionService(certificateRepository),
                 mailProcessingRepository,
-                postfixProperties()
+                postfixProperties(),
+                null,
+                null
         );
 
         EmailAddress sender = new EmailAddress("alice@example.com");
@@ -236,7 +242,9 @@ class RoutingServiceTest {
                 domainConfigRepository,
                 cryptoSelectionService(certificateRepository),
                 mailProcessingRepository,
-                postfixProperties()
+                postfixProperties(),
+                null,
+                null
         );
 
         EmailAddress sender = new EmailAddress("alice@example.com");
@@ -276,7 +284,9 @@ class RoutingServiceTest {
                 domainConfigRepository,
                 cryptoSelectionService(certificateRepository),
                 mailProcessingRepository,
-                postfixProperties()
+                postfixProperties(),
+                null,
+                null
         );
 
         EmailAddress sender = new EmailAddress("alice@example.com");
@@ -319,7 +329,9 @@ class RoutingServiceTest {
                 domainConfigRepository,
                 cryptoSelectionService(certificateRepository),
                 mailProcessingRepository,
-                postfixProperties()
+                postfixProperties(),
+                null,
+                null
         );
 
         EmailAddress sender = new EmailAddress("alice@example.com");
@@ -354,7 +366,9 @@ class RoutingServiceTest {
                 domainConfigRepository,
                 cryptoSelectionService(certificateRepository),
                 mailProcessingRepository,
-                postfixProperties()
+                postfixProperties(),
+                null,
+                null
         );
 
         EmailAddress sender = new EmailAddress("alice@example.com");
@@ -397,7 +411,9 @@ class RoutingServiceTest {
                 domainConfigRepository,
                 cryptoSelectionService(certificateRepository),
                 mailProcessingRepository,
-                postfixProperties()
+                postfixProperties(),
+                null,
+                null
         );
 
         EmailAddress sender = new EmailAddress("sender@remote.test");
@@ -467,7 +483,6 @@ class RoutingServiceTest {
         properties.setAfterFilterPort(10026);
         properties.setOutboundPort(10027);
         properties.setEnvelopeFrom("mailer@example.com");
-        properties.setUseTls(false);
         properties.setTimeout(10000);
         return properties;
     }

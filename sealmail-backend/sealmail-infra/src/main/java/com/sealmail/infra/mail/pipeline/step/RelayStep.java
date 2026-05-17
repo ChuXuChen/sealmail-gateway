@@ -16,7 +16,6 @@ import com.sealmail.infra.mail.relay.SmtpRelayConnectionSettings;
 import com.sealmail.infra.mail.relay.SmtpRelayRequest;
 import com.sealmail.infra.mail.pipeline.MailProcessingHeaders;
 import com.sealmail.infra.mail.pipeline.MailProcessingAuditEvents;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.messaging.Message;
@@ -38,12 +37,6 @@ public class RelayStep {
     private final SmtpRelayClient smtpRelayClient;
     private final DomainEventPublisher domainEventPublisher;
 
-    public RelayStep(RelayPolicyService relayPolicyService,
-                     SmtpRelayClient smtpRelayClient) {
-        this(relayPolicyService, smtpRelayClient, null);
-    }
-
-    @Autowired
     public RelayStep(RelayPolicyService relayPolicyService,
                      SmtpRelayClient smtpRelayClient,
                      DomainEventPublisher domainEventPublisher) {
@@ -104,16 +97,14 @@ public class RelayStep {
             SmtpRelayConnectionSettings connection = new SmtpRelayConnectionSettings(
                     host,
                     port,
-                    relayProfile.transportSecurity(),
                     username,
                     password,
                     timeout
             );
 
-            log.info("=== RELAYING TO: {}:{} mode={} userConfigured={} ===",
+            log.info("=== RELAYING TO: {}:{} mode=PLAIN userConfigured={} ===",
                     host,
                     port,
-                    connection.useImplicitTls() ? "SMTPS" : (connection.useStartTls() ? "STARTTLS" : "PLAIN"),
                     hasText(username));
             smtpRelayClient.send(new SmtpRelayRequest(connection, envelopeFrom, recipients, mailContent));
 

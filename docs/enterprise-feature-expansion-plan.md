@@ -215,7 +215,6 @@ npm run build
 - Postfix/content-filter 对接说明。
 - SMTP 探测。
 - 投递失败诊断。
-- TLS/STARTTLS 状态。
 - 队列与失败事件的最小可观测性。
 
 实施步骤：
@@ -224,19 +223,16 @@ npm run build
 2. 新增 MTA 设置页面或重组 `Settings` 邮件区域：
    - SMTP 入口。
    - Relay 策略。
-   - TLS/STARTTLS。
    - Postfix/content-filter 示例。
    - 探测工具。
 3. 增强 SMTP 探测结果：
    - DNS 可达。
    - TCP 可达。
    - EHLO 响应。
-   - STARTTLS 可用性。
    - AUTH 支持。
    - MAIL FROM/RCPT TO 预检。
 4. Relay 失败分类：
    - 连接失败。
-   - TLS 失败。
    - AUTH 失败。
    - 4xx 临时失败。
    - 5xx 永久失败。
@@ -721,4 +717,3 @@ npm run build
 - 前端能支撑日常运营、排障和隔离处置。
 - 后端全量测试和前端 build/lint 通过。
 - 文档足以支撑企业试用部署和常见故障排查。
-

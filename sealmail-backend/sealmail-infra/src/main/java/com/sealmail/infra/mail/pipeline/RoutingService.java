@@ -9,7 +9,6 @@ import com.sealmail.domain.quarantine.QuarantineReason;
 import com.sealmail.domain.shared.model.EmailAddress;
 import com.sealmail.infra.config.properties.PostfixProperties;
 import com.sealmail.infra.events.DomainEventPublisher;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.slf4j.Logger;
 import org.springframework.messaging.Message;
 import org.springframework.messaging.support.MessageBuilder;
@@ -32,16 +31,6 @@ public class RoutingService {
     private final MailAuthPolicyRepository mailAuthPolicyRepository;
     private final DomainEventPublisher domainEventPublisher;
 
-    public RoutingService(MailRouter mailRouter,
-                           DomainConfigRepository domainConfigRepository,
-                           MailCryptoSelectionService cryptoSelectionService,
-                           MailProcessingRepository mailProcessingRepository,
-                           PostfixProperties postfixProperties) {
-        this(mailRouter, domainConfigRepository, cryptoSelectionService, mailProcessingRepository,
-                postfixProperties, null, null);
-    }
-
-    @Autowired
     public RoutingService(MailRouter mailRouter,
                            DomainConfigRepository domainConfigRepository,
                            MailCryptoSelectionService cryptoSelectionService,
@@ -393,7 +382,6 @@ public class RoutingService {
         return new RelayProfile(
                 postfixProperties.getHost(),
                 port,
-                SmtpTransportSecurity.fromLegacyUseTls(postfixProperties.isUseTls(), port),
                 "",
                 "",
                 postfixProperties.getTimeout(),

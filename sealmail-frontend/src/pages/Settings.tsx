@@ -10,6 +10,7 @@ import SettingsSummary from './settings/SettingsSummary';
 import { ProbeModal, TestMailModal } from './settings/SettingsModals';
 import ToolsSection from './settings/ToolsSection';
 import type {
+  GmEdgePolicyFormValues,
   QuarantinePolicyFormValues,
   RelayPolicyFormValues,
   SectionKey,
@@ -24,7 +25,10 @@ const Settings: React.FC = () => {
   const [testForm] = Form.useForm<TestMailValues>();
   const [relayForm] = Form.useForm<RelayPolicyFormValues>();
   const [quarantineForm] = Form.useForm<QuarantinePolicyFormValues>();
+  const [gmEdgeForm] = Form.useForm<GmEdgePolicyFormValues>();
   const {
+    gmEdgePolicy,
+    handleGmEdgePolicySave,
     handleProbe,
     handleQuarantinePolicySave,
     handleRelayPolicySave,
@@ -39,6 +43,7 @@ const Settings: React.FC = () => {
     settings,
     testLoading,
   } = useSettings({
+    gmEdgeForm,
     quarantineForm,
     relayForm,
     testForm,
@@ -63,10 +68,13 @@ const Settings: React.FC = () => {
           <MailSection
             quarantineForm={quarantineForm}
             quarantinePolicy={quarantinePolicy}
+            gmEdgeForm={gmEdgeForm}
+            gmEdgePolicy={gmEdgePolicy}
             relayForm={relayForm}
             relayPolicy={relayPolicy}
             settings={settings}
             onQuarantinePolicySave={handleQuarantinePolicySave}
+            onGmEdgePolicySave={handleGmEdgePolicySave}
             onRelayPolicySave={handleRelayPolicySave}
           />
         );

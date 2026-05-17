@@ -14,6 +14,7 @@ import com.sealmail.domain.mailsecurity.event.MailQuarantined;
 import com.sealmail.domain.mailsecurity.event.MailSigned;
 import com.sealmail.domain.policy.event.DlpPatternConfigChanged;
 import com.sealmail.domain.policy.event.DlpSelectionConfigChanged;
+import com.sealmail.domain.policy.event.GmEdgePolicyChanged;
 import com.sealmail.domain.policy.event.MailAuthConfigChanged;
 import com.sealmail.domain.policy.event.QuarantinePolicyChanged;
 import com.sealmail.domain.policy.event.RelayPolicyChanged;
@@ -162,6 +163,18 @@ class DomainEventAuditListenerTest {
         AuditLog saved = repository.single();
         assertEquals(AuditLogType.SYSTEM_CONFIG_CHANGED, saved.getType());
         assertEquals("RELAY_POLICY", saved.getResourceType());
+        assertEquals("default", saved.getResourceId());
+    }
+
+    @Test
+    void recordsGmEdgePolicyAuditLog() {
+        listener.onDomainEvent(new GmEdgePolicyChanged(
+                "default",
+                List.of("inbound", "tls", "routes")));
+
+        AuditLog saved = repository.single();
+        assertEquals(AuditLogType.SYSTEM_CONFIG_CHANGED, saved.getType());
+        assertEquals("GM_EDGE_POLICY", saved.getResourceType());
         assertEquals("default", saved.getResourceId());
     }
 

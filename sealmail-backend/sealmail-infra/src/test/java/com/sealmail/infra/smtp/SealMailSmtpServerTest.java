@@ -164,7 +164,6 @@ class SealMailSmtpServerTest {
                 inboundChannel,
                 outboundChannel,
                 domainConfigRepository,
-                secretRef -> null,
                 errorHandlingState
         );
     }

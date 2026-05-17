@@ -1,6 +1,5 @@
 package com.sealmail.infra.smtp;
 
-import com.sealmail.domain.config.SecretReferenceResolver;
 import com.sealmail.domain.mailsecurity.MailDirection;
 import com.sealmail.domain.mailsecurity.MailEnvelope;
 import com.sealmail.domain.mailsecurity.MailProcessingContext;
@@ -9,16 +8,11 @@ import com.sealmail.domain.policy.DomainConfig;
 import com.sealmail.domain.policy.DomainConfigRepository;
 import com.sealmail.domain.shared.model.EmailAddress;
 import com.sealmail.infra.config.properties.SmtpServerProperties;
-import com.sealmail.infra.config.properties.TransportTlsProperties;
-import com.sealmail.infra.crypto.util.PemUtils;
 import com.sealmail.infra.mail.pipeline.MailFlowErrorHandlingState;
 import com.sealmail.infra.mail.pipeline.MailProcessingHeaders;
-import com.sealmail.infra.tls.TransportTlsContextFactory;
 import jakarta.annotation.PreDestroy;
-import org.bouncycastle.jce.provider.BouncyCastleProvider;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.event.EventListener;
@@ -30,16 +24,8 @@ import org.subethamail.smtp.MessageHandler;
 import org.subethamail.smtp.MessageHandlerFactory;
 import org.subethamail.smtp.server.SMTPServer;
 
-import javax.net.ssl.KeyManagerFactory;
-import javax.net.ssl.SSLContext;
-import javax.net.ssl.SSLSocket;
 import java.io.*;
-import java.net.Socket;
 import java.net.InetSocketAddress;
-import java.nio.file.Files;
-import java.nio.file.Paths;
-import java.security.*;
-import java.security.cert.X509Certificate;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -53,42 +39,19 @@ public class SealMailSmtpServer {
     private final MessageChannel mailInboundChannel;
     private final MessageChannel mailOutboundChannel;
     private final DomainConfigRepository domainConfigRepository;
-    private final SecretReferenceResolver secretReferenceResolver;
     private final MailFlowErrorHandlingState errorHandlingState;
-    private final TransportTlsContextFactory transportTlsContextFactory;
-    private SSLContext smtpServerSslContext;
     private final AtomicBoolean running = new AtomicBoolean(false);
 
     public SealMailSmtpServer(SmtpServerProperties properties,
                               @Qualifier("mailInboundChannel") MessageChannel mailInboundChannel,
                               @Qualifier("mailOutboundChannel") MessageChannel mailOutboundChannel,
                               DomainConfigRepository domainConfigRepository,
-                              SecretReferenceResolver secretReferenceResolver,
                               MailFlowErrorHandlingState errorHandlingState) {
-        this(properties,
-                mailInboundChannel,
-                mailOutboundChannel,
-                domainConfigRepository,
-                secretReferenceResolver,
-                errorHandlingState,
-                new TransportTlsContextFactory(new TransportTlsProperties()));
-    }
-
-    @Autowired
-    public SealMailSmtpServer(SmtpServerProperties properties,
-                              @Qualifier("mailInboundChannel") MessageChannel mailInboundChannel,
-                              @Qualifier("mailOutboundChannel") MessageChannel mailOutboundChannel,
-                              DomainConfigRepository domainConfigRepository,
-                              SecretReferenceResolver secretReferenceResolver,
-                              MailFlowErrorHandlingState errorHandlingState,
-                              TransportTlsContextFactory transportTlsContextFactory) {
         this.mailInboundChannel = mailInboundChannel;
         this.mailOutboundChannel = mailOutboundChannel;
         this.domainConfigRepository = domainConfigRepository;
-        this.secretReferenceResolver = secretReferenceResolver;
         this.errorHandlingState = errorHandlingState;
-        this.transportTlsContextFactory = transportTlsContextFactory;
-        this.smtpServer = new SealMailSubEthaServer(new SealMailMessageHandlerFactory());
+        this.smtpServer = new SMTPServer(new SealMailMessageHandlerFactory());
         this.smtpServer.setPort(properties.getPort());
         try {
             this.smtpServer.setBindAddress(java.net.InetAddress.getByName(properties.getBindAddress()));
@@ -97,89 +60,6 @@ public class SealMailSmtpServer {
         }
         this.smtpServer.setMaxConnections(properties.getMaxConnections());
         this.smtpServer.setMaxMessageSize(properties.getMaxMessageSize());
-
-        if (properties.isEnableStartTls() && hasTlsMaterial(properties)) {
-            configureTLS(properties);
-        }
-
-        this.smtpServer.setRequireTLS(properties.isRequireTls());
-    }
-
-    private void configureTLS(SmtpServerProperties properties) {
-        try {
-            SSLContext sslContext = createSSLContext(properties);
-            this.smtpServerSslContext = sslContext;
-
-            this.smtpServer.setEnableTLS(true);
-            log.info("STARTTLS enabled for SMTP server using {} transport TLS", transportTlsContextFactory.engine());
-        } catch (Exception e) {
-            log.warn("Failed to configure TLS for SMTP server: {} - TLS will not be available", e.getMessage());
-        }
-    }
-
-    private boolean hasTlsMaterial(SmtpServerProperties properties) {
-        return hasText(properties.getKeystorePath())
-                || (hasText(properties.getCertificatePath()) && hasText(properties.getPrivateKeyPath()));
-    }
-
-    private SSLContext createSSLContext(SmtpServerProperties properties) throws Exception {
-        if (Security.getProvider(BouncyCastleProvider.PROVIDER_NAME) == null) {
-            Security.addProvider(new BouncyCastleProvider());
-        }
-
-        if (properties.getCertificatePath() != null && properties.getPrivateKeyPath() != null) {
-            return createSSLContextFromPem(properties);
-        } else if (properties.getKeystorePath() != null) {
-            return createSSLContextFromKeystore(properties);
-        } else {
-            throw new IllegalArgumentException(
-                    "Either keystore path or certificate/private key path must be configured for TLS");
-        }
-    }
-
-    private SSLContext createSSLContextFromPem(SmtpServerProperties properties) throws Exception {
-        // Read certificate
-        String certPem = new String(Files.readAllBytes(Paths.get(properties.getCertificatePath())));
-        X509Certificate cert = PemUtils.parseCertificate(certPem);
-
-        // Read private key
-        String keyPem = new String(Files.readAllBytes(Paths.get(properties.getPrivateKeyPath())));
-        String privateKeyPassword = resolveOptionalSecret(properties.getPrivateKeyPasswordSecretRef());
-        char[] keyPassword = privateKeyPassword != null
-                ? privateKeyPassword.toCharArray()
-                : null;
-        PrivateKey privateKey = PemUtils.parsePrivateKey(keyPem, keyPassword);
-
-        // Create in-memory keystore
-        KeyStore keyStore = transportTlsContextFactory.createKeyStore();
-        keyStore.load(null, null);
-        keyStore.setKeyEntry("smtp", privateKey, new char[0], new java.security.cert.Certificate[]{cert});
-
-        KeyManagerFactory kmf = transportTlsContextFactory.createKeyManagerFactory();
-        kmf.init(keyStore, new char[0]);
-
-        return transportTlsContextFactory.createServerContext(kmf.getKeyManagers());
-    }
-
-    private SSLContext createSSLContextFromKeystore(SmtpServerProperties properties) throws Exception {
-        KeyStore keyStore = transportTlsContextFactory.createKeyStore();
-        try (FileInputStream fis = new FileInputStream(properties.getKeystorePath())) {
-            keyStore.load(fis, requireSecret(
-                    properties.getKeystorePasswordSecretRef(),
-                    "sealmail.smtp.server.keystore-password-secret-ref").toCharArray());
-        }
-
-        KeyManagerFactory kmf = transportTlsContextFactory.createKeyManagerFactory();
-        String keystorePassword = requireSecret(
-                properties.getKeystorePasswordSecretRef(),
-                "sealmail.smtp.server.keystore-password-secret-ref");
-        String keyPasswordSecret = resolveOptionalSecret(properties.getKeyPasswordSecretRef());
-        char[] keyPassword = keyPasswordSecret != null
-                ? keyPasswordSecret.toCharArray()
-                : keystorePassword.toCharArray();
-        kmf.init(keyStore, keyPassword);
-
-        return transportTlsContextFactory.createServerContext(kmf.getKeyManagers());
     }
 
     @EventListener(ApplicationReadyEvent.class)
@@ -204,21 +84,6 @@ public class SealMailSmtpServer {
         @Override
         public MessageHandler create(MessageContext ctx) {
             return new SealMailMessageHandler(ctx);
-        }
-    }
-
-    private class SealMailSubEthaServer extends SMTPServer {
-
-        private SealMailSubEthaServer(MessageHandlerFactory handlerFactory) {
-            super(handlerFactory);
-        }
-
-        @Override
-        public SSLSocket createSSLSocket(Socket socket) throws IOException {
-            if (smtpServerSslContext == null) {
-                throw new IOException("SMTP server TLS context is not configured");
-            }
-            return transportTlsContextFactory.wrapServerSocket(socket, smtpServerSslContext);
         }
     }
 
@@ -328,22 +193,6 @@ public class SealMailSmtpServer {
 
     private boolean hasText(String value) {
         return value != null && !value.isBlank();
-    }
-
-    private String resolveOptionalSecret(String secretRef) {
-        if (!hasText(secretRef)) {
-            return null;
-        }
-        String secret = secretReferenceResolver.resolve(secretRef);
-        return hasText(secret) ? secret : null;
-    }
-
-    private String requireSecret(String secretRef, String propertyName) {
-        String secret = resolveOptionalSecret(secretRef);
-        if (secret == null) {
-            throw new IllegalStateException(propertyName + " must point to a resolvable secret");
-        }
-        return secret;
     }
 
     private MailProcessingException findMailProcessingException(Throwable error) {

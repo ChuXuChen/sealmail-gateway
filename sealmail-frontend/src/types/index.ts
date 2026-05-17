@@ -511,18 +511,6 @@ export interface SystemSettings {
     port: number;
     maxConnections: number;
     maxMessageSizeBytes: number;
-    tls: {
-      startTlsEnabled: boolean;
-      tlsRequired: boolean;
-      keystoreConfigured: boolean;
-      pemConfigured: boolean;
-      keyAlias?: string;
-      engine?: string;
-      provider?: string;
-      protocol?: string;
-      enabledProtocols?: string[];
-      enabledCipherSuites?: string[];
-    };
   };
   delivery: {
     mode: 'POSTFIX' | 'DIRECT_RELAY' | string;
@@ -531,20 +519,66 @@ export interface SystemSettings {
       host: string;
       afterFilterPort: number;
       outboundPort: number;
-      useTls: boolean;
-      transportSecurity: SmtpTransportSecurity;
       timeoutMs: number;
       envelopeFrom?: string;
     };
     directRelay: {
       host: string;
       port: number;
-      useTls: boolean;
-      transportSecurity: SmtpTransportSecurity;
       timeoutMs: number;
       usernameConfigured: boolean;
       passwordConfigured: boolean;
     };
+  };
+  gmEdge: {
+    enabled: boolean;
+    inbound: {
+      enabled: boolean;
+      bindAddress: string;
+      startTlsPort: number;
+      implicitTlsPort: number;
+      backlog: number;
+      maxConnections: number;
+    };
+    outbound: {
+      enabled: boolean;
+      bindAddress: string;
+      smartHostPort: number;
+      backlog: number;
+      maxConnections: number;
+    };
+    postfix: {
+      host: string;
+      port: number;
+    };
+    tls: {
+      protocols: string[];
+      cipherSuites: string[];
+      keyStorePath?: string;
+      keyStoreConfigured: boolean;
+      keyStorePasswordConfigured: boolean;
+      keyStorePasswordSecretRef?: string;
+      keyStoreType: string;
+      trustStorePath?: string;
+      trustStoreConfigured: boolean;
+      trustStorePasswordConfigured: boolean;
+      trustStorePasswordSecretRef?: string;
+      trustStoreType: string;
+      trustAll: boolean;
+    };
+    limits: {
+      connectTimeoutMs: number;
+      readTimeoutMs: number;
+      maxMessageSizeBytes: number;
+      maxLineLengthBytes: number;
+      maxRecipients: number;
+    };
+    routes: {
+      domainPattern: string;
+      targetHost: string;
+      targetPort: number;
+      security: string;
+    }[];
   };
   quarantinePolicy: {
     maxRetentionDays: number;
@@ -568,14 +602,10 @@ export interface SystemSettings {
   }[];
 }
 
-export type SmtpTransportSecurity = 'NONE' | 'STARTTLS' | 'SMTPS';
-
 export interface RelayPolicy {
   enabled: boolean;
   host: string;
   port: number;
-  useTls: boolean;
-  transportSecurity: SmtpTransportSecurity;
   username?: string;
   passwordConfigured: boolean;
   passwordSecretRef?: string;
@@ -596,6 +626,71 @@ export type RelayPolicyRequest = Partial<RelayPolicy> & {
 };
 
 export type QuarantinePolicyRequest = Partial<QuarantinePolicy>;
+
+export interface GmEdgePolicy {
+  enabled: boolean;
+  inbound: {
+    enabled: boolean;
+    bindAddress: string;
+    startTlsPort: number;
+    implicitTlsPort: number;
+    backlog: number;
+    maxConnections: number;
+  };
+  outbound: {
+    enabled: boolean;
+    bindAddress: string;
+    smartHostPort: number;
+    backlog: number;
+    maxConnections: number;
+  };
+  postfix: {
+    host: string;
+    port: number;
+  };
+  tls: {
+    protocols: string[];
+    cipherSuites: string[];
+    keyStorePath?: string;
+    keyStoreConfigured: boolean;
+    keyStorePasswordConfigured: boolean;
+    keyStorePasswordSecretRef?: string;
+    keyStoreType: string;
+    trustStorePath?: string;
+    trustStoreConfigured: boolean;
+    trustStorePasswordConfigured: boolean;
+    trustStorePasswordSecretRef?: string;
+    trustStoreType: string;
+    trustAll: boolean;
+  };
+  limits: {
+    connectTimeoutMs: number;
+    readTimeoutMs: number;
+    maxMessageSizeBytes: number;
+    maxLineLengthBytes: number;
+    maxRecipients: number;
+  };
+  routes: {
+    domainPattern: string;
+    targetHost: string;
+    targetPort: number;
+    security: 'STARTTLS' | 'IMPLICIT_TLS' | string;
+  }[];
+  updatedAt?: string;
+}
+
+export interface GmEdgePolicyRequest {
+  enabled?: boolean;
+  inbound?: Partial<GmEdgePolicy['inbound']>;
+  outbound?: Partial<GmEdgePolicy['outbound']>;
+  postfix?: Partial<GmEdgePolicy['postfix']>;
+  tls?: Partial<GmEdgePolicy['tls']> & {
+    clearKeyStorePasswordSecretRef?: boolean;
+    clearTrustStorePasswordSecretRef?: boolean;
+  };
+  limits?: Partial<GmEdgePolicy['limits']>;
+  routes?: Partial<GmEdgePolicy['routes'][number]>[];
+}
 
 export type CreateDlpPatternRequest = Omit<DlpPattern, 'id' | 'createdAt' | 'updatedAt'>;
 export type UpdateDlpPatternRequest = Partial<CreateDlpPatternRequest>;

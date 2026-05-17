@@ -1,9 +1,10 @@
 import { Tag } from 'antd';
 import { CheckCircleOutlined, CloseCircleOutlined } from '@ant-design/icons';
 import type {
+  GmEdgePolicy,
+  GmEdgePolicyRequest,
   QuarantinePolicy,
   RelayPolicy,
-  SmtpTransportSecurity,
   SystemSettings as SystemSettingsSnapshot,
 } from '../../types';
 
@@ -21,6 +22,80 @@ export type RelayPolicyFormValues = Partial<RelayPolicy> & {
 };
 
 export type QuarantinePolicyFormValues = Partial<QuarantinePolicy>;
+
+export type GmEdgePolicyFormValues = GmEdgePolicyRequest;
+
+export const defaultGmEdgePolicyValues: GmEdgePolicyFormValues = {
+  enabled: false,
+  inbound: {
+    enabled: true,
+    bindAddress: '0.0.0.0',
+    startTlsPort: 2525,
+    implicitTlsPort: 2465,
+    backlog: 128,
+    maxConnections: 1024,
+  },
+  outbound: {
+    enabled: true,
+    bindAddress: '127.0.0.1',
+    smartHostPort: 2526,
+    backlog: 128,
+    maxConnections: 512,
+  },
+  postfix: {
+    host: '127.0.0.1',
+    port: 2530,
+  },
+  tls: {
+    protocols: ['TLCPv1.1', 'TLCP', 'TLSv1.3'],
+    cipherSuites: ['TLS_SM4_GCM_SM3', 'TLS_SM4_CCM_SM3'],
+    keyStoreConfigured: false,
+    keyStorePasswordConfigured: false,
+    keyStoreType: 'PKCS12',
+    trustStoreConfigured: false,
+    trustStorePasswordConfigured: false,
+    trustStoreType: 'PKCS12',
+    trustAll: false,
+    clearKeyStorePasswordSecretRef: false,
+    clearTrustStorePasswordSecretRef: false,
+  },
+  limits: {
+    connectTimeoutMs: 10000,
+    readTimeoutMs: 60000,
+    maxMessageSizeBytes: 52428800,
+    maxLineLengthBytes: 16384,
+    maxRecipients: 100,
+  },
+  routes: [],
+};
+
+export const applyGmEdgeDefaults = (policy?: GmEdgePolicy | null): GmEdgePolicyFormValues => ({
+  ...defaultGmEdgePolicyValues,
+  ...policy,
+  inbound: {
+    ...defaultGmEdgePolicyValues.inbound,
+    ...policy?.inbound,
+  },
+  outbound: {
+    ...defaultGmEdgePolicyValues.outbound,
+    ...policy?.outbound,
+  },
+  postfix: {
+    ...defaultGmEdgePolicyValues.postfix,
+    ...policy?.postfix,
+  },
+  tls: {
+    ...defaultGmEdgePolicyValues.tls,
+    ...policy?.tls,
+    clearKeyStorePasswordSecretRef: false,
+    clearTrustStorePasswordSecretRef: false,
+  },
+  limits: {
+    ...defaultGmEdgePolicyValues.limits,
+    ...policy?.limits,
+  },
+  routes: policy?.routes ?? [],
+});
 
 export const formatBytes = (bytes: number) => {
   if (!Number.isFinite(bytes)) return '-';
@@ -50,24 +125,6 @@ export const configuredTag = (value: boolean) => (
     {value ? '已配置' : '未配置'}
   </Tag>
 );
-
-export const transportSecurityLabel = (value?: SmtpTransportSecurity) => {
-  if (value === 'STARTTLS') return 'STARTTLS';
-  if (value === 'SMTPS') return 'SMTPS';
-  return '无 TLS';
-};
-
-export const transportSecurityTag = (value?: SmtpTransportSecurity) => (
-  <Tag color={value === 'NONE' || !value ? 'default' : 'processing'} className="settings-tag">
-    {transportSecurityLabel(value)}
-  </Tag>
-);
-
-export const transportTlsEngineLabel = (value?: string) => {
-  if (value === 'KONA_TLCP') return 'Kona TLCP';
-  if (value === 'KONA_RFC8998_TLS') return 'Kona RFC8998 TLS';
-  return 'JDK TLS';
-};
 
 export const getSettingsSummary = (settings: SystemSettingsSnapshot | null) => {
   const smtpEndpoint = settings ? `${settings.smtpServer.bindAddress}:${settings.smtpServer.port}` : '-';

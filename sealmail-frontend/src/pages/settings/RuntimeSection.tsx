@@ -26,7 +26,7 @@ const RuntimeSection: React.FC<RuntimeSectionProps> = ({ settings }) => {
         <Descriptions.Item label="配置来源">{settings?.runtime.configSource}</Descriptions.Item>
         <Descriptions.Item label="配置修改">
           <Tag color={settings?.runtime.onlineEditingSupported ? 'success' : 'warning'} className="settings-tag">
-            {settings?.runtime.onlineEditingSupported ? '支持在线保存' : '改配置文件后重启'}
+            {settings?.runtime.onlineEditingSupported ? '支持在线保存' : '重启生效'}
           </Tag>
         </Descriptions.Item>
         <Descriptions.Item label="快照时间">

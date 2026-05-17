@@ -27,6 +27,7 @@ import com.sealmail.domain.policy.event.DomainConfigActivationChanged;
 import com.sealmail.domain.policy.event.DomainConfigCreated;
 import com.sealmail.domain.policy.event.DomainConfigDeleted;
 import com.sealmail.domain.policy.event.EncryptionPolicyChanged;
+import com.sealmail.domain.policy.event.GmEdgePolicyChanged;
 import com.sealmail.domain.policy.event.MailAuthConfigChanged;
 import com.sealmail.domain.policy.event.PreferredAlgorithmChanged;
 import com.sealmail.domain.policy.event.QuarantinePolicyChanged;
@@ -377,6 +378,15 @@ public class DomainEventAuditListener {
                     "RELAY_POLICY",
                     relayPolicyChanged.getConfigId(),
                     "修改 Relay 策略: " + String.join(", ", relayPolicyChanged.getChangedFields()));
+        }
+        if (event instanceof GmEdgePolicyChanged gmEdgePolicyChanged) {
+            return audit(
+                    AuditLogType.SYSTEM_CONFIG_CHANGED,
+                    actor,
+                    ipAddress,
+                    "GM_EDGE_POLICY",
+                    gmEdgePolicyChanged.getConfigId(),
+                    "修改国密 Edge 策略: " + String.join(", ", gmEdgePolicyChanged.getChangedFields()));
         }
         if (event instanceof QuarantinePolicyChanged quarantinePolicyChanged) {
             return audit(

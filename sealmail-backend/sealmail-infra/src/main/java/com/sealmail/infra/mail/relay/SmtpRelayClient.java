@@ -1,12 +1,10 @@
 package com.sealmail.infra.mail.relay;
 
 import com.sealmail.domain.mail.spi.SmtpRelayProbe;
-import com.sealmail.infra.tls.TransportTlsContextFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
-import javax.net.ssl.SSLSocket;
 import java.io.BufferedInputStream;
 import java.io.BufferedOutputStream;
 import java.io.ByteArrayOutputStream;
@@ -18,7 +16,6 @@ import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.nio.charset.StandardCharsets;
-import java.security.GeneralSecurityException;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.LinkedHashSet;
@@ -27,18 +24,12 @@ import java.util.Locale;
 import java.util.Set;
 
 /**
- * Minimal SMTP/SMTPS relay client that avoids Jakarta Mail runtime dependencies.
+ * Minimal SMTP relay client that avoids Jakarta Mail runtime dependencies.
  */
 @Component
 public class SmtpRelayClient implements SmtpRelayProbe {
 
     private static final Logger log = LoggerFactory.getLogger(SmtpRelayClient.class);
-
-    private final TransportTlsContextFactory transportTlsContextFactory;
-
-    public SmtpRelayClient(TransportTlsContextFactory transportTlsContextFactory) {
-        this.transportTlsContextFactory = transportTlsContextFactory;
-    }
 
     public void send(SmtpRelayRequest request) throws SmtpRelayException {
         try (SmtpSession session = openSession(request.connection())) {
@@ -64,8 +55,8 @@ public class SmtpRelayClient implements SmtpRelayProbe {
             return new SmtpRelayProbeResult(
                     connection.host(),
                     connection.port(),
-                    connection.useImplicitTls(),
-                    connection.useStartTls(),
+                    false,
+                    false,
                     state.authenticated(),
                     state.capabilities()
             );
@@ -81,7 +72,6 @@ public class SmtpRelayClient implements SmtpRelayProbe {
             result = probe(new SmtpRelayConnectionSettings(
                     settings.host(),
                     settings.port(),
-                    settings.transportSecurity(),
                     settings.username(),
                     settings.password(),
                     settings.timeoutMillis()
@@ -106,16 +96,6 @@ public class SmtpRelayClient implements SmtpRelayProbe {
 
         SmtpResponse hello = sendHello(session);
         List<String> capabilities = hello.code() == 250 ? hello.lines() : List.of();
-
-        if (connection.useStartTls()) {
-            if (!supportsCapability(capabilities, "STARTTLS")) {
-                throw new SmtpRelayException("SMTP server does not advertise STARTTLS");
-            }
-            ensureExpected(session.command("STARTTLS"), "STARTTLS", 220);
-            session.upgradeToTls(connection.host(), connection.port(), connection.timeoutMillis());
-            hello = sendHello(session);
-            capabilities = hello.code() == 250 ? hello.lines() : List.of();
-        }
 
         boolean authenticated = false;
         if (connection.hasAuthentication()) {
@@ -195,26 +175,11 @@ public class SmtpRelayClient implements SmtpRelayProbe {
     }
 
     private SmtpSession openSession(SmtpRelayConnectionSettings connection) throws IOException {
-        Socket socket = connection.useImplicitTls()
-                ? createTlsSocket()
-                : new Socket();
+        Socket socket = new Socket();
         socket.connect(new InetSocketAddress(connection.host(), connection.port()), connection.timeoutMillis());
         socket.setSoTimeout(connection.timeoutMillis());
 
-        if (socket instanceof SSLSocket sslSocket) {
-            sslSocket.setUseClientMode(true);
-            sslSocket.startHandshake();
-        }
-
         return new SmtpSession(socket);
-    }
-
-    private SSLSocket createTlsSocket() throws IOException {
-        try {
-            return transportTlsContextFactory.createClientSocket();
-        } catch (GeneralSecurityException e) {
-            throw new IOException("Failed to create TLS socket: " + e.getMessage(), e);
-        }
     }
 
     private static void ensureExpected(SmtpResponse response, String operation, int... expectedCodes)
@@ -277,7 +242,7 @@ public class SmtpRelayClient implements SmtpRelayProbe {
 
     private final class SmtpSession implements AutoCloseable {
 
-        private Socket socket;
+        private final Socket socket;
         private InputStream input;
         private OutputStream output;
 
@@ -361,19 +326,6 @@ public class SmtpRelayClient implements SmtpRelayProbe {
             output.write('\r');
             output.write('\n');
             output.flush();
-        }
-
-        private void upgradeToTls(String host, int port, int timeoutMillis) throws IOException {
-            SSLSocket sslSocket;
-            try {
-                sslSocket = transportTlsContextFactory.wrapClientSocket(socket, host, port, timeoutMillis);
-            } catch (GeneralSecurityException e) {
-                throw new IOException("Failed to create TLS socket: " + e.getMessage(), e);
-            }
-            sslSocket.startHandshake();
-            socket = sslSocket;
-            input = new BufferedInputStream(socket.getInputStream());
-            output = new BufferedOutputStream(socket.getOutputStream());
         }
 
         private void quit() {

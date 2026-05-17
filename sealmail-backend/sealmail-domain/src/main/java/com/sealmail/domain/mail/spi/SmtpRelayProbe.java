@@ -1,7 +1,5 @@
 package com.sealmail.domain.mail.spi;
 
-import com.sealmail.domain.mailsecurity.SmtpTransportSecurity;
-
 import java.util.List;
 
 public interface SmtpRelayProbe {
@@ -11,25 +9,10 @@ public interface SmtpRelayProbe {
     record SmtpConnectionSettings(
             String host,
             int port,
-            SmtpTransportSecurity transportSecurity,
             String username,
             String password,
             int timeoutMillis
     ) {
-        public SmtpConnectionSettings(String host,
-                                      int port,
-                                      boolean useTls,
-                                      String username,
-                                      String password,
-                                      int timeoutMillis) {
-            this(host,
-                    port,
-                    SmtpTransportSecurity.fromLegacyUseTls(useTls, port),
-                    username,
-                    password,
-                    timeoutMillis);
-        }
-
         public SmtpConnectionSettings {
             if (host == null || host.isBlank()) {
                 throw new IllegalArgumentException("SMTP relay host must not be blank");
@@ -40,11 +23,6 @@ public interface SmtpRelayProbe {
             if (timeoutMillis <= 0) {
                 throw new IllegalArgumentException("SMTP relay timeout must be positive");
             }
-            transportSecurity = transportSecurity == null ? SmtpTransportSecurity.NONE : transportSecurity;
-        }
-
-        public boolean useTls() {
-            return transportSecurity.usesTls();
         }
     }
 
@@ -61,10 +39,9 @@ public interface SmtpRelayProbe {
         }
 
         public String summary() {
-            String mode = implicitTls ? "SMTPS" : (startTls ? "STARTTLS" : "PLAIN");
             String capabilitySummary = capabilities.isEmpty() ? "none" : String.join(", ", capabilities);
             return "SUCCESS: " + host + ":" + port
-                    + " mode=" + mode
+                    + " mode=PLAIN"
                     + " auth=" + (authenticated ? "ok" : "skipped")
                     + " capabilities=" + capabilitySummary;
         }

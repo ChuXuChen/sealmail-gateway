@@ -18,7 +18,6 @@ import com.sealmail.domain.quarantine.spi.QuarantineNotificationPort;
 import com.sealmail.infra.events.DomainEventPublisher;
 import com.sealmail.infra.mail.pipeline.MailProcessingHeaders;
 import com.sealmail.infra.mail.pipeline.MailProcessingAuditEvents;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.messaging.Message;
@@ -39,24 +38,6 @@ public class QuarantineStep {
     private final DomainEventPublisher domainEventPublisher;
     private final DlpEventRepository dlpEventRepository;
 
-    public QuarantineStep(QuarantineRepository quarantineRepository,
-                          ExceptionMailRepository exceptionMailRepository,
-                          QuarantinePolicyPort quarantinePolicyPort,
-                          QuarantineNotificationPort quarantineNotificationPort) {
-        this(quarantineRepository, exceptionMailRepository, quarantinePolicyPort,
-                quarantineNotificationPort, null, null);
-    }
-
-    public QuarantineStep(QuarantineRepository quarantineRepository,
-                          ExceptionMailRepository exceptionMailRepository,
-                          QuarantinePolicyPort quarantinePolicyPort,
-                          QuarantineNotificationPort quarantineNotificationPort,
-                          DomainEventPublisher domainEventPublisher) {
-        this(quarantineRepository, exceptionMailRepository, quarantinePolicyPort,
-                quarantineNotificationPort, domainEventPublisher, null);
-    }
-
-    @Autowired
     public QuarantineStep(QuarantineRepository quarantineRepository,
                           ExceptionMailRepository exceptionMailRepository,
                           QuarantinePolicyPort quarantinePolicyPort,

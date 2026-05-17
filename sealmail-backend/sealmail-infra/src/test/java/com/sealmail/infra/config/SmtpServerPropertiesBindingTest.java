@@ -15,10 +15,7 @@ class SmtpServerPropertiesBindingTest {
             .withPropertyValues(
                     "sealmail.smtp.server.port=10025",
                     "sealmail.smtp.server.bind-address=127.0.0.1",
-                    "sealmail.smtp.server.max-connections=42",
-                    "sealmail.smtp.server.keystore-password-secret-ref=env:SMTP_KEYSTORE_PASSWORD",
-                    "sealmail.smtp.server.key-password-secret-ref=env:SMTP_KEY_PASSWORD",
-                    "sealmail.smtp.server.private-key-password-secret-ref=env:SMTP_PRIVATE_KEY_PASSWORD"
+                    "sealmail.smtp.server.max-connections=42"
             );
 
     @Test
@@ -28,9 +25,6 @@ class SmtpServerPropertiesBindingTest {
             assertEquals(10025, properties.getPort());
             assertEquals("127.0.0.1", properties.getBindAddress());
             assertEquals(42, properties.getMaxConnections());
-            assertEquals("env:SMTP_KEYSTORE_PASSWORD", properties.getKeystorePasswordSecretRef());
-            assertEquals("env:SMTP_KEY_PASSWORD", properties.getKeyPasswordSecretRef());
-            assertEquals("env:SMTP_PRIVATE_KEY_PASSWORD", properties.getPrivateKeyPasswordSecretRef());
         });
     }
 

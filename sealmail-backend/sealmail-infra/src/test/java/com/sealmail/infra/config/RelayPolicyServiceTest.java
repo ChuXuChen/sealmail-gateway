@@ -2,7 +2,6 @@ package com.sealmail.infra.config;
 
 import com.sealmail.domain.config.RelayPolicyPort;
 import com.sealmail.domain.config.SecretReferenceResolver;
-import com.sealmail.domain.mailsecurity.SmtpTransportSecurity;
 import com.sealmail.domain.policy.event.RelayPolicyChanged;
 import com.sealmail.infra.events.DomainEventPublisher;
 import com.sealmail.infra.persistence.entity.RelayPolicyEntity;
@@ -40,8 +39,6 @@ class RelayPolicyServiceTest {
         assertFalse(settings.enabled());
         assertEquals("localhost", settings.host());
         assertEquals(25, settings.port());
-        assertFalse(settings.useTls());
-        assertEquals(SmtpTransportSecurity.NONE, settings.transportSecurity());
         assertNull(settings.username());
         assertFalse(settings.passwordConfigured());
         assertNull(settings.passwordSecretRef());
@@ -81,8 +78,6 @@ class RelayPolicyServiceTest {
                 true,
                 "smtp2.example.net",
                 465,
-                true,
-                null,
                 "new-user",
                 "env:NEW_SMTP_PASSWORD",
                 false,
@@ -92,7 +87,6 @@ class RelayPolicyServiceTest {
 
         assertEquals("smtp2.example.net", entity.getHost());
         assertEquals(465, entity.getPort());
-        assertEquals(SmtpTransportSecurity.SMTPS, entity.getTransportSecurity());
         assertEquals("new-user", entity.getUsername());
         assertEquals("env:NEW_SMTP_PASSWORD", entity.getPasswordSecretRef());
         ArgumentCaptor<RelayPolicyChanged> eventCaptor = ArgumentCaptor.forClass(RelayPolicyChanged.class);
@@ -121,8 +115,6 @@ class RelayPolicyServiceTest {
         entity.setEnabled(true);
         entity.setHost("smtp.example.net");
         entity.setPort(587);
-        entity.setUseTls(true);
-        entity.setTransportSecurity(SmtpTransportSecurity.STARTTLS);
         entity.setUsername("relay-user");
         entity.setPasswordSecretRef(null);
         entity.setTimeoutMs(15000);

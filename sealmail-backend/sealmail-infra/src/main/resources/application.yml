@@ -53,36 +53,6 @@ sealmail:
       host-name: sealmail-gateway
       max-connections: 100
       max-message-size: 52428800
-      # TLS Configuration (enable for STARTTLS support)
-      enable-start-tls: false
-      require-tls: false
-      # Option 1: Use PKCS12 keystore
-      keystore-path:
-      keystore-password-secret-ref: ${SEALMAIL_SMTP_KEYSTORE_PASSWORD_SECRET_REF:}
-      key-alias: sealmail-smtp
-      key-password-secret-ref: ${SEALMAIL_SMTP_KEY_PASSWORD_SECRET_REF:}
-      # Option 2: Use PEM files (simpler)
-      certificate-path:
-      private-key-path:
-      private-key-password-secret-ref: ${SEALMAIL_SMTP_PRIVATE_KEY_PASSWORD_SECRET_REF:}
-
-  # Transport-layer TLS/STARTTLS engine for SMTP ingress and relay egress.
-  # JDK: current JVM TLS behavior.
-  # KONA_RFC8998_TLS: TLS 1.3 with RFC 8998 SM2/SM3/SM4 cipher support.
-  # KONA_TLCP: TLCP 1.1 (GB/T 38636-2020).
-  transport-tls:
-    engine: ${SEALMAIL_TRANSPORT_TLS_ENGINE:JDK}
-    provider: ${SEALMAIL_TRANSPORT_TLS_PROVIDER:Kona}
-    # Leave empty to use the engine default: TLS for JDK/KONA_RFC8998_TLS, TLCP for KONA_TLCP.
-    protocol: ${SEALMAIL_TRANSPORT_TLS_PROTOCOL:}
-    enabled-protocols: ${SEALMAIL_TRANSPORT_TLS_ENABLED_PROTOCOLS:[]}
-    enabled-cipher-suites: ${SEALMAIL_TRANSPORT_TLS_ENABLED_CIPHER_SUITES:[]}
-    # Optional Kona overrides. RFC8998 mode defaults to curveSM2 and sm2sig_sm3.
-    named-groups: ${SEALMAIL_TRANSPORT_TLS_NAMED_GROUPS:}
-    client-signature-schemes: ${SEALMAIL_TRANSPORT_TLS_CLIENT_SIGNATURE_SCHEMES:}
-    server-signature-schemes: ${SEALMAIL_TRANSPORT_TLS_SERVER_SIGNATURE_SCHEMES:}
-    key-manager-algorithm: ${SEALMAIL_TRANSPORT_TLS_KEY_MANAGER_ALGORITHM:}
-    key-store-provider: ${SEALMAIL_TRANSPORT_TLS_KEY_STORE_PROVIDER:}
 
   # Certificate Validation Security Settings
   security:
@@ -100,7 +70,6 @@ sealmail:
     after-filter-port: 10026
     outbound-port: 10027
     envelope-from: ${SEALMAIL_POSTFIX_ENVELOPE_FROM:}
-    use-tls: false
     timeout: 10000
 
   mail-auth:
@@ -247,12 +216,6 @@ spring:
 
   jpa:
     show-sql: false
-
-sealmail:
-  smtp:
-    server:
-      enable-start-tls: true
-      require-tls: true
 
 logging:
   level:

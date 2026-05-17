@@ -14,7 +14,6 @@ import com.sealmail.domain.quarantine.QuarantinedMail;
 import com.sealmail.domain.quarantine.spi.QuarantineMailReleaseRelay;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.TransactionDefinition;
@@ -38,29 +37,18 @@ public class ReleaseQuarantineUseCase {
     private final QuarantinePolicyPort quarantinePolicyPort;
     private final TransactionOperations releaseStateTransaction;
 
-    @Autowired
     public ReleaseQuarantineUseCase(QuarantineRepository quarantineRepository,
                                     QuarantineDtoMapper mapper,
                                     PermissionChecker permissionChecker,
                                     QuarantineMailReleaseRelay releaseRelay,
                                     QuarantinePolicyPort quarantinePolicyPort,
                                     PlatformTransactionManager transactionManager) {
-        this(quarantineRepository, mapper, permissionChecker, releaseRelay, quarantinePolicyPort,
-                releaseStateTransaction(transactionManager));
-    }
-
-    ReleaseQuarantineUseCase(QuarantineRepository quarantineRepository,
-                             QuarantineDtoMapper mapper,
-                             PermissionChecker permissionChecker,
-                             QuarantineMailReleaseRelay releaseRelay,
-                             QuarantinePolicyPort quarantinePolicyPort,
-                             TransactionOperations releaseStateTransaction) {
         this.quarantineRepository = quarantineRepository;
         this.mapper = mapper;
         this.permissionChecker = permissionChecker;
         this.releaseRelay = releaseRelay;
         this.quarantinePolicyPort = quarantinePolicyPort;
-        this.releaseStateTransaction = releaseStateTransaction;
+        this.releaseStateTransaction = releaseStateTransaction(transactionManager);
     }
 
     private static TransactionOperations releaseStateTransaction(PlatformTransactionManager transactionManager) {

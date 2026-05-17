@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>com.sealmail</groupId>
+        <artifactId>sealmail-backend</artifactId>
+        <version>1.0.0-SNAPSHOT</version>
+        <relativePath>../pom.xml</relativePath>
+    </parent>
+
+    <artifactId>sealmail-edge</artifactId>
+    <name>SealMail Edge</name>
+    <description>Kona-based SMTP edge for TLCP and ShangMi TLS 1.3 partner traffic</description>
+
+    <dependencies>
+        <dependency>
+            <groupId>com.tencent.kona</groupId>
+            <artifactId>kona-ssl</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.tencent.kona</groupId>
+            <artifactId>kona-provider</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.tencent.kona</groupId>
+            <artifactId>kona-crypto</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.tencent.kona</groupId>
+            <artifactId>kona-pkix</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-jar-plugin</artifactId>
+                <configuration>
+                    <archive>
+                        <manifest>
+                            <mainClass>com.sealmail.edge.SealMailEdgeApplication</mainClass>
+                        </manifest>
+                    </archive>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
+</project>

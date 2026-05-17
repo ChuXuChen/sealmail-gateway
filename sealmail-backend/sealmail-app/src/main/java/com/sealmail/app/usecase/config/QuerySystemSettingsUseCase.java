@@ -37,19 +37,7 @@ public class QuerySystemSettingsUseCase {
                         snapshot.smtpServer().bindAddress(),
                         snapshot.smtpServer().port(),
                         snapshot.smtpServer().maxConnections(),
-                        snapshot.smtpServer().maxMessageSizeBytes(),
-                        new SystemSettingsResponse.TlsResponse(
-                                snapshot.smtpServer().tls().startTlsEnabled(),
-                                snapshot.smtpServer().tls().tlsRequired(),
-                                snapshot.smtpServer().tls().keystoreConfigured(),
-                                snapshot.smtpServer().tls().pemConfigured(),
-                                snapshot.smtpServer().tls().keyAlias(),
-                                snapshot.smtpServer().tls().engine(),
-                                snapshot.smtpServer().tls().provider(),
-                                snapshot.smtpServer().tls().protocol(),
-                                snapshot.smtpServer().tls().enabledProtocols(),
-                                snapshot.smtpServer().tls().enabledCipherSuites()
-                        )
+                        snapshot.smtpServer().maxMessageSizeBytes()
                 ),
                 new SystemSettingsResponse.DeliveryResponse(
                         snapshot.delivery().mode(),
@@ -58,20 +46,68 @@ public class QuerySystemSettingsUseCase {
                                 snapshot.delivery().postfix().host(),
                                 snapshot.delivery().postfix().afterFilterPort(),
                                 snapshot.delivery().postfix().outboundPort(),
-                                snapshot.delivery().postfix().useTls(),
-                                snapshot.delivery().postfix().transportSecurity(),
                                 snapshot.delivery().postfix().timeoutMs(),
                                 snapshot.delivery().postfix().envelopeFrom()
                         ),
                         new SystemSettingsResponse.RelayResponse(
                                 snapshot.delivery().directRelay().host(),
                                 snapshot.delivery().directRelay().port(),
-                                snapshot.delivery().directRelay().useTls(),
-                                snapshot.delivery().directRelay().transportSecurity(),
                                 snapshot.delivery().directRelay().timeoutMs(),
                                 snapshot.delivery().directRelay().usernameConfigured(),
                                 snapshot.delivery().directRelay().passwordConfigured()
                         )
+                ),
+                new SystemSettingsResponse.GmEdgeResponse(
+                        snapshot.gmEdge().enabled(),
+                        new SystemSettingsResponse.GmEdgeInboundResponse(
+                                snapshot.gmEdge().inbound().enabled(),
+                                snapshot.gmEdge().inbound().bindAddress(),
+                                snapshot.gmEdge().inbound().startTlsPort(),
+                                snapshot.gmEdge().inbound().implicitTlsPort(),
+                                snapshot.gmEdge().inbound().backlog(),
+                                snapshot.gmEdge().inbound().maxConnections()
+                        ),
+                        new SystemSettingsResponse.GmEdgeOutboundResponse(
+                                snapshot.gmEdge().outbound().enabled(),
+                                snapshot.gmEdge().outbound().bindAddress(),
+                                snapshot.gmEdge().outbound().smartHostPort(),
+                                snapshot.gmEdge().outbound().backlog(),
+                                snapshot.gmEdge().outbound().maxConnections()
+                        ),
+                        new SystemSettingsResponse.GmEdgePostfixResponse(
+                                snapshot.gmEdge().postfix().host(),
+                                snapshot.gmEdge().postfix().port()
+                        ),
+                        new SystemSettingsResponse.GmEdgeTlsResponse(
+                                snapshot.gmEdge().tls().protocols(),
+                                snapshot.gmEdge().tls().cipherSuites(),
+                                snapshot.gmEdge().tls().keyStorePath(),
+                                snapshot.gmEdge().tls().keyStoreConfigured(),
+                                snapshot.gmEdge().tls().keyStorePasswordConfigured(),
+                                snapshot.gmEdge().tls().keyStorePasswordSecretRef(),
+                                snapshot.gmEdge().tls().keyStoreType(),
+                                snapshot.gmEdge().tls().trustStorePath(),
+                                snapshot.gmEdge().tls().trustStoreConfigured(),
+                                snapshot.gmEdge().tls().trustStorePasswordConfigured(),
+                                snapshot.gmEdge().tls().trustStorePasswordSecretRef(),
+                                snapshot.gmEdge().tls().trustStoreType(),
+                                snapshot.gmEdge().tls().trustAll()
+                        ),
+                        new SystemSettingsResponse.GmEdgeLimitsResponse(
+                                snapshot.gmEdge().limits().connectTimeoutMs(),
+                                snapshot.gmEdge().limits().readTimeoutMs(),
+                                snapshot.gmEdge().limits().maxMessageSizeBytes(),
+                                snapshot.gmEdge().limits().maxLineLengthBytes(),
+                                snapshot.gmEdge().limits().maxRecipients()
+                        ),
+                        snapshot.gmEdge().routes().stream()
+                                .map(route -> new SystemSettingsResponse.GmEdgeRouteResponse(
+                                        route.domainPattern(),
+                                        route.targetHost(),
+                                        route.targetPort(),
+                                        route.security()
+                                ))
+                                .toList()
                 ),
                 new SystemSettingsResponse.QuarantinePolicyResponse(
                         snapshot.quarantinePolicy().maxRetentionDays(),

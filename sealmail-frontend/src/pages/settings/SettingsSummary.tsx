@@ -32,8 +32,8 @@ const SettingsSummary: React.FC<SettingsSummaryProps> = ({ settings }) => {
       </Col>
       <Col xs={24} md={12} xl={6}>
         <Card className="settings-summary-card">
-          <span className="settings-summary-label">配置方式</span>
-          <div className="settings-summary-value">{settings?.runtime.onlineEditingSupported ? '在线保存' : '重启生效'}</div>
+          <span className="settings-summary-label">国密 Edge</span>
+          <div className="settings-summary-value">{settings?.gmEdge.enabled ? '启用' : '关闭'}</div>
         </Card>
       </Col>
     </Row>

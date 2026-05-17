@@ -20,7 +20,6 @@ import com.sealmail.infra.mail.pipeline.step.SignStep;
 import com.sealmail.infra.mail.pipeline.step.VerifyStep;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.integration.channel.DirectChannel;
@@ -57,40 +56,59 @@ import static org.mockito.Mockito.when;
 @SpringJUnitConfig(classes = MailIntegrationFlowsCharacterizationTest.Config.class)
 class MailIntegrationFlowsCharacterizationTest {
 
-    @Autowired
-    MessageChannel mailOutboundChannel;
-    @Autowired
-    MessageChannel mailInboundChannel;
-    @Autowired
-    MessageChannel quarantineReleaseChannel;
-    @Autowired
-    QueueChannel relayChannel;
-    @Autowired
-    QueueChannel quarantineChannel;
-    @Autowired
-    QueueChannel errorChannel;
-    @Autowired
-    RoutingService routingService;
-    @Autowired
-    MailProcessingTracker tracker;
-    @Autowired
-    DlpStep dlpStep;
-    @Autowired
-    SignStep signStep;
-    @Autowired
-    EncryptStep encryptStep;
-    @Autowired
-    DkimSignStep dkimSignStep;
-    @Autowired
-    RelayStep relayStep;
-    @Autowired
-    QuarantineStep quarantineStep;
-    @Autowired
-    MailAuthenticationStep mailAuthenticationStep;
-    @Autowired
-    DecryptStep decryptStep;
-    @Autowired
-    VerifyStep verifyStep;
+    private final MessageChannel mailOutboundChannel;
+    private final MessageChannel mailInboundChannel;
+    private final MessageChannel quarantineReleaseChannel;
+    private final QueueChannel relayChannel;
+    private final QueueChannel quarantineChannel;
+    private final QueueChannel errorChannel;
+    private final RoutingService routingService;
+    private final MailProcessingTracker tracker;
+    private final DlpStep dlpStep;
+    private final SignStep signStep;
+    private final EncryptStep encryptStep;
+    private final DkimSignStep dkimSignStep;
+    private final RelayStep relayStep;
+    private final QuarantineStep quarantineStep;
+    private final MailAuthenticationStep mailAuthenticationStep;
+    private final DecryptStep decryptStep;
+    private final VerifyStep verifyStep;
+
+    MailIntegrationFlowsCharacterizationTest(MessageChannel mailOutboundChannel,
+                                             MessageChannel mailInboundChannel,
+                                             MessageChannel quarantineReleaseChannel,
+                                             QueueChannel relayChannel,
+                                             QueueChannel quarantineChannel,
+                                             QueueChannel errorChannel,
+                                             RoutingService routingService,
+                                             MailProcessingTracker tracker,
+                                             DlpStep dlpStep,
+                                             SignStep signStep,
+                                             EncryptStep encryptStep,
+                                             DkimSignStep dkimSignStep,
+                                             RelayStep relayStep,
+                                             QuarantineStep quarantineStep,
+                                             MailAuthenticationStep mailAuthenticationStep,
+                                             DecryptStep decryptStep,
+                                             VerifyStep verifyStep) {
+        this.mailOutboundChannel = mailOutboundChannel;
+        this.mailInboundChannel = mailInboundChannel;
+        this.quarantineReleaseChannel = quarantineReleaseChannel;
+        this.relayChannel = relayChannel;
+        this.quarantineChannel = quarantineChannel;
+        this.errorChannel = errorChannel;
+        this.routingService = routingService;
+        this.tracker = tracker;
+        this.dlpStep = dlpStep;
+        this.signStep = signStep;
+        this.encryptStep = encryptStep;
+        this.dkimSignStep = dkimSignStep;
+        this.relayStep = relayStep;
+        this.quarantineStep = quarantineStep;
+        this.mailAuthenticationStep = mailAuthenticationStep;
+        this.decryptStep = decryptStep;
+        this.verifyStep = verifyStep;
+    }
 
     @BeforeEach
     void resetMocksAndChannels() {
@@ -604,7 +622,8 @@ class MailIntegrationFlowsCharacterizationTest {
                     mailAuthenticationStep,
                     dkimSignStep,
                     routingService,
-                    tracker);
+                    tracker,
+                    null);
         }
 
         @Bean

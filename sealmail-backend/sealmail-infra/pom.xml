@@ -85,23 +85,6 @@
             <groupId>org.bouncycastle</groupId>
             <artifactId>bcjmail-jdk18on</artifactId>
         </dependency>
-        <dependency>
-            <groupId>com.tencent.kona</groupId>
-            <artifactId>kona-provider</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>com.tencent.kona</groupId>
-            <artifactId>kona-crypto</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>com.tencent.kona</groupId>
-            <artifactId>kona-pkix</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>com.tencent.kona</groupId>
-            <artifactId>kona-ssl</artifactId>
-        </dependency>
-
         <!-- Jakarta Mail (for S/MIME) - matches BouncyCastle bcjmail 1.78 expectations -->
         <dependency>
             <groupId>org.eclipse.angus</groupId>

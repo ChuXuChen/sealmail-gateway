@@ -35,7 +35,6 @@ import org.slf4j.LoggerFactory;
 import org.bouncycastle.mail.smime.util.SharedFileInputStream;
 import org.bouncycastle.operator.OperatorCreationException;
 import org.bouncycastle.operator.OutputEncryptor;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import jakarta.activation.CommandMap;
@@ -100,21 +99,10 @@ public class BcSMIMEOperations implements SMIMEOperations {
     private final X509CryptoProfileResolver profileResolver;
     private final SecureRandom secureRandom;
 
-    @Autowired
     public BcSMIMEOperations(SmimeCryptoProperties cryptoProperties) {
-        this(new SmimeAlgorithmSuites(cryptoProperties), new X509CryptoProfileResolver(), new SecureRandom());
-    }
-
-    BcSMIMEOperations(SmimeAlgorithmSuites algorithmSuites,
-                      X509CryptoProfileResolver profileResolver,
-                      SecureRandom secureRandom) {
-        this.algorithmSuites = algorithmSuites;
-        this.profileResolver = profileResolver;
-        this.secureRandom = secureRandom;
-    }
-
-    BcSMIMEOperations() {
-        this(SmimeAlgorithmSuites.defaults(), new X509CryptoProfileResolver(), new SecureRandom());
+        this.algorithmSuites = new SmimeAlgorithmSuites(cryptoProperties);
+        this.profileResolver = new X509CryptoProfileResolver();
+        this.secureRandom = new SecureRandom();
     }
 
     private static void setupMailcap() {

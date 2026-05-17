@@ -12,9 +12,11 @@ import com.sealmail.domain.quarantine.QuarantinedMail;
 import com.sealmail.domain.quarantine.spi.QuarantineMailReleaseRelay;
 import com.sealmail.domain.shared.model.EmailAddress;
 import org.junit.jupiter.api.Test;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionDefinition;
+import org.springframework.transaction.TransactionException;
 import org.springframework.transaction.TransactionStatus;
-import org.springframework.transaction.support.TransactionCallback;
-import org.springframework.transaction.support.TransactionOperations;
+import org.springframework.transaction.support.SimpleTransactionStatus;
 
 import java.time.Instant;
 import java.util.List;
@@ -37,14 +39,14 @@ class ReleaseQuarantineUseCaseTest {
     private final QuarantineRepository repository = mock(QuarantineRepository.class);
     private final QuarantineMailReleaseRelay releaseRelay = mock(QuarantineMailReleaseRelay.class);
     private final QuarantinePolicyPort quarantinePolicyPort = mock(QuarantinePolicyPort.class);
-    private final TransactionOperations transactionOperations = new ImmediateTransactionOperations();
+    private final PlatformTransactionManager transactionManager = new ImmediatePlatformTransactionManager();
     private final ReleaseQuarantineUseCase useCase = new ReleaseQuarantineUseCase(
             repository,
             new QuarantineDtoMapper(),
             new PermissionChecker(),
             releaseRelay,
             quarantinePolicyPort,
-            transactionOperations
+            transactionManager
     );
 
     ReleaseQuarantineUseCaseTest() {
@@ -120,7 +122,7 @@ class ReleaseQuarantineUseCaseTest {
                 new PermissionChecker(),
                 releaseRelay,
                 quarantinePolicyPort,
-                transactionOperations
+                transactionManager
         );
 
         assertThrows(RuntimeException.class,
@@ -158,10 +160,18 @@ class ReleaseQuarantineUseCaseTest {
                 .build();
     }
 
-    private static final class ImmediateTransactionOperations implements TransactionOperations {
+    private static final class ImmediatePlatformTransactionManager implements PlatformTransactionManager {
         @Override
-        public <T> T execute(TransactionCallback<T> action) {
-            return action.doInTransaction(mock(TransactionStatus.class));
+        public TransactionStatus getTransaction(TransactionDefinition definition) throws TransactionException {
+            return new SimpleTransactionStatus();
+        }
+
+        @Override
+        public void commit(TransactionStatus status) throws TransactionException {
+        }
+
+        @Override
+        public void rollback(TransactionStatus status) throws TransactionException {
         }
     }
 

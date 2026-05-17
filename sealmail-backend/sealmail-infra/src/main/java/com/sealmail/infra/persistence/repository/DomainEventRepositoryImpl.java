@@ -26,6 +26,7 @@ import com.sealmail.domain.policy.event.DomainConfigActivationChanged;
 import com.sealmail.domain.policy.event.DomainConfigCreated;
 import com.sealmail.domain.policy.event.DomainConfigDeleted;
 import com.sealmail.domain.policy.event.EncryptionPolicyChanged;
+import com.sealmail.domain.policy.event.GmEdgePolicyChanged;
 import com.sealmail.domain.policy.event.MailAuthConfigChanged;
 import com.sealmail.domain.policy.event.PreferredAlgorithmChanged;
 import com.sealmail.domain.policy.event.QuarantinePolicyChanged;
@@ -80,6 +81,7 @@ public class DomainEventRepositoryImpl implements DomainEventRepository {
             Map.entry(DomainConfigCreated.class.getSimpleName(), DomainConfigCreated.class),
             Map.entry(DomainConfigDeleted.class.getSimpleName(), DomainConfigDeleted.class),
             Map.entry(EncryptionPolicyChanged.class.getSimpleName(), EncryptionPolicyChanged.class),
+            Map.entry(GmEdgePolicyChanged.class.getSimpleName(), GmEdgePolicyChanged.class),
             Map.entry(MailAuthConfigChanged.class.getSimpleName(), MailAuthConfigChanged.class),
             Map.entry(PreferredAlgorithmChanged.class.getSimpleName(), PreferredAlgorithmChanged.class),
             Map.entry(QuarantinePolicyChanged.class.getSimpleName(), QuarantinePolicyChanged.class),
@@ -118,6 +120,7 @@ public class DomainEventRepositoryImpl implements DomainEventRepository {
             Map.entry(DomainConfigCreated.class, event -> ((DomainConfigCreated) event).getConfigId()),
             Map.entry(DomainConfigDeleted.class, event -> ((DomainConfigDeleted) event).getConfigId()),
             Map.entry(EncryptionPolicyChanged.class, event -> ((EncryptionPolicyChanged) event).getConfigId()),
+            Map.entry(GmEdgePolicyChanged.class, event -> ((GmEdgePolicyChanged) event).getConfigId()),
             Map.entry(MailAuthConfigChanged.class, event -> ((MailAuthConfigChanged) event).getConfigId()),
             Map.entry(PreferredAlgorithmChanged.class, event -> ((PreferredAlgorithmChanged) event).getConfigId()),
             Map.entry(QuarantinePolicyChanged.class, event -> ((QuarantinePolicyChanged) event).getConfigId()),

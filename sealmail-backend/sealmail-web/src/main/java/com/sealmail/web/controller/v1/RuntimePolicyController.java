@@ -1,7 +1,9 @@
 package com.sealmail.web.controller.v1;
 
+import com.sealmail.app.dto.request.GmEdgePolicyRequest;
 import com.sealmail.app.dto.request.QuarantinePolicyRequest;
 import com.sealmail.app.dto.request.RelayPolicyRequest;
+import com.sealmail.app.dto.response.GmEdgePolicyResponse;
 import com.sealmail.app.dto.response.QuarantinePolicyResponse;
 import com.sealmail.app.dto.response.RelayPolicyResponse;
 import com.sealmail.app.security.UserContext;
@@ -53,5 +55,19 @@ public class RuntimePolicyController {
             @RequestBody QuarantinePolicyRequest request,
             @AuthenticationPrincipal UserContext user) {
         return ApiResponse.ok(manageRuntimePolicyUseCase.updateQuarantinePolicy(request, user));
+    }
+
+    @GetMapping("/gm-edge")
+    @Operation(summary = "查询国密 Edge 策略")
+    public ApiResponse<GmEdgePolicyResponse> gmEdge(@AuthenticationPrincipal UserContext user) {
+        return ApiResponse.ok(manageRuntimePolicyUseCase.getGmEdgePolicy(user));
+    }
+
+    @PutMapping("/gm-edge")
+    @Operation(summary = "更新国密 Edge 策略")
+    public ApiResponse<GmEdgePolicyResponse> updateGmEdge(
+            @RequestBody GmEdgePolicyRequest request,
+            @AuthenticationPrincipal UserContext user) {
+        return ApiResponse.ok(manageRuntimePolicyUseCase.updateGmEdgePolicy(request, user));
     }
 }

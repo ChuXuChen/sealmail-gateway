@@ -1,7 +1,5 @@
 package com.sealmail.domain.system;
 
-import com.sealmail.domain.mailsecurity.SmtpTransportSecurity;
-
 import java.time.Instant;
 import java.util.List;
 
@@ -13,6 +11,7 @@ public interface SystemSettingsProvider {
             RuntimeSettings runtime,
             SmtpServerSettings smtpServer,
             DeliverySettings delivery,
+            GmEdgeSettings gmEdge,
             QuarantinePolicySettings quarantinePolicy,
             CertificateValidationSettings certificateValidation,
             InternalCaSettings internalCa,
@@ -39,27 +38,8 @@ public interface SystemSettingsProvider {
             String bindAddress,
             int port,
             int maxConnections,
-            int maxMessageSizeBytes,
-            TlsSettings tls
+            int maxMessageSizeBytes
     ) {
-    }
-
-    record TlsSettings(
-            boolean startTlsEnabled,
-            boolean tlsRequired,
-            boolean keystoreConfigured,
-            boolean pemConfigured,
-            String keyAlias,
-            String engine,
-            String provider,
-            String protocol,
-            List<String> enabledProtocols,
-            List<String> enabledCipherSuites
-    ) {
-        public TlsSettings {
-            enabledProtocols = enabledProtocols == null ? List.of() : List.copyOf(enabledProtocols);
-            enabledCipherSuites = enabledCipherSuites == null ? List.of() : List.copyOf(enabledCipherSuites);
-        }
     }
 
     record DeliverySettings(
@@ -74,8 +54,6 @@ public interface SystemSettingsProvider {
             String host,
             int afterFilterPort,
             int outboundPort,
-            boolean useTls,
-            SmtpTransportSecurity transportSecurity,
             int timeoutMs,
             String envelopeFrom
     ) {
@@ -84,8 +62,6 @@ public interface SystemSettingsProvider {
     record RelaySettings(
             String host,
             int port,
-            boolean useTls,
-            SmtpTransportSecurity transportSecurity,
             int timeoutMs,
             boolean usernameConfigured,
             boolean passwordConfigured,
@@ -93,7 +69,7 @@ public interface SystemSettingsProvider {
             String password
     ) {
         public RelaySettings redacted() {
-            return new RelaySettings(host, port, useTls, transportSecurity, timeoutMs, usernameConfigured, passwordConfigured, null, null);
+            return new RelaySettings(host, port, timeoutMs, usernameConfigured, passwordConfigured, null, null);
         }
     }
 

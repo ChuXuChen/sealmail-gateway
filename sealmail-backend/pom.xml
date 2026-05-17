@@ -25,6 +25,7 @@
     <modules>
         <module>sealmail-domain</module>
         <module>sealmail-infra</module>
+        <module>sealmail-edge</module>
         <module>sealmail-app</module>
         <module>sealmail-web</module>
         <module>sealmail-boot</module>

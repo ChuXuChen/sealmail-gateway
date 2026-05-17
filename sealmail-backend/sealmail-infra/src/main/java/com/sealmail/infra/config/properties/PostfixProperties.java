@@ -9,7 +9,6 @@ public class PostfixProperties {
     private String host = "127.0.0.1";
     private int afterFilterPort = 10026;
     private int outboundPort = 10027;
-    private boolean useTls = false;
     private int timeout = 10000;
     private String envelopeFrom;
 
@@ -43,14 +42,6 @@ public class PostfixProperties {
 
     public void setOutboundPort(int outboundPort) {
         this.outboundPort = outboundPort;
-    }
-
-    public boolean isUseTls() {
-        return useTls;
-    }
-
-    public void setUseTls(boolean useTls) {
-        this.useTls = useTls;
     }
 
     public int getTimeout() {

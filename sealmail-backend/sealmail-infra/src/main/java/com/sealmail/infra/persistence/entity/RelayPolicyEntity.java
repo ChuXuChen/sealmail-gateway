@@ -1,10 +1,7 @@
 package com.sealmail.infra.persistence.entity;
 
-import com.sealmail.domain.mailsecurity.SmtpTransportSecurity;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
-import jakarta.persistence.EnumType;
-import jakarta.persistence.Enumerated;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import jakarta.persistence.Version;
@@ -29,13 +26,6 @@ public class RelayPolicyEntity {
 
     @Column(name = "port", nullable = false)
     private int port;
-
-    @Column(name = "use_tls", nullable = false)
-    private boolean useTls;
-
-    @Enumerated(EnumType.STRING)
-    @Column(name = "transport_security", nullable = false, length = 16)
-    private SmtpTransportSecurity transportSecurity = SmtpTransportSecurity.NONE;
 
     @Column(name = "username", length = 254)
     private String username;

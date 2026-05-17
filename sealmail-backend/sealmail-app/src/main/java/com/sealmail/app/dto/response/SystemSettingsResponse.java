@@ -1,7 +1,5 @@
 package com.sealmail.app.dto.response;
 
-import com.sealmail.domain.mailsecurity.SmtpTransportSecurity;
-
 import java.time.Instant;
 import java.util.List;
 
@@ -9,6 +7,7 @@ public record SystemSettingsResponse(
         RuntimeResponse runtime,
         SmtpServerResponse smtpServer,
         DeliveryResponse delivery,
+        GmEdgeResponse gmEdge,
         QuarantinePolicyResponse quarantinePolicy,
         CertificateValidationResponse certificateValidation,
         InternalCaResponse internalCa,
@@ -34,27 +33,8 @@ public record SystemSettingsResponse(
             String bindAddress,
             int port,
             int maxConnections,
-            int maxMessageSizeBytes,
-            TlsResponse tls
+            int maxMessageSizeBytes
     ) {
-    }
-
-    public record TlsResponse(
-            boolean startTlsEnabled,
-            boolean tlsRequired,
-            boolean keystoreConfigured,
-            boolean pemConfigured,
-            String keyAlias,
-            String engine,
-            String provider,
-            String protocol,
-            List<String> enabledProtocols,
-            List<String> enabledCipherSuites
-    ) {
-        public TlsResponse {
-            enabledProtocols = enabledProtocols == null ? List.of() : List.copyOf(enabledProtocols);
-            enabledCipherSuites = enabledCipherSuites == null ? List.of() : List.copyOf(enabledCipherSuites);
-        }
     }
 
     public record DeliveryResponse(
@@ -64,13 +44,88 @@ public record SystemSettingsResponse(
     ) {
     }
 
+    public record GmEdgeResponse(
+            boolean enabled,
+            GmEdgeInboundResponse inbound,
+            GmEdgeOutboundResponse outbound,
+            GmEdgePostfixResponse postfix,
+            GmEdgeTlsResponse tls,
+            GmEdgeLimitsResponse limits,
+            List<GmEdgeRouteResponse> routes
+    ) {
+        public GmEdgeResponse {
+            routes = routes == null ? List.of() : List.copyOf(routes);
+        }
+    }
+
+    public record GmEdgeInboundResponse(
+            boolean enabled,
+            String bindAddress,
+            int startTlsPort,
+            int implicitTlsPort,
+            int backlog,
+            int maxConnections
+    ) {
+    }
+
+    public record GmEdgeOutboundResponse(
+            boolean enabled,
+            String bindAddress,
+            int smartHostPort,
+            int backlog,
+            int maxConnections
+    ) {
+    }
+
+    public record GmEdgePostfixResponse(
+            String host,
+            int port
+    ) {
+    }
+
+    public record GmEdgeTlsResponse(
+            List<String> protocols,
+            List<String> cipherSuites,
+            String keyStorePath,
+            boolean keyStoreConfigured,
+            boolean keyStorePasswordConfigured,
+            String keyStorePasswordSecretRef,
+            String keyStoreType,
+            String trustStorePath,
+            boolean trustStoreConfigured,
+            boolean trustStorePasswordConfigured,
+            String trustStorePasswordSecretRef,
+            String trustStoreType,
+            boolean trustAll
+    ) {
+        public GmEdgeTlsResponse {
+            protocols = protocols == null ? List.of() : List.copyOf(protocols);
+            cipherSuites = cipherSuites == null ? List.of() : List.copyOf(cipherSuites);
+        }
+    }
+
+    public record GmEdgeLimitsResponse(
+            int connectTimeoutMs,
+            int readTimeoutMs,
+            int maxMessageSizeBytes,
+            int maxLineLengthBytes,
+            int maxRecipients
+    ) {
+    }
+
+    public record GmEdgeRouteResponse(
+            String domainPattern,
+            String targetHost,
+            int targetPort,
+            String security
+    ) {
+    }
+
     public record PostfixResponse(
             boolean enabled,
             String host,
             int afterFilterPort,
             int outboundPort,
-            boolean useTls,
-            SmtpTransportSecurity transportSecurity,
             int timeoutMs,
             String envelopeFrom
     ) {
@@ -79,8 +134,6 @@ public record SystemSettingsResponse(
     public record RelayResponse(
             String host,
             int port,
-            boolean useTls,
-            SmtpTransportSecurity transportSecurity,
             int timeoutMs,
             boolean usernameConfigured,
             boolean passwordConfigured

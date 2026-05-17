@@ -1,8 +1,5 @@
 package com.sealmail.infra.mail.relay;
 
-import com.sealmail.domain.mailsecurity.SmtpTransportSecurity;
-import com.sealmail.infra.config.properties.TransportTlsProperties;
-import com.sealmail.infra.tls.TransportTlsContextFactory;
 import org.junit.jupiter.api.Test;
 
 import java.io.BufferedReader;
@@ -20,7 +17,6 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class SmtpRelayClientTest {
@@ -30,12 +26,11 @@ class SmtpRelayClientTest {
         try (FakeSmtpServer fakeServer = new FakeSmtpServer()) {
             fakeServer.start();
 
-            SmtpRelayClient smtpRelayClient = new SmtpRelayClient(
-                    new TransportTlsContextFactory(new TransportTlsProperties()));
+            SmtpRelayClient smtpRelayClient = new SmtpRelayClient();
             byte[] message = "Subject: Test\n\n.leading line\nsecond line".getBytes(StandardCharsets.UTF_8);
 
             smtpRelayClient.send(new SmtpRelayRequest(
-                    new SmtpRelayConnectionSettings("127.0.0.1", fakeServer.port(), false,
+                    new SmtpRelayConnectionSettings("127.0.0.1", fakeServer.port(),
                             "relay@example.com", "secret", 5000),
                     "relay@example.com",
                     List.of("alice@example.com", "bob@example.com"),
@@ -53,19 +48,6 @@ class SmtpRelayClientTest {
             assertTrue(fakeServer.commands().contains("RCPT TO:<bob@example.com>"));
             assertEquals("..leading line", fakeServer.dataLines().get(2));
         }
-    }
-
-    @Test
-    void connectionSettingsDoNotTreatPort465AsImplicitTlsUnlessModeRequestsSmpts() {
-        SmtpRelayConnectionSettings plainOn465 = new SmtpRelayConnectionSettings(
-                "127.0.0.1", 465, SmtpTransportSecurity.NONE, "", "", 5000);
-        SmtpRelayConnectionSettings smtps = new SmtpRelayConnectionSettings(
-                "127.0.0.1", 465, SmtpTransportSecurity.SMTPS, "", "", 5000);
-
-        assertFalse(plainOn465.useTls());
-        assertFalse(plainOn465.useImplicitTls());
-        assertTrue(smtps.useTls());
-        assertTrue(smtps.useImplicitTls());
     }
 
     private static final class FakeSmtpServer implements AutoCloseable {

@@ -17,7 +17,6 @@ import com.sealmail.infra.mail.pipeline.step.RelayStep;
 import com.sealmail.infra.mail.pipeline.step.SignStep;
 import com.sealmail.infra.mail.pipeline.step.VerifyStep;
 import org.springframework.integration.dsl.IntegrationFlow;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.messaging.Message;
 import org.springframework.messaging.MessageChannel;
 import org.springframework.messaging.MessageHeaders;
@@ -43,22 +42,6 @@ public class MailIntegrationFlows {
     private final MailProcessingTracker tracker;
     private final DomainEventPublisher domainEventPublisher;
 
-    public MailIntegrationFlows(DecryptStep decryptStep,
-                                VerifyStep verifyStep,
-                                SignStep signStep,
-                                EncryptStep encryptStep,
-                                QuarantineStep quarantineStep,
-                                RelayStep relayStep,
-                                DlpStep dlpStep,
-                                MailAuthenticationStep mailAuthenticationStep,
-                                DkimSignStep dkimSignStep,
-                                RoutingService routingService,
-                                MailProcessingTracker tracker) {
-        this(decryptStep, verifyStep, signStep, encryptStep, quarantineStep, relayStep, dlpStep,
-                mailAuthenticationStep, dkimSignStep, routingService, tracker, null);
-    }
-
-    @Autowired
     public MailIntegrationFlows(DecryptStep decryptStep,
                                 VerifyStep verifyStep,
                                 SignStep signStep,

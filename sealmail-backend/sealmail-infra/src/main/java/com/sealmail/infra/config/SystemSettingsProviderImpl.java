@@ -1,12 +1,12 @@
 package com.sealmail.infra.config;
 
-import com.sealmail.domain.mailsecurity.SmtpTransportSecurity;
+import com.sealmail.domain.system.GmEdgeSettings;
 import com.sealmail.domain.system.SystemSettingsProvider;
+import com.sealmail.domain.config.GmEdgePolicyPort;
 import com.sealmail.infra.config.properties.CaProperties;
 import com.sealmail.infra.config.properties.PostfixProperties;
 import com.sealmail.infra.config.properties.SecurityProperties;
 import com.sealmail.infra.config.properties.SmtpServerProperties;
-import com.sealmail.infra.tls.TransportTlsContextFactory;
 import org.springframework.core.env.Environment;
 import org.springframework.stereotype.Component;
 
@@ -21,26 +21,26 @@ public class SystemSettingsProviderImpl implements SystemSettingsProvider {
     private final PostfixProperties postfixProperties;
     private final RelayPolicyService relayPolicyService;
     private final QuarantinePolicyService quarantinePolicyService;
+    private final GmEdgePolicyService gmEdgePolicyService;
     private final SecurityProperties securityProperties;
     private final CaProperties caProperties;
-    private final TransportTlsContextFactory transportTlsContextFactory;
 
     public SystemSettingsProviderImpl(Environment environment,
                                       SmtpServerProperties smtpServerProperties,
                                       PostfixProperties postfixProperties,
                                       RelayPolicyService relayPolicyService,
                                       QuarantinePolicyService quarantinePolicyService,
+                                      GmEdgePolicyService gmEdgePolicyService,
                                       SecurityProperties securityProperties,
-                                      CaProperties caProperties,
-                                      TransportTlsContextFactory transportTlsContextFactory) {
+                                      CaProperties caProperties) {
         this.environment = environment;
         this.smtpServerProperties = smtpServerProperties;
         this.postfixProperties = postfixProperties;
         this.relayPolicyService = relayPolicyService;
         this.quarantinePolicyService = quarantinePolicyService;
+        this.gmEdgePolicyService = gmEdgePolicyService;
         this.securityProperties = securityProperties;
         this.caProperties = caProperties;
-        this.transportTlsContextFactory = transportTlsContextFactory;
     }
 
     @Override
@@ -49,6 +49,7 @@ public class SystemSettingsProviderImpl implements SystemSettingsProvider {
                 runtime(),
                 smtpServer(),
                 delivery(),
+                gmEdge(),
                 quarantinePolicy(),
                 certificateValidation(),
                 internalCa(),
@@ -61,7 +62,7 @@ public class SystemSettingsProviderImpl implements SystemSettingsProvider {
                 environment.getProperty("spring.application.name", "sealmail-gateway"),
                 List.of(environment.getActiveProfiles()),
                 true,
-                "PostgreSQL runtime policies + deployment-level YAML references",
+                "PostgreSQL runtime policies + deployment secret references",
                 Instant.now()
         );
     }
@@ -71,20 +72,7 @@ public class SystemSettingsProviderImpl implements SystemSettingsProvider {
                 smtpServerProperties.getBindAddress(),
                 smtpServerProperties.getPort(),
                 smtpServerProperties.getMaxConnections(),
-                smtpServerProperties.getMaxMessageSize(),
-                new TlsSettings(
-                        smtpServerProperties.isEnableStartTls(),
-                        smtpServerProperties.isRequireTls(),
-                        hasText(smtpServerProperties.getKeystorePath()),
-                        hasText(smtpServerProperties.getCertificatePath())
-                                && hasText(smtpServerProperties.getPrivateKeyPath()),
-                        emptyToNull(smtpServerProperties.getKeyAlias()),
-                        transportTlsContextFactory.engine().name(),
-                        transportTlsContextFactory.effectiveProvider(),
-                        transportTlsContextFactory.effectiveProtocol(),
-                        transportTlsContextFactory.effectiveEnabledProtocols(),
-                        transportTlsContextFactory.effectiveEnabledCipherSuites()
-                )
+                smtpServerProperties.getMaxMessageSize()
         );
     }
 
@@ -97,24 +85,74 @@ public class SystemSettingsProviderImpl implements SystemSettingsProvider {
                         postfixProperties.getHost(),
                         postfixProperties.getAfterFilterPort(),
                         postfixProperties.getOutboundPort(),
-                        postfixProperties.isUseTls(),
-                        SmtpTransportSecurity.fromLegacyUseTls(
-                                postfixProperties.isUseTls(),
-                                postfixProperties.getOutboundPort()),
                         postfixProperties.getTimeout(),
                         emptyToNull(postfixProperties.getEnvelopeFrom())
                 ),
                 new RelaySettings(
                         relay.host(),
                         relay.port(),
-                        relay.useTls(),
-                        relay.transportSecurity(),
                         relay.timeoutMs(),
                         hasText(relay.username()),
                         relay.passwordConfigured(),
                         relay.username(),
                         null
                 )
+        );
+    }
+
+    private GmEdgeSettings gmEdge() {
+        GmEdgePolicyPort.GmEdgePolicySettings settings = gmEdgePolicyService.getSettings();
+        return new GmEdgeSettings(
+                settings.enabled(),
+                new GmEdgeSettings.Inbound(
+                        settings.inbound().enabled(),
+                        settings.inbound().bindAddress(),
+                        settings.inbound().startTlsPort(),
+                        settings.inbound().implicitTlsPort(),
+                        settings.inbound().backlog(),
+                        settings.inbound().maxConnections()
+                ),
+                new GmEdgeSettings.Outbound(
+                        settings.outbound().enabled(),
+                        settings.outbound().bindAddress(),
+                        settings.outbound().smartHostPort(),
+                        settings.outbound().backlog(),
+                        settings.outbound().maxConnections()
+                ),
+                new GmEdgeSettings.Postfix(
+                        settings.postfix().host(),
+                        settings.postfix().port()
+                ),
+                new GmEdgeSettings.Tls(
+                        settings.tls().protocols(),
+                        settings.tls().cipherSuites(),
+                        settings.tls().keyStorePath(),
+                        hasText(settings.tls().keyStorePath()),
+                        settings.tls().keyStorePasswordConfigured(),
+                        settings.tls().keyStorePasswordSecretRef(),
+                        settings.tls().keyStoreType(),
+                        settings.tls().trustStorePath(),
+                        hasText(settings.tls().trustStorePath()),
+                        settings.tls().trustStorePasswordConfigured(),
+                        settings.tls().trustStorePasswordSecretRef(),
+                        settings.tls().trustStoreType(),
+                        settings.tls().trustAll()
+                ),
+                new GmEdgeSettings.Limits(
+                        settings.limits().connectTimeoutMs(),
+                        settings.limits().readTimeoutMs(),
+                        settings.limits().maxMessageSizeBytes(),
+                        settings.limits().maxLineLengthBytes(),
+                        settings.limits().maxRecipients()
+                ),
+                settings.routes().stream()
+                        .map(route -> new GmEdgeSettings.Route(
+                                route.domainPattern(),
+                                route.targetHost(),
+                                route.targetPort(),
+                                route.security()
+                        ))
+                        .toList()
         );
     }
 
@@ -149,8 +187,7 @@ public class SystemSettingsProviderImpl implements SystemSettingsProvider {
                 new CryptoCapability("签名算法", List.of("SM3withSM2", "SHA256withRSA")),
                 new CryptoCapability("内容加密", List.of("SM4-CBC", "AES-256-CBC")),
                 new CryptoCapability("密钥交换", List.of("SM2 KeyAgreement", "RSA KeyTransport")),
-                new CryptoCapability("哈希算法", List.of("SM3", "SHA-256")),
-                new CryptoCapability("传输层", List.of("TLS/STARTTLS", "TLCP 1.1", "TLS 1.3 RFC 8998"))
+                new CryptoCapability("哈希算法", List.of("SM3", "SHA-256"))
         );
     }
 

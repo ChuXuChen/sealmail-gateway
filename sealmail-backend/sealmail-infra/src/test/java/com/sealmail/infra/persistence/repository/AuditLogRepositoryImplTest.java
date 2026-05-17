@@ -6,7 +6,6 @@ import com.sealmail.domain.audit.AuditLogType;
 import com.sealmail.infra.persistence.mapper.AuditLogMapper;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.SpringBootConfiguration;
 import org.springframework.boot.autoconfigure.EnableAutoConfiguration;
 import org.springframework.boot.persistence.autoconfigure.EntityScan;
@@ -47,14 +46,17 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 @EnabledIfEnvironmentVariable(named = "SEALMAIL_TEST_DB_PASSWORD", matches = ".+")
 class AuditLogRepositoryImplTest {
 
-    @Autowired
-    private JdbcTemplate jdbcTemplate;
+    private final JdbcTemplate jdbcTemplate;
+    private final FailingAuditWriter failingAuditWriter;
+    private final AuditLogRepository repository;
 
-    @Autowired
-    private FailingAuditWriter failingAuditWriter;
-
-    @Autowired
-    private AuditLogRepository repository;
+    AuditLogRepositoryImplTest(JdbcTemplate jdbcTemplate,
+                               FailingAuditWriter failingAuditWriter,
+                               AuditLogRepository repository) {
+        this.jdbcTemplate = jdbcTemplate;
+        this.failingAuditWriter = failingAuditWriter;
+        this.repository = repository;
+    }
 
     @org.junit.jupiter.api.BeforeEach
     void cleanAuditLog() {

@@ -4,25 +4,29 @@ import type { FormInstance } from 'antd';
 import { mailTestApi, runtimePolicyApi, systemSettingsApi } from '../../api/client';
 import { getApiErrorMessage } from '../../api/errors';
 import type {
+  GmEdgePolicy,
   QuarantinePolicy,
   RelayPolicy,
   SystemSettings as SystemSettingsSnapshot,
 } from '../../types';
 import type {
+  GmEdgePolicyFormValues,
   QuarantinePolicyFormValues,
   RelayPolicyFormValues,
   TestMailValues,
 } from './settingsUtils';
-import { splitRecipients } from './settingsUtils';
+import { applyGmEdgeDefaults, splitRecipients } from './settingsUtils';
 
 interface UseSettingsParams {
+  gmEdgeForm: FormInstance<GmEdgePolicyFormValues>;
   quarantineForm: FormInstance<QuarantinePolicyFormValues>;
   relayForm: FormInstance<RelayPolicyFormValues>;
   testForm: FormInstance<TestMailValues>;
 }
 
-export const useSettings = ({ quarantineForm, relayForm, testForm }: UseSettingsParams) => {
+export const useSettings = ({ gmEdgeForm, quarantineForm, relayForm, testForm }: UseSettingsParams) => {
   const [settings, setSettings] = useState<SystemSettingsSnapshot | null>(null);
+  const [gmEdgePolicy, setGmEdgePolicy] = useState<GmEdgePolicy | null>(null);
   const [relayPolicy, setRelayPolicy] = useState<RelayPolicy | null>(null);
   const [quarantinePolicy, setQuarantinePolicy] = useState<QuarantinePolicy | null>(null);
   const [loading, setLoading] = useState(true);
@@ -31,14 +35,14 @@ export const useSettings = ({ quarantineForm, relayForm, testForm }: UseSettings
   const [probeResult, setProbeResult] = useState('');
   const [testLoading, setTestLoading] = useState(false);
 
-  const applyPolicyForms = useCallback((relay: RelayPolicy, quarantine: QuarantinePolicy) => {
+  const applyPolicyForms = useCallback((relay: RelayPolicy, quarantine: QuarantinePolicy, gmEdge: GmEdgePolicy) => {
     relayForm.setFieldsValue({
       ...relay,
-      transportSecurity: relay.transportSecurity ?? (relay.useTls ? 'STARTTLS' : 'NONE'),
       clearPasswordSecretRef: false,
     });
     quarantineForm.setFieldsValue(quarantine);
-  }, [quarantineForm, relayForm]);
+    gmEdgeForm.setFieldsValue(applyGmEdgeDefaults(gmEdge));
+  }, [gmEdgeForm, quarantineForm, relayForm]);
 
   const loadSettings = useCallback(async (initial = false) => {
     if (initial) {
@@ -48,10 +52,11 @@ export const useSettings = ({ quarantineForm, relayForm, testForm }: UseSettings
     }
 
     try {
-      const [response, relayResponse, quarantineResponse] = await Promise.all([
+      const [response, relayResponse, quarantineResponse, gmEdgeResponse] = await Promise.all([
         systemSettingsApi.get(),
         runtimePolicyApi.getRelay(),
         runtimePolicyApi.getQuarantine(),
+        runtimePolicyApi.getGmEdge(),
       ]);
       if (!response.data.success) {
         throw new Error(response.data.message);
@@ -59,7 +64,8 @@ export const useSettings = ({ quarantineForm, relayForm, testForm }: UseSettings
       setSettings(response.data.data);
       setRelayPolicy(relayResponse.data.data);
       setQuarantinePolicy(quarantineResponse.data.data);
-      applyPolicyForms(relayResponse.data.data, quarantineResponse.data.data);
+      setGmEdgePolicy(gmEdgeResponse.data.data);
+      applyPolicyForms(relayResponse.data.data, quarantineResponse.data.data, gmEdgeResponse.data.data);
     } catch (error) {
       message.error(getApiErrorMessage(error, '加载系统设置失败'));
     } finally {
@@ -73,17 +79,19 @@ export const useSettings = ({ quarantineForm, relayForm, testForm }: UseSettings
 
     const loadInitialSettings = async () => {
       try {
-        const [response, relayResponse, quarantineResponse] = await Promise.all([
+        const [response, relayResponse, quarantineResponse, gmEdgeResponse] = await Promise.all([
           systemSettingsApi.get(),
           runtimePolicyApi.getRelay(),
           runtimePolicyApi.getQuarantine(),
+          runtimePolicyApi.getGmEdge(),
         ]);
         if (!response.data.success) throw new Error(response.data.message);
         if (mounted) {
           setSettings(response.data.data);
           setRelayPolicy(relayResponse.data.data);
           setQuarantinePolicy(quarantineResponse.data.data);
-          applyPolicyForms(relayResponse.data.data, quarantineResponse.data.data);
+          setGmEdgePolicy(gmEdgeResponse.data.data);
+          applyPolicyForms(relayResponse.data.data, quarantineResponse.data.data, gmEdgeResponse.data.data);
         }
       } catch (error) {
         if (mounted) {
@@ -160,7 +168,6 @@ export const useSettings = ({ quarantineForm, relayForm, testForm }: UseSettings
       setRelayPolicy(response.data.data);
       relayForm.setFieldsValue({
         ...response.data.data,
-        transportSecurity: response.data.data.transportSecurity ?? (response.data.data.useTls ? 'STARTTLS' : 'NONE'),
         clearPasswordSecretRef: false,
       });
       const settingsResponse = await systemSettingsApi.get();
@@ -189,7 +196,25 @@ export const useSettings = ({ quarantineForm, relayForm, testForm }: UseSettings
     }
   }, [quarantineForm]);
 
+  const handleGmEdgePolicySave = useCallback(async (values: GmEdgePolicyFormValues) => {
+    try {
+      const response = await runtimePolicyApi.updateGmEdge(values);
+      if (!response.data.success) throw new Error(response.data.message);
+      setGmEdgePolicy(response.data.data);
+      gmEdgeForm.setFieldsValue(applyGmEdgeDefaults(response.data.data));
+      const settingsResponse = await systemSettingsApi.get();
+      if (settingsResponse.data.success) {
+        setSettings(settingsResponse.data.data);
+      }
+      message.success('国密 Edge 策略已保存');
+    } catch (error) {
+      message.error(getApiErrorMessage(error, '国密 Edge 策略保存失败'));
+    }
+  }, [gmEdgeForm]);
+
   return {
+    gmEdgePolicy,
+    handleGmEdgePolicySave,
     handleProbe,
     handleQuarantinePolicySave,
     handleRelayPolicySave,

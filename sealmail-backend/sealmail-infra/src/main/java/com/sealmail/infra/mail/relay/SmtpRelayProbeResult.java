@@ -19,10 +19,9 @@ public record SmtpRelayProbeResult(
     }
 
     public String summary() {
-        String mode = implicitTls ? "SMTPS" : (startTls ? "STARTTLS" : "PLAIN");
         String capabilitySummary = capabilities.isEmpty() ? "none" : String.join(", ", capabilities);
         return "SUCCESS: " + host + ":" + port
-                + " mode=" + mode
+                + " mode=PLAIN"
                 + " auth=" + (authenticated ? "ok" : "skipped")
                 + " capabilities=" + capabilitySummary;
     }

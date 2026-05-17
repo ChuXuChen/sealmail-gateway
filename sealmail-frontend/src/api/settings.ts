@@ -1,5 +1,7 @@
 import type {
   ApiResponse,
+  GmEdgePolicy,
+  GmEdgePolicyRequest,
   QuarantinePolicy,
   QuarantinePolicyRequest,
   RelayPolicy,
@@ -26,6 +28,12 @@ export const runtimePolicyApi = {
 
   updateQuarantine: (data: QuarantinePolicyRequest) =>
     apiClient.put<ApiResponse<QuarantinePolicy>>('/api/v1/runtime-policies/quarantine', data),
+
+  getGmEdge: () =>
+    apiClient.get<ApiResponse<GmEdgePolicy>>('/api/v1/runtime-policies/gm-edge'),
+
+  updateGmEdge: (data: GmEdgePolicyRequest) =>
+    apiClient.put<ApiResponse<GmEdgePolicy>>('/api/v1/runtime-policies/gm-edge', data),
 };
 
 export const mailTestApi = {
