@@ -47,6 +47,24 @@ class InfraDependencyRulesTest {
         assertTrue(violations.isEmpty(), () -> "Infra startup or global scan violations: " + violations);
     }
 
+    @Test
+    void mailPipelineDoesNotUseLegacyMailAuthImplementation() throws IOException {
+        List<Path> violations = javaFiles(Path.of("src/main/java/com/sealmail/infra/mail/pipeline")).stream()
+                .filter(path -> containsAny(path, "com.sealmail.infra.mail.auth."))
+                .toList();
+
+        assertTrue(violations.isEmpty(), () -> "Mail pipeline must use mailauth ports/adapters: " + violations);
+    }
+
+    @Test
+    void modernMailAuthDoesNotUseLegacyMailAuthImplementation() throws IOException {
+        List<Path> violations = javaFiles(Path.of("src/main/java/com/sealmail/infra/mailauth")).stream()
+                .filter(path -> containsAny(path, "com.sealmail.infra.mail.auth."))
+                .toList();
+
+        assertTrue(violations.isEmpty(), () -> "Modern mailauth adapters must not depend on legacy mail auth: " + violations);
+    }
+
     private static List<Path> javaFiles(Path root) throws IOException {
         try (var stream = Files.walk(root)) {
             return stream

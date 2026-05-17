@@ -11,6 +11,7 @@ public class MailAuthProperties {
     private boolean enabled = true;
     private String authservId = "sealmail-gateway";
     private boolean skipPrivateRelay = true;
+    private final TrustedSource trustedSource = new TrustedSource();
     private final Dkim dkim = new Dkim();
     private final Spf spf = new Spf();
     private final Dmarc dmarc = new Dmarc();
@@ -41,6 +42,10 @@ public class MailAuthProperties {
 
     public Dkim getDkim() {
         return dkim;
+    }
+
+    public TrustedSource getTrustedSource() {
+        return trustedSource;
     }
 
     public Spf getSpf() {
@@ -98,6 +103,27 @@ public class MailAuthProperties {
 
         public void setSignedHeaders(List<String> signedHeaders) {
             this.signedHeaders = signedHeaders != null ? signedHeaders : new ArrayList<>();
+        }
+    }
+
+    public static class TrustedSource {
+        private List<String> trustedRelayCidrs = new ArrayList<>(List.of("127.0.0.1/32", "::1/128"));
+        private List<String> originalIpHeaders = new ArrayList<>(List.of("X-Original-Client-IP", "X-Forwarded-For"));
+
+        public List<String> getTrustedRelayCidrs() {
+            return trustedRelayCidrs;
+        }
+
+        public void setTrustedRelayCidrs(List<String> trustedRelayCidrs) {
+            this.trustedRelayCidrs = trustedRelayCidrs != null ? trustedRelayCidrs : new ArrayList<>();
+        }
+
+        public List<String> getOriginalIpHeaders() {
+            return originalIpHeaders;
+        }
+
+        public void setOriginalIpHeaders(List<String> originalIpHeaders) {
+            this.originalIpHeaders = originalIpHeaders != null ? originalIpHeaders : new ArrayList<>();
         }
     }
 

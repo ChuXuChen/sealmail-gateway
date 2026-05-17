@@ -1,6 +1,7 @@
 package com.sealmail.infra.mail.pipeline;
 
 import com.sealmail.domain.certificate.Certificate;
+import com.sealmail.domain.mailauth.MailAuthPolicyRepository;
 import com.sealmail.domain.mailsecurity.*;
 import com.sealmail.domain.policy.DomainConfig;
 import com.sealmail.domain.policy.DomainConfigRepository;
@@ -28,6 +29,7 @@ public class RoutingService {
     private final MailCryptoSelectionService cryptoSelectionService;
     private final MailProcessingRepository mailProcessingRepository;
     private final PostfixProperties postfixProperties;
+    private final MailAuthPolicyRepository mailAuthPolicyRepository;
     private final DomainEventPublisher domainEventPublisher;
 
     public RoutingService(MailRouter mailRouter,
@@ -36,7 +38,7 @@ public class RoutingService {
                            MailProcessingRepository mailProcessingRepository,
                            PostfixProperties postfixProperties) {
         this(mailRouter, domainConfigRepository, cryptoSelectionService, mailProcessingRepository,
-                postfixProperties, null);
+                postfixProperties, null, null);
     }
 
     @Autowired
@@ -45,12 +47,14 @@ public class RoutingService {
                            MailCryptoSelectionService cryptoSelectionService,
                            MailProcessingRepository mailProcessingRepository,
                            PostfixProperties postfixProperties,
+                           MailAuthPolicyRepository mailAuthPolicyRepository,
                            DomainEventPublisher domainEventPublisher) {
         this.mailRouter = mailRouter;
         this.domainConfigRepository = domainConfigRepository;
         this.cryptoSelectionService = cryptoSelectionService;
         this.mailProcessingRepository = mailProcessingRepository;
         this.postfixProperties = postfixProperties;
+        this.mailAuthPolicyRepository = mailAuthPolicyRepository;
         this.domainEventPublisher = domainEventPublisher;
     }
 
@@ -277,7 +281,7 @@ public class RoutingService {
             baseContext = baseContext.withRecordDisposition(MailRecordDisposition.EXCEPTION);
         }
 
-        if (domainConfig != null && domainConfig.isDkimEnabled()) {
+        if (direction == MailDirection.OUTBOUND && dkimSigningEnabled(envelope.getSender().getDomain())) {
             processingDecision = processingDecision.withDkimSigningRequired(true);
         }
 
@@ -357,6 +361,15 @@ public class RoutingService {
         return direction == MailDirection.OUTBOUND
                 && decision instanceof RoutingDecision.Quarantine quarantine
                 && quarantine.getReason() == QuarantineReason.CERTIFICATE_MISSING;
+    }
+
+    private boolean dkimSigningEnabled(String domain) {
+        if (mailAuthPolicyRepository == null || domain == null || domain.isBlank()) {
+            return false;
+        }
+        return mailAuthPolicyRepository.findDomainPolicy(domain)
+                .map(policy -> policy.enabled() && policy.dkimSigningPolicy().signingReady())
+                .orElse(false);
     }
 
     private MailProcessingContext context(Message<?> message) {

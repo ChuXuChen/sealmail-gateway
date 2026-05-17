@@ -1,13 +1,12 @@
 package com.sealmail.infra.mail.auth;
 
 import com.sealmail.infra.config.properties.MailAuthProperties;
-import org.springframework.stereotype.Component;
+import com.sealmail.infra.dns.DnsTxtResolver;
 
 import java.net.InetAddress;
 import java.util.List;
 import java.util.Locale;
 
-@Component
 public class SpfVerifier {
 
     private final DnsTxtResolver dns;

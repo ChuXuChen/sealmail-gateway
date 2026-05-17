@@ -4,7 +4,6 @@ import com.sealmail.domain.config.SecretReferenceResolver;
 import com.sealmail.infra.config.properties.MailAuthProperties;
 import com.sealmail.infra.crypto.util.PemUtils;
 import jakarta.mail.internet.MimeMessage;
-import org.springframework.stereotype.Component;
 
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -15,7 +14,6 @@ import java.util.Base64;
 import java.util.List;
 import java.util.Locale;
 
-@Component
 public class DkimSigner {
 
     private final MailAuthProperties properties;

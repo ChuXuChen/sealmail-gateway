@@ -111,13 +111,13 @@ sealmail-infra/src/main/java/com/sealmail/infra/mailauth/
 适配器：
 
 - `DnsLookupMailAuthProbe`
-- `LibraryBackedMailAuthVerifier`
-- `LibraryBackedDkimSigner`
+- `StandardMailAuthVerifier`
+- `DkimRsaSha256Signer`
 - `SecretRefDkimKeyResolver`
 - `PostfixTrustedSourceResolver`
 - `AuthenticationResultsHeaderWriter`
-- `MailAuthVerificationStep`
-- `DkimSigningStep`
+- `MailAuthenticationStep`
+- `DkimSignStep`
 
 要求：
 
@@ -381,6 +381,27 @@ MAVEN_USER_HOME=/tmp/m2 ./mvnw -Dmaven.repo.local=/tmp/m2/repository \
 
 ### 阶段 0：行为保护与边界确认
 
+状态：已完成（2026-05-17）。
+
+已完成记录：
+
+- 已为旧 `infra/mail/auth` 入站认证、DKIM 签名/验签、SPF、DMARC、DNS 记录生成补 characterization tests。
+- 已将旧 `com.sealmail.infra.mail.auth` 包标记为迁移对象，后续新能力不得继续扩展该旧包边界。
+- 已确认真实来源 IP 缺口：当前 `SealMailSmtpServer` 只把 `MessageContext#getRemoteAddress()` 写入 `MailEnvelope.remoteHost` 和 `AuditTrace.remoteAddress`；content-filter/本机中继部署下 SPF 只能看到 `127.0.0.1` 等中继地址，尚未实现可信 `XFORWARD` 或可信边界来源覆盖。
+
+验收命令：
+
+```bash
+MAVEN_USER_HOME=/tmp/m2 ./mvnw -Dmaven.repo.local=/tmp/m2/repository \
+  -f sealmail-backend/pom.xml \
+  -pl sealmail-infra -am \
+  -Dtest='*MailAuth*,*Dkim*,*Spf*,*Dmarc*' \
+  -Dsurefire.failIfNoSpecifiedTests=false \
+  test
+```
+
+验收结果：通过，18 个邮件认证相关测试成功。
+
 交付：
 
 - 为当前入站认证、出站 DKIM、DNS 记录生成补 characterization tests。
@@ -393,6 +414,27 @@ MAVEN_USER_HOME=/tmp/m2 ./mvnw -Dmaven.repo.local=/tmp/m2/repository \
 - 邮件认证相关测试可单独运行。
 
 ### 阶段 1：新领域模型与端口
+
+状态：已完成（2026-05-17）。
+
+已完成记录：
+
+- 已新增 `domain/mailauth` 邮件认证模型与端口，包括全局策略、域名策略、DKIM selector/key ref、SPF/DMARC 发布策略、认证结果、DNS 记录、DNS probe、签名/验签/来源解析端口。
+- 已新增 `app/usecase/mailauth` 用例骨架与 DTO：全局策略查询/更新、域名策略查询/更新、DNS 记录生成、DNS probe、selector 轮换、状态查询。
+- 已新增新版 Web API controller，覆盖计划中的 `/policy`、`/status`、`/domains/{domain}/policy`、`/domains/{domain}/dns-records`、`/domains/{domain}/dns-probe`、`/domains/{domain}/dkim/rotate-selector`。
+
+验收命令：
+
+```bash
+MAVEN_USER_HOME=/tmp/m2 ./mvnw -Dmaven.repo.local=/tmp/m2/repository \
+  -f sealmail-backend/pom.xml \
+  -pl sealmail-domain,sealmail-app,sealmail-web -am \
+  -Dtest='*MailAuth*,*DependencyRules*' \
+  -Dsurefire.failIfNoSpecifiedTests=false \
+  test
+```
+
+验收结果：通过，domain/app/web 编译通过，架构边界测试通过。
 
 交付：
 
@@ -408,6 +450,29 @@ MAVEN_USER_HOME=/tmp/m2 ./mvnw -Dmaven.repo.local=/tmp/m2/repository \
 
 ### 阶段 2：配置与数据库重塑
 
+状态：已完成（2026-05-17）。
+
+已完成记录：
+
+- 已新增 Flyway migration `V15__mail_auth_policy_modernization.sql`，创建 `mail_auth_policy`、`mail_auth_domain_policy`、`mail_auth_dns_probe` 三张新表。
+- 已新增对应 JPA entity 与 `MailAuthPolicyRepository` adapter。
+- 新 adapter 支持新表读写；当新表尚未初始化时，可从旧 `mail_auth_config` 兼容推导全局策略和域名级策略。
+- 域名级 DKIM policy 已支持独立 selector、key secret ref/key path、签名 header 集。
+- 新 schema 只保存 DKIM key path 或 secret ref，并通过约束禁止同一策略同时保存两者。
+
+验收命令：
+
+```bash
+MAVEN_USER_HOME=/tmp/m2 ./mvnw -Dmaven.repo.local=/tmp/m2/repository \
+  -f sealmail-backend/pom.xml \
+  -pl sealmail-infra -am \
+  -Dtest='*MailAuth*,*Dkim*,*Spf*,*Dmarc*,*DependencyRules*' \
+  -Dsurefire.failIfNoSpecifiedTests=false \
+  test
+```
+
+验收结果：通过，21 个相关测试成功。
+
 交付：
 
 - 新增 migration。
@@ -421,6 +486,48 @@ MAVEN_USER_HOME=/tmp/m2 ./mvnw -Dmaven.repo.local=/tmp/m2/repository \
 - 私钥只以 path/secret ref 表达。
 
 ### 阶段 3：协议适配器
+
+状态：已完成（2026-05-17）。
+
+已完成记录：
+
+- 已新增 `infra/mailauth` 适配器边界：
+  - `DnsLookupMailAuthProbe`
+  - `SecretRefDkimKeyResolver`
+  - `StandardMailAuthVerifier`
+  - `DkimRsaSha256Signer`
+  - `DkimRsaSha256Verifier`
+  - `SpfEvaluator`
+  - `DmarcEvaluator`
+  - `AuthenticationResultsHeaderWriter`
+- DNS probe 已支持 TXT 匹配、不匹配、缺失和临时错误分类，并持久化结果可经阶段 2 repository 保存。
+- DKIM key resolver 已支持 path/secret ref 读取，并只向上暴露私钥 PEM 或公钥数据，不进入数据库。
+- 新 verifier adapter 已通过 `MailSourceIdentity` 使用来源 IP 与 envelope domain，避免完全依赖旧 envelope 缺省值。
+- DKIM 已实现 `rsa-sha256`、relaxed/relaxed 出站签名和 DNS 公钥验签；测试只生成运行期 RSA key，不写入仓库。
+- SPF 已覆盖 `ip4`/`ip6` CIDR、`a`、`mx`、`include`、`redirect`、`exists` 和 DNS lookup 上限。
+- DMARC 已覆盖基于 Public Suffix List 的组织域判断、SPF/DKIM alignment、`p`/`sp` 策略映射和本地 failure action 映射。
+- `Authentication-Results` writer 已从认证逻辑中拆出。
+- `Authentication-Results` writer 写入前会移除同一 `authserv-id` 的旧结果，保留其他认证服务写入的结果，避免伪造内部认证结果被继续保留。
+
+当前限制：
+
+- 协议实现不再包裹旧 `infra/mail/auth`。旧包只保留 characterization tests 和旧配置 API 兼容入口。
+- 完整 RFC/互操作 fixture 仍需持续补强。
+
+验收命令：
+
+```bash
+MAVEN_USER_HOME=/tmp/m2 ./mvnw -Dmaven.repo.local=/tmp/m2/repository \
+  -f sealmail-backend/pom.xml \
+  -pl sealmail-infra -am \
+  -Dtest='*MailAuth*,*Dkim*,*Spf*,*Dmarc*,*DnsLookup*,*AuthenticationResults*,*PublicSuffix*,*DependencyRules*' \
+  -Dsurefire.failIfNoSpecifiedTests=false \
+  test
+```
+
+验收结果：通过，42 个相关测试成功。
+
+补充验收结果：直连协议实现与主链路相关测试通过，57 个相关测试成功。
 
 交付：
 
@@ -438,6 +545,18 @@ MAVEN_USER_HOME=/tmp/m2 ./mvnw -Dmaven.repo.local=/tmp/m2/repository \
 
 ### 阶段 4：真实来源 IP 与 Postfix 边界
 
+状态：已完成（2026-05-17）。
+
+已完成记录：
+
+- 已新增 `sealmail.mail-auth.trusted-source.trusted-relay-cidrs` 与 `original-ip-headers` 部署级配置，默认只信任 loopback。
+- 已新增 `PostfixTrustedSourceResolver`：
+  - `DISABLED`：不覆盖 SMTP peer IP。
+  - `TRUSTED_HEADERS`：只有 peer IP 命中可信中继 CIDR 时，才接受 `X-Original-Client-IP`/`X-Forwarded-For` 等配置头。
+  - `XFORWARD`：明确记录当前 SubEtha SMTP adapter 尚未暴露 XFORWARD。
+- 已在入站 `MailAuthenticationStep` 中接入 `TrustedMailSourcePort`，SPF 使用解析后的来源身份。
+- 已用测试覆盖可信中继、不可信 header、关闭模式与主链路来源传递。
+
 交付：
 
 - 可信中继配置。
@@ -451,6 +570,22 @@ MAVEN_USER_HOME=/tmp/m2 ./mvnw -Dmaven.repo.local=/tmp/m2/repository \
 - 私网跳过行为可审计。
 
 ### 阶段 5：接入邮件主链路
+
+状态：已完成（2026-05-17）。
+
+已完成记录：
+
+- 已扩展 `MailProcessingContext`，新增强类型 `AuthenticationResultSet mailAuthResults`。
+- 已将入站 `MailAuthenticationStep` 替换为新端口链路：
+  - `MailAuthPolicyRepository`
+  - `TrustedMailSourcePort`
+  - `MailAuthVerifierPort`
+  - `AuthenticationResultsHeaderWriter`
+- 入站认证结果写入 `MailProcessingContext.mailAuthResults`，DMARC quarantine/reject 等本地动作转入统一 `MailProcessingDecision` 隔离分支。
+- 已将出站 `DkimSignStep` 替换为 `MailAuthPolicyRepository` + `DkimSigningPort`，按域名 `DomainMailAuthPolicy` 决定是否签名。
+- 已将 `RoutingService` 的 `dkimSigningRequired` 决策迁移到新域名邮件认证策略，旧 `DomainConfig.dkimEnabled` 不再驱动主链路 DKIM。
+- 已将旧 `SpfVerifier`、`DkimSigner`、`DkimVerifier`、`DmarcVerifier`、`MailAuthenticationService` 从 Spring 生产装配中移除。
+- 已新增架构测试，禁止 `infra/mail/pipeline` 引用旧 `infra.mail.auth` 协议实现。
 
 交付：
 
@@ -467,6 +602,15 @@ MAVEN_USER_HOME=/tmp/m2 ./mvnw -Dmaven.repo.local=/tmp/m2/repository \
 
 ### 阶段 6：DNS 健康检查与运营化
 
+状态：已完成（2026-05-17）。
+
+已完成记录：
+
+- 已通过 `GenerateMailAuthDnsRecordsUseCase` 暴露 DKIM/SPF/DMARC DNS TXT 生成，返回稳定的 record type/name/value/available 结构。
+- 已通过 `ProbeMailAuthDnsUseCase` 暴露 DNS probe API，probe 结果保存到 `mail_auth_dns_probe`。
+- 已通过 `QueryMailAuthStatusUseCase` 和 `/api/v1/mail-auth/status` 暴露现代化状态摘要，包括全局策略、可信代理模式、失败动作、域名策略数量、DKIM 启用域名数量和最近 DNS probe。
+- 旧 `/api/v1/mail-auth/status` controller 已删除，当前 status 只来自新策略仓库。
+
 交付：
 
 - DNS probe API。
@@ -480,6 +624,25 @@ MAVEN_USER_HOME=/tmp/m2 ./mvnw -Dmaven.repo.local=/tmp/m2/repository \
 - DNS 错误能明确分类。
 
 ### 阶段 7：旧实现下线
+
+状态：已完成（2026-05-17）。
+
+已完成记录：
+
+- 旧 `infra/mail/auth` 协议类保留为 legacy characterization 输入，但已从 Spring 生产装配移除。
+- 主链路 `MailAuthenticationStep`、`DkimSignStep`、`RoutingService` 均使用 `domain/mailauth` 端口与 `infra/mailauth` adapter。
+- 旧全局配置 API、DTO、app use case 和 `MailAuthConfigPort` 已删除；`mail_auth_config` 仅作为新 `MailAuthPolicyRepositoryImpl` 的兼容读取 fallback。
+- 旧 `MailAuthConfigService` 已瘦身为 legacy DNS 记录 characterization helper，不再是 Spring bean，也不再提供生产写入入口。
+- DNS 查询组件已移至中性 `infra/dns` 边界；旧 `infra/mail/auth` 不再保留 Spring 生产组件。
+- 已新增架构测试，禁止 `infra/mail/pipeline` 和现代 `infra/mailauth` adapter 引用旧 `infra.mail.auth` 协议实现。
+
+最终验收命令：
+
+```bash
+MAVEN_USER_HOME=/tmp/m2 ./mvnw -Dmaven.repo.local=/tmp/m2/repository -f sealmail-backend/pom.xml test
+```
+
+最终验收结果：通过，231 个后端测试成功，2 个测试按既有条件跳过。
 
 交付：
 

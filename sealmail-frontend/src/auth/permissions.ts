@@ -31,12 +31,16 @@ export const canViewAuditLogs = (user: UserContext | null): boolean =>
 export const canManageDomains = (user: UserContext | null): boolean =>
   canManageCa(user);
 
+export const canManageMailAuth = (user: UserContext | null): boolean =>
+  canManageDomains(user);
+
 export const getPermissionSummary = (user: UserContext | null): string[] => {
   const summary = [
     canManageCa(user) ? 'PKI 管理' : null,
     canManageCertificates(user) ? '证书管理' : null,
     canManageDlp(user) ? 'DLP 管理' : null,
     canManageDomains(user) ? '域名配置' : null,
+    canManageMailAuth(user) ? '邮件认证' : null,
     canViewQuarantine(user) ? '隔离查看' : null,
     canViewAuditLogs(user) ? '审计查看' : null,
   ].filter(Boolean) as string[];

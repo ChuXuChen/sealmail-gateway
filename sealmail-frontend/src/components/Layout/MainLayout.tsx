@@ -14,6 +14,7 @@ import {
   StopOutlined,
   WarningOutlined,
   PartitionOutlined,
+  MailOutlined,
   MenuFoldOutlined,
   MenuUnfoldOutlined,
 } from '@ant-design/icons';
@@ -25,6 +26,7 @@ import {
   canManageCertificates,
   canManageDlp,
   canManageDomains,
+  canManageMailAuth,
   canViewAuditLogs,
   canViewCrl,
   canViewQuarantine,
@@ -115,6 +117,11 @@ const MainLayout: React.FC = () => {
       key: '/domains',
       icon: <GlobalOutlined />,
       label: '域名配置',
+    } : null,
+    canManageMailAuth(user) ? {
+      key: '/mail-auth',
+      icon: <MailOutlined />,
+      label: '邮件认证',
     } : null,
     canViewAuditLogs(user) ? {
       key: '/audit-logs',

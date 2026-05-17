@@ -3,9 +3,7 @@ package com.sealmail.infra.mail.auth;
 import com.sealmail.domain.mailsecurity.MailEnvelope;
 import com.sealmail.infra.config.properties.MailAuthProperties;
 import jakarta.mail.internet.MimeMessage;
-import org.springframework.stereotype.Service;
 
-@Service
 public class MailAuthenticationService {
 
     private final MailAuthProperties properties;

@@ -1,4 +1,4 @@
-package com.sealmail.infra.mail.auth;
+package com.sealmail.infra.dns;
 
 import org.springframework.stereotype.Component;
 

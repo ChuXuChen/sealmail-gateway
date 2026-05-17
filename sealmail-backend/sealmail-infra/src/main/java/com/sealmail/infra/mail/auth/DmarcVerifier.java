@@ -1,13 +1,12 @@
 package com.sealmail.infra.mail.auth;
 
 import com.sealmail.infra.config.properties.MailAuthProperties;
-import org.springframework.stereotype.Component;
+import com.sealmail.infra.dns.DnsTxtResolver;
 
 import java.util.HashMap;
 import java.util.Locale;
 import java.util.Map;
 
-@Component
 public class DmarcVerifier {
 
     private final DnsTxtResolver dns;

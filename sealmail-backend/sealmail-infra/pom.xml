@@ -115,6 +115,12 @@
             <artifactId>spring-security-crypto</artifactId>
         </dependency>
 
+        <!-- Public Suffix List for DMARC organizational domain resolution -->
+        <dependency>
+            <groupId>com.google.guava</groupId>
+            <artifactId>guava</artifactId>
+        </dependency>
+
         <!-- JWT Support -->
         <dependency>
             <groupId>io.jsonwebtoken</groupId>

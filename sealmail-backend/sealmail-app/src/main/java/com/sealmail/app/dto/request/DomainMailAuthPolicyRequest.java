@@ -2,35 +2,30 @@ package com.sealmail.app.dto.request;
 
 import java.util.List;
 
-public record MailAuthConfigRequest(
+public record DomainMailAuthPolicyRequest(
         Boolean enabled,
-        String authservId,
-        Boolean skipPrivateRelay,
-        Boolean dkimEnabled,
+        Boolean dkimSigningEnabled,
         String dkimSelector,
-        String dkimPrivateKeyPath,
-        String dkimPrivateKeySecretRef,
-        Boolean clearDkimPrivateKeySecretRef,
+        String dkimKeySecretRef,
+        String dkimKeyPath,
         List<String> dkimSignedHeaders,
-        Boolean spfEnabled,
-        Integer spfMaxDnsLookups,
+        Boolean spfPublishEnabled,
         Boolean spfUseA,
         Boolean spfUseMx,
         List<String> spfIp4,
         List<String> spfIp6,
         List<String> spfIncludes,
         String spfAllPolicy,
-        Boolean dmarcEnabled,
+        Boolean dmarcPublishEnabled,
         String dmarcPolicy,
+        String dmarcSubdomainPolicy,
         String dmarcAdkim,
         String dmarcAspf,
         Integer dmarcPct,
         String dmarcRua,
-        String dmarcRuf,
-        String dmarcFailureAction,
-        Boolean dmarcQuarantineRejectPolicy
+        String dmarcRuf
 ) {
-    public MailAuthConfigRequest {
+    public DomainMailAuthPolicyRequest {
         dkimSignedHeaders = dkimSignedHeaders == null ? null : List.copyOf(dkimSignedHeaders);
         spfIp4 = spfIp4 == null ? null : List.copyOf(spfIp4);
         spfIp6 = spfIp6 == null ? null : List.copyOf(spfIp6);

@@ -1,7 +1,7 @@
 package com.sealmail.infra.mail.auth;
 
+import com.sealmail.infra.dns.DnsTxtResolver;
 import jakarta.mail.internet.MimeMessage;
-import org.springframework.stereotype.Component;
 
 import java.nio.charset.StandardCharsets;
 import java.security.KeyFactory;
@@ -16,7 +16,6 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 
-@Component
 public class DkimVerifier {
 
     private final DnsTxtResolver dns;

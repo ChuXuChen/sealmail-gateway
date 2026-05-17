@@ -5,6 +5,15 @@ import com.sealmail.domain.certificate.CertificateId;
 import com.sealmail.domain.certificate.CertificateRepository;
 import com.sealmail.domain.certificate.KeyUsage;
 import com.sealmail.domain.certificate.ValidityPeriod;
+import com.sealmail.domain.mailauth.DkimKeyRef;
+import com.sealmail.domain.mailauth.DkimSelector;
+import com.sealmail.domain.mailauth.DkimSigningPolicy;
+import com.sealmail.domain.mailauth.DmarcPublicationPolicy;
+import com.sealmail.domain.mailauth.DomainMailAuthPolicy;
+import com.sealmail.domain.mailauth.DnsProbeResult;
+import com.sealmail.domain.mailauth.MailAuthPolicy;
+import com.sealmail.domain.mailauth.MailAuthPolicyRepository;
+import com.sealmail.domain.mailauth.SpfPublicationPolicy;
 import com.sealmail.domain.mailsecurity.MailDirection;
 import com.sealmail.domain.mailsecurity.MailEnvelope;
 import com.sealmail.domain.mailsecurity.MailProcessingContext;
@@ -180,6 +189,40 @@ class RoutingServiceTest {
 
         MailProcessingContext context = (MailProcessingContext) routed.getHeaders().get(MailProcessingHeaders.CONTEXT);
         assertEquals(CryptoProfile.GM, context.cryptoProfile());
+    }
+
+    @Test
+    void routeOutboundEnablesDkimSigningFromMailAuthDomainPolicy() {
+        MailRouter mailRouter = mock(MailRouter.class);
+        DomainConfigRepository domainConfigRepository = mock(DomainConfigRepository.class);
+        CertificateRepository certificateRepository = mock(CertificateRepository.class);
+        MailProcessingRepository mailProcessingRepository = mock(MailProcessingRepository.class);
+        RoutingService routingService = new RoutingService(
+                mailRouter,
+                domainConfigRepository,
+                cryptoSelectionService(certificateRepository),
+                mailProcessingRepository,
+                postfixProperties(),
+                mailAuthPolicies(Optional.of(dkimReadyPolicy())),
+                null
+        );
+
+        EmailAddress sender = new EmailAddress("alice@example.com");
+        EmailAddress recipient = new EmailAddress("bob@example.com");
+        MailEnvelope envelope = envelope(sender, recipient);
+        DomainConfig config = DomainConfig.create("domain-1", "example.com", true);
+
+        when(domainConfigRepository.findByDomain("example.com")).thenReturn(Optional.of(config));
+        when(mailRouter.route(any(), any(), any(), any(), any(), any(), any()))
+                .thenReturn(new RoutingDecision.PassThrough());
+        when(mailProcessingRepository.save(any(MailProcessing.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        Message<byte[]> routed = routingService.routeOutbound(MessageBuilder.withPayload("hello".getBytes())
+                .setHeader(MailProcessingHeaders.CONTEXT, MailProcessingContext.create(envelope))
+                .build());
+
+        MailProcessingContext context = (MailProcessingContext) routed.getHeaders().get(MailProcessingHeaders.CONTEXT);
+        assertTrue(context.decision().dkimSigningRequired());
     }
 
     @Test
@@ -431,5 +474,60 @@ class RoutingServiceTest {
 
     private static MailCryptoSelectionService cryptoSelectionService(CertificateRepository certificateRepository) {
         return new MailCryptoSelectionService(certificateRepository, new CryptoProfileSelector());
+    }
+
+    private static DomainMailAuthPolicy dkimReadyPolicy() {
+        return new DomainMailAuthPolicy(
+                "example.com",
+                true,
+                new DkimSigningPolicy(
+                        true,
+                        new DkimSelector("sealmail"),
+                        new DkimKeyRef("DKIM_PRIVATE_KEY", null),
+                        List.of("from", "to", "subject", "date", "message-id")),
+                SpfPublicationPolicy.disabled(),
+                DmarcPublicationPolicy.disabled(),
+                null,
+                null,
+                0);
+    }
+
+    private static MailAuthPolicyRepository mailAuthPolicies(Optional<DomainMailAuthPolicy> domainPolicy) {
+        return new MailAuthPolicyRepository() {
+            @Override
+            public MailAuthPolicy findPolicy() {
+                return MailAuthPolicy.defaults();
+            }
+
+            @Override
+            public MailAuthPolicy savePolicy(MailAuthPolicy policy) {
+                return policy;
+            }
+
+            @Override
+            public Optional<DomainMailAuthPolicy> findDomainPolicy(String domainName) {
+                return domainPolicy;
+            }
+
+            @Override
+            public DomainMailAuthPolicy saveDomainPolicy(DomainMailAuthPolicy policy) {
+                return policy;
+            }
+
+            @Override
+            public List<DomainMailAuthPolicy> findDomainPolicies() {
+                return domainPolicy.stream().toList();
+            }
+
+            @Override
+            public DnsProbeResult saveDnsProbeResult(DnsProbeResult result) {
+                return result;
+            }
+
+            @Override
+            public List<DnsProbeResult> findLatestDnsProbeResults(String domainName) {
+                return List.of();
+            }
+        };
     }
 }

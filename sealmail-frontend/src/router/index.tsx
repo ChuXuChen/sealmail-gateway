@@ -11,6 +11,7 @@ import {
   canManageCertificates,
   canManageDlp,
   canManageDomains,
+  canManageMailAuth,
   canViewAuditLogs,
   canViewCrl,
   canViewQuarantine,
@@ -30,6 +31,7 @@ const DlpSelection = React.lazy(() => import('../pages/DlpSelection'));
 const Settings = React.lazy(() => import('../pages/Settings'));
 const AuditLogs = React.lazy(() => import('../pages/AuditLogs'));
 const DomainConfigs = React.lazy(() => import('../pages/DomainConfigs'));
+const MailAuth = React.lazy(() => import('../pages/MailAuth'));
 const Forbidden = React.lazy(() => import('../pages/Forbidden'));
 
 interface ProtectedRouteProps {
@@ -191,6 +193,14 @@ const router = createBrowserRouter([
         element: withSuspense(
           <RoleRoute check={canManageDomains}>
             <DomainConfigs />
+          </RoleRoute>,
+        ),
+      },
+      {
+        path: 'mail-auth',
+        element: withSuspense(
+          <RoleRoute check={canManageMailAuth}>
+            <MailAuth />
           </RoleRoute>,
         ),
       },
