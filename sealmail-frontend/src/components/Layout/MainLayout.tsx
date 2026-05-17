@@ -37,6 +37,9 @@ const { Header, Sider, Content } = Layout;
 const { useBreakpoint } = Grid;
 const { Text } = Typography;
 
+const siderWidth = 212;
+const collapsedWidth = 92;
+
 const MainLayout: React.FC = () => {
   const [collapsed, setCollapsed] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
@@ -184,7 +187,9 @@ const MainLayout: React.FC = () => {
           className="main-layout__sider"
           collapsible
           collapsed={collapsed}
+          collapsedWidth={collapsedWidth}
           onCollapse={setCollapsed}
+          width={siderWidth}
         >
           {navigation}
         </Sider>
@@ -197,8 +202,8 @@ const MainLayout: React.FC = () => {
         onClose={() => setMobileNavOpen(false)}
         width={240}
         styles={{
-          body: { padding: 0, background: '#001529' },
-          content: { background: '#001529' },
+          body: { padding: 0, background: '#17211f' },
+          content: { background: '#17211f' },
         }}
       >
         {navigation}
@@ -216,11 +221,11 @@ const MainLayout: React.FC = () => {
               onClick={() => setMobileNavOpen(true)}
               aria-label="打开导航"
             />
-          ) : <span />}
+          ) : <span className="main-layout__header-spacer" />}
           <Dropdown menu={{ items: userMenuItems }} placement="bottomRight">
             <div className="main-layout__user">
               <Avatar icon={<UserOutlined />} />
-              <span>{user?.username || 'User'}</span>
+              <span className="main-layout__user-name">{user?.username || 'User'}</span>
               <Tag>{role}</Tag>
             </div>
           </Dropdown>

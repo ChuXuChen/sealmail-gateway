@@ -127,7 +127,7 @@ const MailAuthSettingsPanel: React.FC<MailAuthSettingsPanelProps> = ({
   };
 
   return (
-    <Card>
+    <Card className="mail-auth-card">
       <Form form={form} layout="vertical" onFinish={onSubmit} disabled={loading}>
         <Tabs
           items={[

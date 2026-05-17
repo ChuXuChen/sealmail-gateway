@@ -14,7 +14,7 @@ interface SealMailLogoProps {
 const SealMailLogo: React.FC<SealMailLogoProps> = ({
   collapsed = false,
   className,
-  hideMark = true,
+  hideMark = false,
   subtitle = '邮件安全网关',
   variant = 'sider',
 }) => {

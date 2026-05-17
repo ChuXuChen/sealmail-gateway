@@ -28,11 +28,13 @@ const normalizePagination = (
 };
 
 const DataTable = <RecordType extends object>({
+  className,
   locale,
   pagination,
   ...props
 }: TableProps<RecordType>) => (
   <Table<RecordType>
+    className={['data-table', className].filter(Boolean).join(' ')}
     locale={{ ...defaultLocale, ...locale }}
     pagination={normalizePagination(pagination as TableProps<object>['pagination']) as TableProps<RecordType>['pagination']}
     {...props}

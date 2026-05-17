@@ -235,23 +235,57 @@ const Dashboard: React.FC = () => {
 
   return (
     <PageShell>
-      <PageHeader
-        title="仪表盘"
-        description="邮件安全、DLP 隔离处置、异常阻断与 S/MIME 能力概览。"
-        extra={<Tag color={viewModel.systemTone}>{viewModel.systemState}</Tag>}
-        actions={(
-          <Button icon={<ReloadOutlined />} loading={refreshing} onClick={loadStats}>
-            刷新
-          </Button>
-        )}
-      />
+      <section className="dashboard-hero">
+        <div className="dashboard-hero__main">
+          <PageHeader
+            title="仪表盘"
+            description="邮件安全、DLP 隔离处置、异常阻断与 S/MIME 能力概览。"
+            extra={<Tag color={viewModel.systemTone}>{viewModel.systemState}</Tag>}
+            actions={(
+              <Button icon={<ReloadOutlined />} loading={refreshing} onClick={loadStats}>
+                刷新
+              </Button>
+            )}
+          />
+          <div className="dashboard-hero__status">
+            <Space align="center" size={14}>
+              <span className={`dashboard-hero__signal dashboard-hero__signal--${viewModel.pending > 0 ? 'warning' : 'ok'}`}>
+                {viewModel.pending > 0 ? <WarningOutlined /> : <SafetyCertificateOutlined />}
+              </span>
+              <div>
+                <Text className="dashboard-hero__status-label">
+                  {viewModel.pending > 0 ? '待处置队列需要关注' : '邮件安全链路稳定'}
+                </Text>
+                <Text className="dashboard-hero__status-copy">
+                  {viewModel.pending > 0
+                    ? `${viewModel.pending} 封隔离邮件等待人工处置，当前健康度 ${healthPercent}%。`
+                    : `当前无待处理隔离邮件，处置完成率 ${viewModel.completionRate}%。`}
+                </Text>
+              </div>
+            </Space>
+          </div>
+        </div>
+        <div className="dashboard-hero__meter">
+          <Progress
+            type="dashboard"
+            percent={healthPercent}
+            size={144}
+            status={viewModel.pending > 0 ? 'active' : 'success'}
+          />
+          <Text type="secondary">运行健康度</Text>
+        </div>
+      </section>
 
       <Row gutter={[16, 16]}>
         {viewModel.metrics.map((item) => (
           <Col xs={24} sm={12} xl={6} xxl={4} key={item.title}>
-            <Card>
-              <Statistic title={item.title} value={item.value} prefix={item.icon} />
-              <Text type="secondary">{item.hint}</Text>
+            <Card className="metric-card">
+              <div className="metric-card__head">
+                <span className="metric-card__icon">{item.icon}</span>
+                <Text type="secondary">{item.title}</Text>
+              </div>
+              <Statistic value={item.value} />
+              <Text type="secondary" className="metric-card__hint">{item.hint}</Text>
             </Card>
           </Col>
         ))}
@@ -260,6 +294,7 @@ const Dashboard: React.FC = () => {
       <Row gutter={[16, 16]}>
         <Col xs={24} xl={15}>
           <Card
+            className="dashboard-card"
             title="邮件处置"
             extra={<Tag color={viewModel.pending > 0 ? 'warning' : 'success'}>{viewModel.completionRate}% 已处理</Tag>}
           >
@@ -298,7 +333,7 @@ const Dashboard: React.FC = () => {
         </Col>
 
         <Col xs={24} xl={9}>
-          <Card title="队列状态">
+          <Card title="队列状态" className="dashboard-card">
             <Space direction="vertical" size={16} style={{ width: '100%' }}>
               <Space>
                 {viewModel.pending > 0 ? <WarningOutlined /> : <SafetyCertificateOutlined />}
@@ -331,7 +366,7 @@ const Dashboard: React.FC = () => {
         </Col>
 
         <Col xs={24} xl={15}>
-          <Card title="原因分布">
+          <Card title="原因分布" className="dashboard-card">
             {viewModel.distribution.length > 0 ? (
               <Space direction="vertical" size={12} style={{ width: '100%' }}>
                 {viewModel.distribution.map((item) => (
@@ -356,6 +391,7 @@ const Dashboard: React.FC = () => {
 
         <Col xs={24} xl={9}>
           <Card
+            className="dashboard-card"
             title="算法能力"
             extra={<SecurityScanOutlined />}
           >

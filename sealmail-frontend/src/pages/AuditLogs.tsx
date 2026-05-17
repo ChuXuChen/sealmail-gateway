@@ -312,7 +312,7 @@ const AuditLogs: React.FC = () => {
       render: (_: unknown, record: AuditLog) => (
         <Space direction="vertical" size={0}>
           <Text strong>{record.typeDisplayName || record.type}</Text>
-          <Text type="secondary" style={{ fontSize: 12 }}>{record.action || record.type}</Text>
+          <Text type="secondary" className="text-micro">{record.action || record.type}</Text>
         </Space>
       ),
       width: 180,
@@ -323,7 +323,7 @@ const AuditLogs: React.FC = () => {
       render: (_: unknown, record: AuditLog) => (
         <Space direction="vertical" size={0}>
           <Text>{record.username || '-'}</Text>
-          <Text type="secondary" style={{ fontSize: 12 }}>{record.ipAddress || '-'}</Text>
+          <Text type="secondary" className="text-micro mono-small">{record.ipAddress || '-'}</Text>
         </Space>
       ),
       width: 160,

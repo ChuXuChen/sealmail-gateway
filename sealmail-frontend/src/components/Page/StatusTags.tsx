@@ -4,15 +4,15 @@ import { Space, Tag } from 'antd';
 import type { Certificate, DlpAction, QuarantineItem } from '../../types';
 
 const reasonColors: Record<string, string> = {
-  POLICY_VIOLATION: 'red',
+  POLICY_VIOLATION: 'error',
   DECRYPTION_FAILED: 'orange',
   CERTIFICATE_MISSING: 'gold',
   SIGNATURE_INVALID: 'orange',
-  ENCRYPTION_FAILED: 'red',
+  ENCRYPTION_FAILED: 'error',
   EMAIL_AUTH_FAILED: 'volcano',
   DOMAIN_NOT_CONFIGURED: 'orange',
   SCAN_ERROR: 'purple',
-  CERTIFICATE_REVOKED: 'red',
+  CERTIFICATE_REVOKED: 'error',
 };
 
 const reasonLabels: Record<string, string> = {
@@ -28,10 +28,10 @@ const reasonLabels: Record<string, string> = {
 };
 
 const dlpActionColors: Record<DlpAction, string> = {
-  WARN: 'blue',
+  WARN: 'processing',
   MUST_ENCRYPT: 'gold',
   QUARANTINE: 'orange',
-  BLOCK: 'red',
+  BLOCK: 'error',
 };
 
 const dlpActionLabels: Record<DlpAction, string> = {
@@ -43,9 +43,9 @@ const dlpActionLabels: Record<DlpAction, string> = {
 
 const quarantineStatusColors: Record<QuarantineItem['status'], string> = {
   QUARANTINED: 'gold',
-  RELEASING: 'blue',
-  RELEASED: 'green',
-  REJECTED: 'red',
+  RELEASING: 'processing',
+  RELEASED: 'success',
+  REJECTED: 'error',
 };
 
 const quarantineStatusLabels: Record<QuarantineItem['status'], string> = {
@@ -78,7 +78,7 @@ export const EnabledTag: React.FC<{ enabled: boolean; enabledText?: string; disa
   enabled,
   enabledText = '启用',
 }) => (
-  <Tag color={enabled ? 'green' : 'default'}>{enabled ? enabledText : disabledText}</Tag>
+  <Tag color={enabled ? 'success' : 'default'}>{enabled ? enabledText : disabledText}</Tag>
 );
 
 export const AuditResultTag: React.FC<{ success: boolean }> = ({ success }) => (
@@ -88,8 +88,8 @@ export const AuditResultTag: React.FC<{ success: boolean }> = ({ success }) => (
 );
 
 export const AlgorithmTag: React.FC<{ algorithm?: string }> = ({ algorithm }) => {
-  if (algorithm === 'SM2') return <Tag color="magenta">SM2</Tag>;
-  if (algorithm === 'RSA') return <Tag color="blue">RSA</Tag>;
+  if (algorithm === 'SM2') return <Tag color="volcano">SM2</Tag>;
+  if (algorithm === 'RSA') return <Tag color="processing">RSA</Tag>;
   return <Tag>{algorithm || '未知'}</Tag>;
 };
 
@@ -101,8 +101,8 @@ export const CertificateRoleTag: React.FC<{ cert: Certificate }> = ({ cert }) =>
 
 export const CertificateStateTags: React.FC<{ cert: Certificate }> = ({ cert }) => (
   <Space size={[0, 4]} wrap>
-    <Tag color={cert.trusted ? 'green' : 'default'}>{cert.trusted ? '信任' : '未信'}</Tag>
-    <Tag color={cert.revoked ? 'red' : 'processing'}>{cert.revoked ? '吊销' : '有效'}</Tag>
+    <Tag color={cert.trusted ? 'success' : 'default'}>{cert.trusted ? '信任' : '未信'}</Tag>
+    <Tag color={cert.revoked ? 'error' : 'processing'}>{cert.revoked ? '吊销' : '有效'}</Tag>
     {cert.chainUsable === false ? <Tag color="orange">链断</Tag> : null}
   </Space>
 );

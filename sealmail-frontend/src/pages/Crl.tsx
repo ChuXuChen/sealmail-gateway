@@ -134,7 +134,7 @@ const Crl: React.FC = () => {
   };
 
   const innerColumns: TableColumnsType<Certificate> = [
-    { title: '指纹', dataIndex: 'id', render: (v: string) => <Text code style={{ fontSize: 11 }}>{v.substring(0, 24)}…</Text> },
+    { title: '指纹', dataIndex: 'id', render: (v: string) => <Text code className="text-micro">{v.substring(0, 24)}…</Text> },
     { title: 'Owner', dataIndex: 'ownerEmail' },
     { title: '算法', dataIndex: 'algorithm', render: (v: string) => <AlgorithmTag algorithm={v} />, width: 80 },
     { title: '吊销原因', dataIndex: 'revocationReason' },
@@ -159,7 +159,7 @@ const Crl: React.FC = () => {
       render: (_: unknown, r: { ca: Certificate }) => (
         <Space direction="vertical" size={0}>
           <strong>{r.ca.alias || r.ca.subjectDn}</strong>
-          <Text type="secondary" style={{ fontSize: 11 }}>{r.ca.id.substring(0, 24)}…</Text>
+          <Text type="secondary" className="text-micro mono-small">{r.ca.id.substring(0, 24)}…</Text>
         </Space>
       ),
     },
