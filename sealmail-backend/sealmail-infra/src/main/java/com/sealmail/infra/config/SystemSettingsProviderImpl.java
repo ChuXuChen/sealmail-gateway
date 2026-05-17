@@ -1,5 +1,6 @@
 package com.sealmail.infra.config;
 
+import com.sealmail.domain.mailsecurity.SmtpTransportSecurity;
 import com.sealmail.domain.system.SystemSettingsProvider;
 import com.sealmail.infra.config.properties.CaProperties;
 import com.sealmail.infra.config.properties.PostfixProperties;
@@ -88,6 +89,9 @@ public class SystemSettingsProviderImpl implements SystemSettingsProvider {
                         postfixProperties.getAfterFilterPort(),
                         postfixProperties.getOutboundPort(),
                         postfixProperties.isUseTls(),
+                        SmtpTransportSecurity.fromLegacyUseTls(
+                                postfixProperties.isUseTls(),
+                                postfixProperties.getOutboundPort()),
                         postfixProperties.getTimeout(),
                         emptyToNull(postfixProperties.getEnvelopeFrom())
                 ),
@@ -95,6 +99,7 @@ public class SystemSettingsProviderImpl implements SystemSettingsProvider {
                         relay.host(),
                         relay.port(),
                         relay.useTls(),
+                        relay.transportSecurity(),
                         relay.timeoutMs(),
                         hasText(relay.username()),
                         relay.passwordConfigured(),

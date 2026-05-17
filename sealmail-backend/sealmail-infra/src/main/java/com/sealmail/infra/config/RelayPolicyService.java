@@ -3,6 +3,7 @@ package com.sealmail.infra.config;
 import com.sealmail.domain.config.RelayPolicyPort;
 import com.sealmail.domain.config.SecretReferenceResolver;
 import com.sealmail.domain.mailsecurity.RelayProfile;
+import com.sealmail.domain.mailsecurity.SmtpTransportSecurity;
 import com.sealmail.domain.policy.event.RelayPolicyChanged;
 import com.sealmail.infra.events.DomainEventPublisher;
 import com.sealmail.infra.persistence.entity.RelayPolicyEntity;
@@ -57,7 +58,8 @@ public class RelayPolicyService implements RelayPolicyPort {
                 entity.isEnabled(),
                 entity.getHost(),
                 entity.getPort(),
-                entity.isUseTls(),
+                effectiveTransportSecurity(entity).usesTls(),
+                effectiveTransportSecurity(entity),
                 emptyToBlank(entity.getUsername()),
                 emptyToBlank(password),
                 entity.getTimeoutMs());
@@ -85,7 +87,7 @@ public class RelayPolicyService implements RelayPolicyPort {
         return new RelayProfile(
                 entity.getHost(),
                 entity.getPort(),
-                entity.isUseTls(),
+                effectiveTransportSecurity(entity),
                 emptyToBlank(entity.getUsername()),
                 emptyToBlank(password),
                 entity.getTimeoutMs(),
@@ -117,6 +119,7 @@ public class RelayPolicyService implements RelayPolicyPort {
         entity.setHost("localhost");
         entity.setPort(25);
         entity.setUseTls(false);
+        entity.setTransportSecurity(SmtpTransportSecurity.NONE);
         entity.setUsername(null);
         entity.setPasswordSecretRef(null);
         entity.setTimeoutMs(30000);
@@ -140,8 +143,11 @@ public class RelayPolicyService implements RelayPolicyPort {
             require(update.port() > 0 && update.port() <= 65535, "Relay port must be between 1 and 65535");
             entity.setPort(update.port());
         }
-        if (update.useTls() != null) {
-            entity.setUseTls(update.useTls());
+        if (update.transportSecurity() != null) {
+            setTransportSecurity(entity, update.transportSecurity());
+        } else if (update.useTls() != null) {
+            int port = update.port() != null ? update.port() : entity.getPort();
+            setTransportSecurity(entity, SmtpTransportSecurity.fromLegacyUseTls(update.useTls(), port));
         }
         if (update.username() != null) {
             entity.setUsername(blankToNull(update.username()));
@@ -165,7 +171,8 @@ public class RelayPolicyService implements RelayPolicyPort {
                 entity.isEnabled(),
                 entity.getHost(),
                 entity.getPort(),
-                entity.isUseTls(),
+                effectiveTransportSecurity(entity).usesTls(),
+                effectiveTransportSecurity(entity),
                 entity.getUsername(),
                 hasText(entity.getPasswordSecretRef()),
                 entity.getPasswordSecretRef(),
@@ -182,7 +189,8 @@ public class RelayPolicyService implements RelayPolicyPort {
         if (update.enabled() != null) {
             fields.add("enabled");
         }
-        if (update.host() != null || update.port() != null || update.useTls() != null || update.timeoutMs() != null) {
+        if (update.host() != null || update.port() != null || update.useTls() != null
+                || update.transportSecurity() != null || update.timeoutMs() != null) {
             fields.add("connection");
         }
         if (update.username() != null || update.passwordSecretRef() != null || update.clearPasswordSecretRef() != null) {
@@ -216,5 +224,19 @@ public class RelayPolicyService implements RelayPolicyPort {
 
     private boolean hasText(String value) {
         return value != null && !value.isBlank();
+    }
+
+    private SmtpTransportSecurity effectiveTransportSecurity(RelayPolicyEntity entity) {
+        SmtpTransportSecurity transportSecurity = entity.getTransportSecurity();
+        if (transportSecurity != null) {
+            return transportSecurity;
+        }
+        return SmtpTransportSecurity.fromLegacyUseTls(entity.isUseTls(), entity.getPort());
+    }
+
+    private void setTransportSecurity(RelayPolicyEntity entity, SmtpTransportSecurity transportSecurity) {
+        SmtpTransportSecurity normalized = transportSecurity == null ? SmtpTransportSecurity.NONE : transportSecurity;
+        entity.setTransportSecurity(normalized);
+        entity.setUseTls(normalized.usesTls());
     }
 }

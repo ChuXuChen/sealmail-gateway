@@ -139,7 +139,7 @@ public class MailTestUseCase {
             appendProbeResult(result, "after-filter", new SmtpRelayProbe.SmtpConnectionSettings(
                     settings.delivery().postfix().host(),
                     settings.delivery().postfix().afterFilterPort(),
-                    settings.delivery().postfix().useTls(),
+                    settings.delivery().postfix().transportSecurity(),
                     "",
                     "",
                     settings.delivery().postfix().timeoutMs()
@@ -148,7 +148,7 @@ public class MailTestUseCase {
             appendProbeResult(result, "outbound", new SmtpRelayProbe.SmtpConnectionSettings(
                     settings.delivery().postfix().host(),
                     settings.delivery().postfix().outboundPort(),
-                    settings.delivery().postfix().useTls(),
+                    settings.delivery().postfix().transportSecurity(),
                     "",
                     "",
                     settings.delivery().postfix().timeoutMs()
@@ -161,7 +161,7 @@ public class MailTestUseCase {
             appendProbeResult(result, "direct-relay", new SmtpRelayProbe.SmtpConnectionSettings(
                     relay.host(),
                     relay.port(),
-                    relay.useTls(),
+                    relay.transportSecurity(),
                     relay.username(),
                     relay.password(),
                     relay.timeoutMs()

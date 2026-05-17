@@ -1,5 +1,6 @@
 package com.sealmail.infra.mail.relay;
 
+import com.sealmail.domain.mailsecurity.SmtpTransportSecurity;
 import org.junit.jupiter.api.Test;
 
 import java.io.BufferedReader;
@@ -17,6 +18,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class SmtpRelayClientTest {
@@ -48,6 +50,19 @@ class SmtpRelayClientTest {
             assertTrue(fakeServer.commands().contains("RCPT TO:<bob@example.com>"));
             assertEquals("..leading line", fakeServer.dataLines().get(2));
         }
+    }
+
+    @Test
+    void connectionSettingsDoNotTreatPort465AsImplicitTlsUnlessModeRequestsSmpts() {
+        SmtpRelayConnectionSettings plainOn465 = new SmtpRelayConnectionSettings(
+                "127.0.0.1", 465, SmtpTransportSecurity.NONE, "", "", 5000);
+        SmtpRelayConnectionSettings smtps = new SmtpRelayConnectionSettings(
+                "127.0.0.1", 465, SmtpTransportSecurity.SMTPS, "", "", 5000);
+
+        assertFalse(plainOn465.useTls());
+        assertFalse(plainOn465.useImplicitTls());
+        assertTrue(smtps.useTls());
+        assertTrue(smtps.useImplicitTls());
     }
 
     private static final class FakeSmtpServer implements AutoCloseable {

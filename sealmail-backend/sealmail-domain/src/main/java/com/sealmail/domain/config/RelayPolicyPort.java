@@ -1,5 +1,7 @@
 package com.sealmail.domain.config;
 
+import com.sealmail.domain.mailsecurity.SmtpTransportSecurity;
+
 import java.time.Instant;
 
 public interface RelayPolicyPort {
@@ -15,6 +17,7 @@ public interface RelayPolicyPort {
             String host,
             int port,
             boolean useTls,
+            SmtpTransportSecurity transportSecurity,
             String username,
             boolean passwordConfigured,
             String passwordSecretRef,
@@ -29,6 +32,7 @@ public interface RelayPolicyPort {
             String host,
             Integer port,
             Boolean useTls,
+            SmtpTransportSecurity transportSecurity,
             String username,
             String passwordSecretRef,
             Boolean clearPasswordSecretRef,
@@ -42,6 +46,7 @@ public interface RelayPolicyPort {
             String host,
             int port,
             boolean useTls,
+            SmtpTransportSecurity transportSecurity,
             String username,
             String password,
             int timeoutMs

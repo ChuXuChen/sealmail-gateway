@@ -40,7 +40,8 @@ class DeadLetterHandlerTest {
         MailProcessingRepository repository = mock(MailProcessingRepository.class);
         DomainEventPublisher publisher = mock(DomainEventPublisher.class);
         MailErrorDecisionHandler decisionHandler = new MailErrorDecisionHandler(repository, publisher);
-        DeadLetterHandler handler = new DeadLetterHandler(quarantineChannel, decisionHandler);
+        MailFlowErrorHandlingState errorHandlingState = new MailFlowErrorHandlingState();
+        DeadLetterHandler handler = new DeadLetterHandler(quarantineChannel, decisionHandler, errorHandlingState);
 
         byte[] originalPayload = "raw mail".getBytes();
         MailProcessingContext context = MailProcessingContext.create(new MailEnvelope(
@@ -82,6 +83,7 @@ class DeadLetterHandlerTest {
         assertEquals(MailRecordDisposition.EXCEPTION, quarantineContext.recordDisposition());
         assertEquals("processing-1", quarantineContext.processingId());
         verify(publisher).publishEvent(any());
+        assertTrue(errorHandlingState.take().handled());
     }
 
     @Test
@@ -119,7 +121,8 @@ class DeadLetterHandlerTest {
         MailProcessingRepository repository = mock(MailProcessingRepository.class);
         DomainEventPublisher publisher = mock(DomainEventPublisher.class);
         MailErrorDecisionHandler decisionHandler = new MailErrorDecisionHandler(repository, publisher);
-        DeadLetterHandler handler = new DeadLetterHandler(quarantineChannel, decisionHandler);
+        MailFlowErrorHandlingState errorHandlingState = new MailFlowErrorHandlingState();
+        DeadLetterHandler handler = new DeadLetterHandler(quarantineChannel, decisionHandler, errorHandlingState);
         byte[] payload = "raw mail".getBytes();
         MailEnvelope envelope = new MailEnvelope(
                 "msg-3@example.com",
@@ -141,6 +144,7 @@ class DeadLetterHandlerTest {
         assertEquals(1, handler.getTotalDeadLetters());
         verify(quarantineChannel, never()).send(any());
         verify(publisher).publishEvent(any());
+        assertEquals("db down", errorHandlingState.take().failure().getMessage());
     }
 
     @SuppressWarnings("unchecked")

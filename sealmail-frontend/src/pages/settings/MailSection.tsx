@@ -1,9 +1,15 @@
 import React from 'react';
-import { Button, Card, Col, Descriptions, Form, Input, InputNumber, Row, Space, Switch, Tag, Typography } from 'antd';
+import { Button, Card, Col, Descriptions, Form, Input, InputNumber, Radio, Row, Space, Switch, Tag, Typography } from 'antd';
 import type { FormInstance } from 'antd';
 import type { QuarantinePolicy, RelayPolicy, SystemSettings } from '../../types';
 import type { QuarantinePolicyFormValues, RelayPolicyFormValues } from './settingsUtils';
-import { booleanTag, configuredTag, formatBytes, getSettingsSummary } from './settingsUtils';
+import {
+  booleanTag,
+  configuredTag,
+  formatBytes,
+  getSettingsSummary,
+  transportSecurityTag,
+} from './settingsUtils';
 
 const { Text } = Typography;
 
@@ -56,7 +62,9 @@ const MailSection: React.FC<MailSectionProps> = ({
               <Descriptions.Item label="回注端口">
                 {settings.delivery.postfix.afterFilterPort} / {settings.delivery.postfix.outboundPort}
               </Descriptions.Item>
-              <Descriptions.Item label="TLS">{booleanTag(settings.delivery.postfix.useTls)}</Descriptions.Item>
+              <Descriptions.Item label="传输安全">
+                {transportSecurityTag(settings.delivery.postfix.transportSecurity)}
+              </Descriptions.Item>
               <Descriptions.Item label="超时">{settings.delivery.postfix.timeoutMs} ms</Descriptions.Item>
               <Descriptions.Item label="Envelope From">{settings.delivery.postfix.envelopeFrom || '-'}</Descriptions.Item>
             </>
@@ -65,7 +73,9 @@ const MailSection: React.FC<MailSectionProps> = ({
               <Descriptions.Item label="中继主机">
                 {settings?.delivery.directRelay.host}:{settings?.delivery.directRelay.port}
               </Descriptions.Item>
-              <Descriptions.Item label="TLS">{booleanTag(settings?.delivery.directRelay.useTls || false)}</Descriptions.Item>
+              <Descriptions.Item label="传输安全">
+                {transportSecurityTag(settings?.delivery.directRelay.transportSecurity)}
+              </Descriptions.Item>
               <Descriptions.Item label="认证">
                 <Space wrap>
                   <Text>用户名</Text>
@@ -88,7 +98,7 @@ const MailSection: React.FC<MailSectionProps> = ({
             enabled: relayPolicy?.enabled ?? false,
             host: relayPolicy?.host ?? 'localhost',
             port: relayPolicy?.port ?? 25,
-            useTls: relayPolicy?.useTls ?? false,
+            transportSecurity: relayPolicy?.transportSecurity ?? (relayPolicy?.useTls ? 'STARTTLS' : 'NONE'),
             timeoutMs: relayPolicy?.timeoutMs ?? 30000,
           }}
         >
@@ -109,8 +119,16 @@ const MailSection: React.FC<MailSectionProps> = ({
               </Form.Item>
             </Col>
             <Col xs={24} md={8}>
-              <Form.Item name="useTls" label="TLS" valuePropName="checked">
-                <Switch />
+              <Form.Item name="transportSecurity" label="传输安全">
+                <Radio.Group
+                  optionType="button"
+                  buttonStyle="solid"
+                  options={[
+                    { label: '无 TLS', value: 'NONE' },
+                    { label: 'STARTTLS', value: 'STARTTLS' },
+                    { label: 'SMTPS', value: 'SMTPS' },
+                  ]}
+                />
               </Form.Item>
             </Col>
             <Col xs={24} md={8}>

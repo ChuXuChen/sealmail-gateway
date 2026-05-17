@@ -49,13 +49,14 @@ public class ManageRuntimePolicyUseCase {
 
     private RelayPolicyPort.RelayPolicySettingsUpdate toRelayUpdate(RelayPolicyRequest request) {
         if (request == null) {
-            return new RelayPolicyPort.RelayPolicySettingsUpdate(null, null, null, null, null, null, null, null, null);
+            return new RelayPolicyPort.RelayPolicySettingsUpdate(null, null, null, null, null, null, null, null, null, null);
         }
         return new RelayPolicyPort.RelayPolicySettingsUpdate(
                 request.enabled(),
                 request.host(),
                 request.port(),
                 request.useTls(),
+                request.transportSecurity(),
                 request.username(),
                 request.passwordSecretRef(),
                 request.clearPasswordSecretRef(),
@@ -79,6 +80,7 @@ public class ManageRuntimePolicyUseCase {
                 settings.host(),
                 settings.port(),
                 settings.useTls(),
+                settings.transportSecurity(),
                 settings.username(),
                 settings.passwordConfigured(),
                 settings.passwordSecretRef(),

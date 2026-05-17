@@ -34,6 +34,7 @@ export const useSettings = ({ quarantineForm, relayForm, testForm }: UseSettings
   const applyPolicyForms = useCallback((relay: RelayPolicy, quarantine: QuarantinePolicy) => {
     relayForm.setFieldsValue({
       ...relay,
+      transportSecurity: relay.transportSecurity ?? (relay.useTls ? 'STARTTLS' : 'NONE'),
       clearPasswordSecretRef: false,
     });
     quarantineForm.setFieldsValue(quarantine);
@@ -157,7 +158,11 @@ export const useSettings = ({ quarantineForm, relayForm, testForm }: UseSettings
       const response = await runtimePolicyApi.updateRelay(values);
       if (!response.data.success) throw new Error(response.data.message);
       setRelayPolicy(response.data.data);
-      relayForm.setFieldsValue({ ...response.data.data, clearPasswordSecretRef: false });
+      relayForm.setFieldsValue({
+        ...response.data.data,
+        transportSecurity: response.data.data.transportSecurity ?? (response.data.data.useTls ? 'STARTTLS' : 'NONE'),
+        clearPasswordSecretRef: false,
+      });
       const settingsResponse = await systemSettingsApi.get();
       if (settingsResponse.data.success) {
         setSettings(settingsResponse.data.data);

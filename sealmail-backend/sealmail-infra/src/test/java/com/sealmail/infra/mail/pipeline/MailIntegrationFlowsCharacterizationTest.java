@@ -608,8 +608,14 @@ class MailIntegrationFlowsCharacterizationTest {
         }
 
         @Bean
-        MailFlowErrorChannelInterceptor errorInterceptor(QueueChannel errorChannel) {
-            return new MailFlowErrorChannelInterceptor(errorChannel);
+        MailFlowErrorChannelInterceptor errorInterceptor(QueueChannel errorChannel,
+                                                         MailFlowErrorHandlingState errorHandlingState) {
+            return new MailFlowErrorChannelInterceptor(errorChannel, errorHandlingState);
+        }
+
+        @Bean
+        MailFlowErrorHandlingState errorHandlingState() {
+            return new MailFlowErrorHandlingState();
         }
 
         private MessageChannel interceptedChannel(MailFlowErrorChannelInterceptor errorInterceptor) {

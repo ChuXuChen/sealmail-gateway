@@ -28,14 +28,17 @@ public class DeadLetterHandler {
 
     private final MessageChannel quarantineChannel;
     private final MailErrorDecisionHandler errorDecisionHandler;
+    private final MailFlowErrorHandlingState errorHandlingState;
     private final ConcurrentLinkedDeque<DeadLetterEntry> recentErrors = new ConcurrentLinkedDeque<>();
     private final AtomicLong totalDeadLetters = new AtomicLong(0);
     private final int maxRecentErrors = 100;
 
     public DeadLetterHandler(@Qualifier("quarantineChannel") MessageChannel quarantineChannel,
-                             MailErrorDecisionHandler errorDecisionHandler) {
+                             MailErrorDecisionHandler errorDecisionHandler,
+                             MailFlowErrorHandlingState errorHandlingState) {
         this.quarantineChannel = quarantineChannel;
         this.errorDecisionHandler = errorDecisionHandler;
+        this.errorHandlingState = errorHandlingState;
     }
 
     @ServiceActivator(inputChannel = "errorChannel")
@@ -65,17 +68,31 @@ public class DeadLetterHandler {
 
         MailErrorDecisionHandler.ErrorDecision decision = errorDecisionHandler.decide(message);
         if (decision.quarantine()) {
-            routeToQuarantine(decision.quarantineMessage());
+            if (!routeToQuarantine(decision.quarantineMessage())) {
+                return;
+            }
+            errorHandlingState.markHandled();
+            return;
         }
+        errorHandlingState.markFailed(error);
     }
 
-    private void routeToQuarantine(Message<byte[]> message) {
+    private boolean routeToQuarantine(Message<byte[]> message) {
         try {
-            quarantineChannel.send(message);
+            boolean sent = quarantineChannel.send(message);
+            if (!sent) {
+                IllegalStateException failure = new IllegalStateException("Quarantine channel rejected message");
+                errorHandlingState.markFailed(failure);
+                log.error("Failed to route message to quarantine: {}", failure.getMessage());
+                return false;
+            }
 
             log.debug("Failed message routed to quarantine");
+            return true;
         } catch (Exception e) {
             log.error("Failed to route message to quarantine: {}", e.getMessage());
+            errorHandlingState.markFailed(e);
+            return false;
         }
     }
 

@@ -4,11 +4,13 @@ import com.sealmail.domain.config.SecretReferenceResolver;
 import com.sealmail.domain.mailsecurity.MailDirection;
 import com.sealmail.domain.mailsecurity.MailEnvelope;
 import com.sealmail.domain.mailsecurity.MailProcessingContext;
+import com.sealmail.domain.mailsecurity.MailProcessingException;
 import com.sealmail.domain.policy.DomainConfig;
 import com.sealmail.domain.policy.DomainConfigRepository;
 import com.sealmail.domain.shared.model.EmailAddress;
 import com.sealmail.infra.config.properties.SmtpServerProperties;
 import com.sealmail.infra.crypto.util.PemUtils;
+import com.sealmail.infra.mail.pipeline.MailFlowErrorHandlingState;
 import com.sealmail.infra.mail.pipeline.MailProcessingHeaders;
 import jakarta.annotation.PreDestroy;
 import org.bouncycastle.jce.provider.BouncyCastleProvider;
@@ -48,17 +50,20 @@ public class SealMailSmtpServer {
     private final MessageChannel mailOutboundChannel;
     private final DomainConfigRepository domainConfigRepository;
     private final SecretReferenceResolver secretReferenceResolver;
+    private final MailFlowErrorHandlingState errorHandlingState;
     private final AtomicBoolean running = new AtomicBoolean(false);
 
     public SealMailSmtpServer(SmtpServerProperties properties,
                               @Qualifier("mailInboundChannel") MessageChannel mailInboundChannel,
                               @Qualifier("mailOutboundChannel") MessageChannel mailOutboundChannel,
                               DomainConfigRepository domainConfigRepository,
-                              SecretReferenceResolver secretReferenceResolver) {
+                              SecretReferenceResolver secretReferenceResolver,
+                              MailFlowErrorHandlingState errorHandlingState) {
         this.mailInboundChannel = mailInboundChannel;
         this.mailOutboundChannel = mailOutboundChannel;
         this.domainConfigRepository = domainConfigRepository;
         this.secretReferenceResolver = secretReferenceResolver;
+        this.errorHandlingState = errorHandlingState;
         this.smtpServer = new SMTPServer(new SealMailMessageHandlerFactory());
         this.smtpServer.setPort(properties.getPort());
         try {
@@ -232,29 +237,57 @@ public class SealMailSmtpServer {
                     content
             );
 
-            MailDirection direction = resolveDirection(envelope);
-            MessageChannel targetChannel = direction == MailDirection.OUTBOUND
-                    ? mailOutboundChannel
-                    : mailInboundChannel;
-
-            log.debug("Dispatching content-filter mail as {} from {} to {} recipients",
-                    direction, from, recipients.size());
-
-            var context = MailProcessingContext.initial(
-                    envelope,
-                    direction,
-                    "content_filter",
-                    content,
-                    null,
-                    remoteAddr.getAddress().getHostAddress());
-            var builder = MessageBuilder
-                    .withPayload(content)
-                    .setHeader(MailProcessingHeaders.CONTEXT, context);
-            targetChannel.send(builder.build());
+            dispatchContentFilterMail(content, envelope);
         }
 
         @Override
         public void done() {
+        }
+    }
+
+    void dispatchContentFilterMail(byte[] content, MailEnvelope envelope) throws IOException {
+        MailDirection direction = resolveDirection(envelope);
+        MessageChannel targetChannel = direction == MailDirection.OUTBOUND
+                ? mailOutboundChannel
+                : mailInboundChannel;
+
+        log.debug("Dispatching content-filter mail as {} from {} to {} recipients",
+                direction, envelope.getSender(), envelope.getRecipients().size());
+
+        var context = MailProcessingContext.initial(
+                envelope,
+                direction,
+                "content_filter",
+                content,
+                null,
+                envelope.getRemoteHost());
+        var builder = MessageBuilder
+                .withPayload(content)
+                .setHeader(MailProcessingHeaders.CONTEXT, context);
+        try {
+            errorHandlingState.clear();
+            boolean accepted = targetChannel.send(builder.build());
+            if (!accepted) {
+                throw new IOException("Mail processing channel rejected message");
+            }
+        } catch (RuntimeException e) {
+            MailProcessingException processingException = findMailProcessingException(e);
+            MailFlowErrorHandlingState.Result errorHandlingResult = errorHandlingState.take();
+            if (processingException != null
+                    && !processingException.retryable()
+                    && errorHandlingResult != null
+                    && errorHandlingResult.handled()) {
+                log.warn("Accepted content-filter mail {} after non-retryable {} failure: {}",
+                        envelope.getMessageId(),
+                        processingException.errorType(),
+                        processingException.getMessage());
+                return;
+            }
+            if (errorHandlingResult != null && errorHandlingResult.failure() != null) {
+                log.warn("Content-filter mail {} remains retryable because error handling failed: {}",
+                        envelope.getMessageId(), errorHandlingResult.failure().getMessage());
+            }
+            throw e;
         }
     }
 
@@ -286,6 +319,17 @@ public class SealMailSmtpServer {
             throw new IllegalStateException(propertyName + " must point to a resolvable secret");
         }
         return secret;
+    }
+
+    private MailProcessingException findMailProcessingException(Throwable error) {
+        Throwable current = error;
+        while (current != null) {
+            if (current instanceof MailProcessingException mailProcessingException) {
+                return mailProcessingException;
+            }
+            current = current.getCause();
+        }
+        return null;
     }
 
     MailDirection resolveDirection(MailEnvelope envelope) {

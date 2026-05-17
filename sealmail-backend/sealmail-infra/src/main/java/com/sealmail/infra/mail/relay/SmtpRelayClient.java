@@ -74,7 +74,7 @@ public class SmtpRelayClient implements SmtpRelayProbe {
             result = probe(new SmtpRelayConnectionSettings(
                     settings.host(),
                     settings.port(),
-                    settings.useTls(),
+                    settings.transportSecurity(),
                     settings.username(),
                     settings.password(),
                     settings.timeoutMillis()

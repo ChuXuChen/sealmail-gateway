@@ -387,12 +387,13 @@ public class RoutingService {
         if (!postfixProperties.isEnabled()) {
             return null;
         }
+        int port = direction == MailDirection.INBOUND
+                ? postfixProperties.getAfterFilterPort()
+                : postfixProperties.getOutboundPort();
         return new RelayProfile(
                 postfixProperties.getHost(),
-                direction == MailDirection.INBOUND
-                        ? postfixProperties.getAfterFilterPort()
-                        : postfixProperties.getOutboundPort(),
-                postfixProperties.isUseTls(),
+                port,
+                SmtpTransportSecurity.fromLegacyUseTls(postfixProperties.isUseTls(), port),
                 "",
                 "",
                 postfixProperties.getTimeout(),

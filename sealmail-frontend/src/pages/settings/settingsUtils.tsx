@@ -3,6 +3,7 @@ import { CheckCircleOutlined, CloseCircleOutlined } from '@ant-design/icons';
 import type {
   QuarantinePolicy,
   RelayPolicy,
+  SmtpTransportSecurity,
   SystemSettings as SystemSettingsSnapshot,
 } from '../../types';
 
@@ -47,6 +48,18 @@ export const configuredTag = (value: boolean) => (
     className="settings-tag"
   >
     {value ? '已配置' : '未配置'}
+  </Tag>
+);
+
+export const transportSecurityLabel = (value?: SmtpTransportSecurity) => {
+  if (value === 'STARTTLS') return 'STARTTLS';
+  if (value === 'SMTPS') return 'SMTPS';
+  return '无 TLS';
+};
+
+export const transportSecurityTag = (value?: SmtpTransportSecurity) => (
+  <Tag color={value === 'NONE' || !value ? 'default' : 'processing'} className="settings-tag">
+    {transportSecurityLabel(value)}
   </Tag>
 );
 

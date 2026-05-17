@@ -54,6 +54,7 @@ public class QuerySystemSettingsUseCase {
                                 snapshot.delivery().postfix().afterFilterPort(),
                                 snapshot.delivery().postfix().outboundPort(),
                                 snapshot.delivery().postfix().useTls(),
+                                snapshot.delivery().postfix().transportSecurity(),
                                 snapshot.delivery().postfix().timeoutMs(),
                                 snapshot.delivery().postfix().envelopeFrom()
                         ),
@@ -61,6 +62,7 @@ public class QuerySystemSettingsUseCase {
                                 snapshot.delivery().directRelay().host(),
                                 snapshot.delivery().directRelay().port(),
                                 snapshot.delivery().directRelay().useTls(),
+                                snapshot.delivery().directRelay().transportSecurity(),
                                 snapshot.delivery().directRelay().timeoutMs(),
                                 snapshot.delivery().directRelay().usernameConfigured(),
                                 snapshot.delivery().directRelay().passwordConfigured()

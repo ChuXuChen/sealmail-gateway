@@ -92,7 +92,6 @@ public class RelayStep {
         int port = relayProfile.port();
         String username = relayProfile.username();
         String password = relayProfile.password();
-        boolean useTls = relayProfile.useTls();
         int timeout = relayProfile.timeout();
         try {
             String envelopeFrom = relayProfile.envelopeFrom();
@@ -105,7 +104,7 @@ public class RelayStep {
             SmtpRelayConnectionSettings connection = new SmtpRelayConnectionSettings(
                     host,
                     port,
-                    useTls,
+                    relayProfile.transportSecurity(),
                     username,
                     password,
                     timeout

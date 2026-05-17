@@ -1,5 +1,7 @@
 package com.sealmail.app.dto.response;
 
+import com.sealmail.domain.mailsecurity.SmtpTransportSecurity;
+
 import java.time.Instant;
 import java.util.List;
 
@@ -59,6 +61,7 @@ public record SystemSettingsResponse(
             int afterFilterPort,
             int outboundPort,
             boolean useTls,
+            SmtpTransportSecurity transportSecurity,
             int timeoutMs,
             String envelopeFrom
     ) {
@@ -68,6 +71,7 @@ public record SystemSettingsResponse(
             String host,
             int port,
             boolean useTls,
+            SmtpTransportSecurity transportSecurity,
             int timeoutMs,
             boolean usernameConfigured,
             boolean passwordConfigured

@@ -398,6 +398,7 @@ export interface SystemSettings {
       afterFilterPort: number;
       outboundPort: number;
       useTls: boolean;
+      transportSecurity: SmtpTransportSecurity;
       timeoutMs: number;
       envelopeFrom?: string;
     };
@@ -405,6 +406,7 @@ export interface SystemSettings {
       host: string;
       port: number;
       useTls: boolean;
+      transportSecurity: SmtpTransportSecurity;
       timeoutMs: number;
       usernameConfigured: boolean;
       passwordConfigured: boolean;
@@ -432,11 +434,14 @@ export interface SystemSettings {
   }[];
 }
 
+export type SmtpTransportSecurity = 'NONE' | 'STARTTLS' | 'SMTPS';
+
 export interface RelayPolicy {
   enabled: boolean;
   host: string;
   port: number;
   useTls: boolean;
+  transportSecurity: SmtpTransportSecurity;
   username?: string;
   passwordConfigured: boolean;
   passwordSecretRef?: string;

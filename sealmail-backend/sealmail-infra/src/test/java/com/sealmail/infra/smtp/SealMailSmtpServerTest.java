@@ -2,19 +2,26 @@ package com.sealmail.infra.smtp;
 
 import com.sealmail.domain.mailsecurity.MailDirection;
 import com.sealmail.domain.mailsecurity.MailEnvelope;
+import com.sealmail.domain.mailsecurity.MailProcessingErrorType;
+import com.sealmail.domain.mailsecurity.MailProcessingException;
 import com.sealmail.domain.policy.DomainConfig;
 import com.sealmail.domain.policy.DomainConfigRepository;
 import com.sealmail.domain.shared.model.EmailAddress;
 import com.sealmail.infra.config.properties.SmtpServerProperties;
+import com.sealmail.infra.mail.pipeline.MailFlowErrorHandlingState;
 import org.junit.jupiter.api.Test;
 import org.springframework.messaging.MessageChannel;
+import org.springframework.messaging.MessageDeliveryException;
 
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class SealMailSmtpServerTest {
@@ -65,15 +72,100 @@ class SealMailSmtpServerTest {
         assertEquals(MailDirection.INBOUND, server.resolveDirection(envelope("alice@remote.test", "bob@other.test")));
     }
 
+    @Test
+    void contentFilterMailAcknowledgesNonRetryableFailureAfterErrorFlowHandledIt() {
+        DomainConfigRepository domainConfigRepository = mock(DomainConfigRepository.class);
+        DomainConfig localDomain = DomainConfig.create("domain-1", "example.com", true);
+        when(domainConfigRepository.findByDomain("example.com")).thenReturn(Optional.of(localDomain));
+        MessageChannel outboundChannel = mock(MessageChannel.class);
+        MailFlowErrorHandlingState errorHandlingState = new MailFlowErrorHandlingState();
+        SealMailSmtpServer server = server(domainConfigRepository, mock(MessageChannel.class),
+                outboundChannel, errorHandlingState);
+        MailEnvelope envelope = envelope("alice@example.com", "bob@remote.test");
+        MailProcessingException missingCertificate = new MailProcessingException(
+                MailProcessingErrorType.ENCRYPTION,
+                "以下收件人没有加密证书: bob@remote.test",
+                null);
+        when(outboundChannel.send(org.mockito.ArgumentMatchers.any()))
+                .thenAnswer(invocation -> {
+                    errorHandlingState.markHandled();
+                    throw new MessageDeliveryException(invocation.getArgument(0), "pipeline failed", missingCertificate);
+                });
+
+        assertDoesNotThrow(() -> server.dispatchContentFilterMail("Subject: T\r\n\r\nBody".getBytes(), envelope));
+
+        verify(outboundChannel).send(org.mockito.ArgumentMatchers.any());
+    }
+
+    @Test
+    void contentFilterMailKeepsTemporaryFailureWhenErrorFlowCouldNotPersist() {
+        DomainConfigRepository domainConfigRepository = mock(DomainConfigRepository.class);
+        DomainConfig localDomain = DomainConfig.create("domain-1", "example.com", true);
+        when(domainConfigRepository.findByDomain("example.com")).thenReturn(Optional.of(localDomain));
+        MessageChannel outboundChannel = mock(MessageChannel.class);
+        MailFlowErrorHandlingState errorHandlingState = new MailFlowErrorHandlingState();
+        SealMailSmtpServer server = server(domainConfigRepository, mock(MessageChannel.class),
+                outboundChannel, errorHandlingState);
+        MailEnvelope envelope = envelope("alice@example.com", "bob@remote.test");
+        MailProcessingException missingCertificate = new MailProcessingException(
+                MailProcessingErrorType.ENCRYPTION,
+                "以下收件人没有加密证书: bob@remote.test",
+                null);
+        when(outboundChannel.send(org.mockito.ArgumentMatchers.any()))
+                .thenAnswer(invocation -> {
+                    errorHandlingState.markFailed(new IllegalStateException("exception mail save failed"));
+                    throw new MessageDeliveryException(invocation.getArgument(0), "pipeline failed", missingCertificate);
+                });
+
+        assertThrows(MessageDeliveryException.class,
+                () -> server.dispatchContentFilterMail("Subject: T\r\n\r\nBody".getBytes(), envelope));
+    }
+
+    @Test
+    void contentFilterMailKeepsTemporaryFailureForRetryableError() {
+        DomainConfigRepository domainConfigRepository = mock(DomainConfigRepository.class);
+        DomainConfig localDomain = DomainConfig.create("domain-1", "example.com", true);
+        when(domainConfigRepository.findByDomain("example.com")).thenReturn(Optional.of(localDomain));
+        MessageChannel outboundChannel = mock(MessageChannel.class);
+        MailFlowErrorHandlingState errorHandlingState = new MailFlowErrorHandlingState();
+        SealMailSmtpServer server = server(domainConfigRepository, mock(MessageChannel.class),
+                outboundChannel, errorHandlingState);
+        MailEnvelope envelope = envelope("alice@example.com", "bob@remote.test");
+        MailProcessingException relayDown = new MailProcessingException(
+                MailProcessingErrorType.RELAY,
+                "relay down",
+                null,
+                com.sealmail.domain.mailsecurity.MailRecordDisposition.EXCEPTION,
+                true,
+                null);
+        when(outboundChannel.send(org.mockito.ArgumentMatchers.any()))
+                .thenAnswer(invocation -> {
+                    errorHandlingState.markHandled();
+                    throw new MessageDeliveryException(invocation.getArgument(0), "pipeline failed", relayDown);
+                });
+
+        assertThrows(MessageDeliveryException.class,
+                () -> server.dispatchContentFilterMail("Subject: T\r\n\r\nBody".getBytes(), envelope));
+    }
+
     private static SealMailSmtpServer server(DomainConfigRepository domainConfigRepository) {
+        return server(domainConfigRepository, mock(MessageChannel.class), mock(MessageChannel.class),
+                new MailFlowErrorHandlingState());
+    }
+
+    private static SealMailSmtpServer server(DomainConfigRepository domainConfigRepository,
+                                             MessageChannel inboundChannel,
+                                             MessageChannel outboundChannel,
+                                             MailFlowErrorHandlingState errorHandlingState) {
         SmtpServerProperties properties = new SmtpServerProperties();
         properties.setPort(0);
         return new SealMailSmtpServer(
                 properties,
-                mock(MessageChannel.class),
-                mock(MessageChannel.class),
+                inboundChannel,
+                outboundChannel,
                 domainConfigRepository,
-                secretRef -> null
+                secretRef -> null,
+                errorHandlingState
         );
     }
 

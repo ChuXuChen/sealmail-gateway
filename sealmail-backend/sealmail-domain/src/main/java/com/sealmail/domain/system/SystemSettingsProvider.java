@@ -1,5 +1,7 @@
 package com.sealmail.domain.system;
 
+import com.sealmail.domain.mailsecurity.SmtpTransportSecurity;
+
 import java.time.Instant;
 import java.util.List;
 
@@ -64,6 +66,7 @@ public interface SystemSettingsProvider {
             int afterFilterPort,
             int outboundPort,
             boolean useTls,
+            SmtpTransportSecurity transportSecurity,
             int timeoutMs,
             String envelopeFrom
     ) {
@@ -73,6 +76,7 @@ public interface SystemSettingsProvider {
             String host,
             int port,
             boolean useTls,
+            SmtpTransportSecurity transportSecurity,
             int timeoutMs,
             boolean usernameConfigured,
             boolean passwordConfigured,
@@ -80,7 +84,7 @@ public interface SystemSettingsProvider {
             String password
     ) {
         public RelaySettings redacted() {
-            return new RelaySettings(host, port, useTls, timeoutMs, usernameConfigured, passwordConfigured, null, null);
+            return new RelaySettings(host, port, useTls, transportSecurity, timeoutMs, usernameConfigured, passwordConfigured, null, null);
         }
     }
 
