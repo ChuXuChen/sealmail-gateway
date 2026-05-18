@@ -27,6 +27,7 @@ interface IssueByCaModalProps {
   form: FormInstance<IssueByCaValues>;
   issuing: boolean;
   open: boolean;
+  onCaChange?: (certificateId: string) => void;
   onCancel: () => void;
   onFinish: (values: IssueByCaValues) => void | Promise<void>;
 }
@@ -124,6 +125,7 @@ export const IssueByCaModal: React.FC<IssueByCaModalProps> = ({
   form,
   issuing,
   open,
+  onCaChange,
   onCancel,
   onFinish,
 }) => (
@@ -146,6 +148,7 @@ export const IssueByCaModal: React.FC<IssueByCaModalProps> = ({
       >
         <Select
           placeholder="请选择 Intermediate CA"
+          onChange={onCaChange}
           options={caCandidates.map((candidate) => ({
             value: candidate.id,
             label: `${certificateDisplayName(candidate)} (${candidate.algorithm || '?'}, ${candidate.id.substring(0, 12)}...)`,
@@ -156,7 +159,7 @@ export const IssueByCaModal: React.FC<IssueByCaModalProps> = ({
         <Input placeholder="user@example.com" />
       </Form.Item>
       <Form.Item name="algorithm" label="新证书算法" rules={[{ required: true }]}>
-        <Select options={algorithmOptions} />
+        <Select options={algorithmOptions} disabled />
       </Form.Item>
       <Form.Item name="subjectDn" label="Subject DN（可选）">
         <Input placeholder="留空则使用 CN=邮箱, O=SealMail, C=CN" />

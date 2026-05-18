@@ -174,8 +174,7 @@
                             <locations>
                                 <location>filesystem:${project.basedir}/src/main/resources/db/migration</location>
                             </locations>
-                            <baselineOnMigrate>true</baselineOnMigrate>
-                            <baselineVersion>6</baselineVersion>
+                            <baselineOnMigrate>false</baselineOnMigrate>
                             <validateOnMigrate>true</validateOnMigrate>
                         </configuration>
                     </plugin>

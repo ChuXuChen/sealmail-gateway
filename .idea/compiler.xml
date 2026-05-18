@@ -20,8 +20,8 @@
         <module name="sealmail-app" />
         <module name="sealmail-domain" />
         <module name="sealmail-infra" />
-        <module name="sealmail-boot" />
         <module name="sealmail-web" />
+        <module name="sealmail-boot" />
       </profile>
     </annotationProcessing>
     <bytecodeTargetLevel>

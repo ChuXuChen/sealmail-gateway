@@ -17,7 +17,6 @@ import com.sealmail.domain.mailauth.MailAuthPolicyRepository;
 import com.sealmail.domain.mailauth.SpfPublicationPolicy;
 import com.sealmail.domain.mailauth.TrustedProxyMode;
 import com.sealmail.domain.policy.DomainName;
-import com.sealmail.infra.persistence.entity.MailAuthConfigEntity;
 import com.sealmail.infra.persistence.entity.MailAuthDnsProbeEntity;
 import com.sealmail.infra.persistence.entity.MailAuthDomainPolicyEntity;
 import com.sealmail.infra.persistence.entity.MailAuthPolicyEntity;
@@ -51,10 +50,7 @@ public class MailAuthPolicyRepositoryImpl implements MailAuthPolicyRepository {
     @Transactional(readOnly = true)
     public MailAuthPolicy findPolicy() {
         MailAuthPolicyEntity entity = entityManager.find(MailAuthPolicyEntity.class, DEFAULT_ID);
-        if (entity != null) {
-            return toDomain(entity);
-        }
-        return legacyGlobalPolicy();
+        return entity != null ? toDomain(entity) : MailAuthPolicy.defaults();
     }
 
     @Override
@@ -76,10 +72,7 @@ public class MailAuthPolicyRepositoryImpl implements MailAuthPolicyRepository {
     public Optional<DomainMailAuthPolicy> findDomainPolicy(String domainName) {
         String normalizedDomain = DomainName.requireValid(domainName);
         MailAuthDomainPolicyEntity entity = findDomainEntity(normalizedDomain).orElse(null);
-        if (entity != null) {
-            return Optional.of(toDomain(entity));
-        }
-        return legacyDomainPolicy(normalizedDomain);
+        return entity != null ? Optional.of(toDomain(entity)) : Optional.empty();
     }
 
     @Override
@@ -158,59 +151,6 @@ public class MailAuthPolicyRepositoryImpl implements MailAuthPolicyRepository {
                 .setParameter("domain", DomainName.requireValid(domainName))
                 .getResultList();
         return results.stream().findFirst();
-    }
-
-    private MailAuthPolicy legacyGlobalPolicy() {
-        MailAuthConfigEntity legacy = entityManager.find(MailAuthConfigEntity.class, DEFAULT_ID);
-        if (legacy == null) {
-            return MailAuthPolicy.defaults();
-        }
-        return new MailAuthPolicy(
-                DEFAULT_ID,
-                legacy.isEnabled(),
-                legacy.getAuthservId(),
-                legacy.isSkipPrivateRelay() ? TrustedProxyMode.DISABLED : TrustedProxyMode.DISABLED,
-                legacy.isDmarcQuarantineRejectPolicy()
-                        ? MailAuthFailureAction.APPLY_POLICY
-                        : MailAuthFailureAction.LOG_ONLY,
-                legacy.getCreatedAt(),
-                legacy.getUpdatedAt(),
-                legacy.getVersion());
-    }
-
-    private Optional<DomainMailAuthPolicy> legacyDomainPolicy(String domainName) {
-        MailAuthConfigEntity legacy = entityManager.find(MailAuthConfigEntity.class, DEFAULT_ID);
-        if (legacy == null) {
-            return Optional.empty();
-        }
-        return Optional.of(new DomainMailAuthPolicy(
-                domainName,
-                legacy.isEnabled(),
-                new DkimSigningPolicy(
-                        legacy.isDkimEnabled(),
-                        new DkimSelector(legacy.getDkimSelector()),
-                        new DkimKeyRef(legacy.getDkimPrivateKeySecretRef(), legacy.getDkimPrivateKeyPath()),
-                        readList(legacy.getDkimSignedHeaders())),
-                new SpfPublicationPolicy(
-                        legacy.isSpfEnabled(),
-                        legacy.isSpfUseA(),
-                        legacy.isSpfUseMx(),
-                        readList(legacy.getSpfIp4()),
-                        readList(legacy.getSpfIp6()),
-                        readList(legacy.getSpfIncludes()),
-                        legacy.getSpfAllPolicy()),
-                new DmarcPublicationPolicy(
-                        legacy.isDmarcEnabled(),
-                        DmarcPolicyMode.fromTag(legacy.getDmarcPolicy()),
-                        DmarcPolicyMode.fromTag(legacy.getDmarcPolicy()),
-                        DmarcAlignmentMode.fromTag(legacy.getDmarcAdkim()),
-                        DmarcAlignmentMode.fromTag(legacy.getDmarcAspf()),
-                        legacy.getDmarcPct(),
-                        legacy.getDmarcRua(),
-                        legacy.getDmarcRuf()),
-                legacy.getCreatedAt(),
-                legacy.getUpdatedAt(),
-                legacy.getVersion()));
     }
 
     private MailAuthPolicy toDomain(MailAuthPolicyEntity entity) {

@@ -37,7 +37,7 @@ public class Certificate extends AggregateRoot<CertificateId> {
     private String revocationCrlReason;
     private final Instant createdAt;
     private Instant updatedAt;
-    private String privateKeyData; // 关联的私钥（PEM格式）
+    private String privateKeySecretRef; // 关联私钥的外部 secret / keystore 引用
     private String algorithm; // 证书公钥算法（缓存，避免重复解析PEM）
 
     // ---- CA / chain ----
@@ -209,16 +209,16 @@ public class Certificate extends AggregateRoot<CertificateId> {
         this.updatedAt = updatedAt;
     }
 
-    public String getPrivateKeyData() {
-        return privateKeyData;
+    public String getPrivateKeySecretRef() {
+        return privateKeySecretRef;
     }
 
-    public void setPrivateKeyData(String privateKeyData) {
-        this.privateKeyData = privateKeyData;
+    public void setPrivateKeySecretRef(String privateKeySecretRef) {
+        this.privateKeySecretRef = privateKeySecretRef;
     }
 
     public boolean hasPrivateKey() {
-        return privateKeyData != null && !privateKeyData.isBlank();
+        return privateKeySecretRef != null && !privateKeySecretRef.isBlank();
     }
 
     public String getAlgorithm() {

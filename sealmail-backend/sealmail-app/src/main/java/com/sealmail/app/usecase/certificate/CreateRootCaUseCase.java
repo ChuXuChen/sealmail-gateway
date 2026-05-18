@@ -27,6 +27,7 @@ public class CreateRootCaUseCase {
     private final CertificateDtoMapper mapper;
     private final CertificateCryptoPort certificateCryptoPort;
     private final CertificateMaterialAssembler certificateMaterialAssembler;
+    private final CertificatePrivateKeyMaterialService privateKeyMaterialService;
     private final PermissionChecker permissionChecker;
     private final int defaultRootValidityDays;
 
@@ -34,12 +35,14 @@ public class CreateRootCaUseCase {
                                CertificateDtoMapper mapper,
                                CertificateCryptoPort certificateCryptoPort,
                                CertificateMaterialAssembler certificateMaterialAssembler,
+                               CertificatePrivateKeyMaterialService privateKeyMaterialService,
                                PermissionChecker permissionChecker,
                                @Value("${sealmail.ca.default-root-validity-days:3650}") int defaultRootValidityDays) {
         this.certificateRepository = certificateRepository;
         this.mapper = mapper;
         this.certificateCryptoPort = certificateCryptoPort;
         this.certificateMaterialAssembler = certificateMaterialAssembler;
+        this.privateKeyMaterialService = privateKeyMaterialService;
         this.permissionChecker = permissionChecker;
         this.defaultRootValidityDays = defaultRootValidityDays;
     }
@@ -71,7 +74,7 @@ public class CreateRootCaUseCase {
 
             EmailAddress owner = new EmailAddress("ca-" + request.getAlgorithm().toLowerCase() + "@sealmail.local");
             Certificate cert = certificateMaterialAssembler.issued(material.certificate(), owner);
-            cert.setPrivateKeyData(material.privateKeyPem());
+            privateKeyMaterialService.store(cert, material.privateKeyPem());
             cert.markAsCA(1);
             cert.setIssuerCertId(null); // self-signed root
             if (request.getAlias() != null && !request.getAlias().isBlank()) {

@@ -30,6 +30,7 @@ import {
   canManageDlp,
   canManageDomains,
   canManageMailAuth,
+  canManageUsers,
   canViewAuditLogs,
   canViewCrl,
   canViewQuarantine,
@@ -38,6 +39,7 @@ import {
 } from '../../auth/permissions';
 import SealMailLogo from '../Brand/SealMailLogo';
 import { ROUTES } from '../../router/routes';
+import ProfileModal from '../../pages/account/ProfileModal';
 
 const { Header, Sider, Content } = Layout;
 const { useBreakpoint } = Grid;
@@ -49,6 +51,7 @@ const collapsedWidth = 92;
 const MainLayout: React.FC = () => {
   const [collapsed, setCollapsed] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const [profileOpen, setProfileOpen] = useState(false);
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
@@ -140,6 +143,11 @@ const MainLayout: React.FC = () => {
   ].filter(Boolean) as ItemType[], [user]);
 
   const opsChildren = useMemo<ItemType[]>(() => [
+    canManageUsers(user) ? {
+      key: ROUTES.opsUsers,
+      icon: <UserOutlined />,
+      label: '用户管理',
+    } : null,
     canManageCa(user) ? {
       key: ROUTES.opsSmtpProbe,
       icon: <ThunderboltOutlined />,
@@ -214,7 +222,7 @@ const MainLayout: React.FC = () => {
 
   const userMenuItems = [
     {
-      key: 'profile',
+      key: 'user-info',
       disabled: true,
       label: (
         <div className="main-layout__user-menu">
@@ -233,6 +241,12 @@ const MainLayout: React.FC = () => {
     },
     {
       type: 'divider' as const,
+    },
+    {
+      key: 'profile',
+      icon: <UserOutlined />,
+      label: '个人中心',
+      onClick: () => setProfileOpen(true),
     },
     {
       key: 'logout',
@@ -315,6 +329,7 @@ const MainLayout: React.FC = () => {
           <Outlet />
         </Content>
       </Layout>
+      <ProfileModal open={profileOpen} onCancel={() => setProfileOpen(false)} />
     </Layout>
   );
 };

@@ -1,6 +1,7 @@
 package com.sealmail.web.controller.v1;
 
 import com.sealmail.app.dto.request.UserChangePasswordRequest;
+import com.sealmail.app.dto.request.UserProfileUpdateRequest;
 import com.sealmail.app.dto.response.LoginResponse;
 import com.sealmail.app.dto.response.UserSummaryResponse;
 import com.sealmail.app.security.UserContext;
@@ -17,6 +18,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -61,6 +63,22 @@ public class AuthController {
     @Operation(summary = "查询当前登录用户")
     public ApiResponse<LoginResponse.UserInfo> me(@AuthenticationPrincipal UserContext user) {
         UserSummaryResponse userAccount = userAccountUseCase.currentUser(user);
+        return ApiResponse.ok(new LoginResponse.UserInfo(
+                userAccount.getUserId(),
+                userAccount.getUsername(),
+                userAccount.getEmail(),
+                userAccount.getRoles(),
+                userAccount.getManagedDomains(),
+                userAccount.isActive(),
+                userAccount.isLocked()));
+    }
+
+    @PutMapping("/profile")
+    @Operation(summary = "修改当前用户资料", description = "修改用户名或邮箱后旧Token立即失效")
+    public ApiResponse<LoginResponse.UserInfo> updateProfile(@Valid @RequestBody UserProfileUpdateRequest request,
+                                                             @AuthenticationPrincipal UserContext user,
+                                                             HttpServletRequest httpRequest) {
+        UserSummaryResponse userAccount = userAccountUseCase.updateProfile(request, user, clientIp(httpRequest));
         return ApiResponse.ok(new LoginResponse.UserInfo(
                 userAccount.getUserId(),
                 userAccount.getUsername(),

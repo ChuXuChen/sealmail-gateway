@@ -9,8 +9,8 @@ import java.util.Set;
 
 public class UserAccount extends AggregateRoot<String> {
 
-    private final String username;
-    private final String email;
+    private String username;
+    private String email;
     private String passwordHash;
     private Set<String> roles;
     private Set<String> managedDomains;
@@ -147,6 +147,19 @@ public class UserAccount extends AggregateRoot<String> {
         this.lockoutExpiresAt = null;
     }
 
+    public void updateProfile(String username, String email) {
+        this.username = requireText(username, "用户名不能为空");
+        this.email = requireText(email, "邮箱不能为空").toLowerCase(Locale.ROOT);
+    }
+
+    public void replaceRoles(Set<String> roles) {
+        this.roles = normalizeRoles(roles);
+    }
+
+    public void replaceManagedDomains(Set<String> managedDomains) {
+        this.managedDomains = normalizeDomains(managedDomains);
+    }
+
     public void invalidateTokens() {
         this.tokenInvalidBefore = Instant.now();
     }
@@ -163,6 +176,10 @@ public class UserAccount extends AggregateRoot<String> {
         this.locked = false;
         this.failedLoginAttempts = 0;
         this.lockoutExpiresAt = null;
+    }
+
+    public void lock() {
+        this.locked = true;
     }
 
     public String getUsername() {

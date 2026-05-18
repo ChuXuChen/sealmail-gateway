@@ -28,24 +28,30 @@ public class CreateIntermediateCaUseCase {
     private final CertificateDtoMapper mapper;
     private final CertificateCryptoPort certificateCryptoPort;
     private final CertificateMaterialAssembler certificateMaterialAssembler;
+    private final CertificatePrivateKeyMaterialService privateKeyMaterialService;
     private final PermissionChecker permissionChecker;
     private final CertificateChainService certificateChainService;
+    private final CertificateAlgorithmPolicy certificateAlgorithmPolicy;
     private final int defaultIntermediateValidityDays;
 
     public CreateIntermediateCaUseCase(CertificateRepository certificateRepository,
                                        CertificateDtoMapper mapper,
                                        CertificateCryptoPort certificateCryptoPort,
                                        CertificateMaterialAssembler certificateMaterialAssembler,
+                                       CertificatePrivateKeyMaterialService privateKeyMaterialService,
                                        PermissionChecker permissionChecker,
                                        CertificateChainService certificateChainService,
+                                       CertificateAlgorithmPolicy certificateAlgorithmPolicy,
                                        @Value("${sealmail.ca.default-intermediate-validity-days:1825}")
                                        int defaultIntermediateValidityDays) {
         this.certificateRepository = certificateRepository;
         this.mapper = mapper;
         this.certificateCryptoPort = certificateCryptoPort;
         this.certificateMaterialAssembler = certificateMaterialAssembler;
+        this.privateKeyMaterialService = privateKeyMaterialService;
         this.permissionChecker = permissionChecker;
         this.certificateChainService = certificateChainService;
+        this.certificateAlgorithmPolicy = certificateAlgorithmPolicy;
         this.defaultIntermediateValidityDays = defaultIntermediateValidityDays;
     }
 
@@ -70,6 +76,11 @@ public class CreateIntermediateCaUseCase {
         if (!certificateChainService.isChainTrustedAndUsable(rootCa)) {
             throw BusinessException.badRequest("Root CA 链不可信或已失效，无法签发下级 CA");
         }
+        certificateAlgorithmPolicy.requireSameAlgorithm(
+                "Root CA",
+                rootCa.getAlgorithm(),
+                "Intermediate CA",
+                request.getAlgorithm());
 
         try {
             String subjectDn = request.getSubjectDn();
@@ -84,7 +95,7 @@ public class CreateIntermediateCaUseCase {
                             subjectDn,
                             request.getAlgorithm(),
                             rootCa.getPemContent(),
-                            rootCa.getPrivateKeyData(),
+                            privateKeyMaterialService.resolve(rootCa, "Root CA 没有关联私钥，无法签发"),
                             validity,
                             true,
                             0,
@@ -99,7 +110,7 @@ public class CreateIntermediateCaUseCase {
 
             EmailAddress owner = new EmailAddress("ica-" + request.getAlgorithm().toLowerCase() + "@sealmail.local");
             Certificate cert = certificateMaterialAssembler.issued(material.certificate(), owner);
-            cert.setPrivateKeyData(material.privateKeyPem());
+            privateKeyMaterialService.store(cert, material.privateKeyPem());
             cert.markAsCA(0);
             cert.setIssuerCertId(rootCa.getId().getThumbprint());
             if (request.getAlias() != null && !request.getAlias().isBlank()) {

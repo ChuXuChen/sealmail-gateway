@@ -35,6 +35,7 @@ public class GenerateCrlUseCase {
 
     private final CertificateRepository certificateRepository;
     private final CertificateCryptoPort certificateCryptoPort;
+    private final CertificatePrivateKeyMaterialService privateKeyMaterialService;
 
     public CrlContentResponse execute(String caCertId) {
         CertificateCryptoPort.CrlContent crl = generate(caCertId);
@@ -65,7 +66,7 @@ public class GenerateCrlUseCase {
             CertificateCryptoPort.CrlContent crl = certificateCryptoPort.generateCrl(
                     new CertificateCryptoPort.GenerateCrlCommand(
                             caCert.getPemContent(),
-                            caCert.getPrivateKeyData(),
+                            privateKeyMaterialService.resolve(caCert, "CA 没有关联私钥，无法签发 CRL"),
                             now,
                             now.plusSeconds(24L * 60 * 60),
                             children.stream()

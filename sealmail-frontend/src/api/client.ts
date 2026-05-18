@@ -6,3 +6,4 @@ export { domainConfigApi } from './domains';
 export { dlpApi, dlpQuarantineApi, exceptionMailApi } from './dlp';
 export { mailAuthApi } from './mailAuth';
 export { mailTestApi, runtimePolicyApi, systemSettingsApi } from './settings';
+export { userApi } from './users';

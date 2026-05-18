@@ -38,8 +38,8 @@ public class QuarantinedMailEntity {
     @Column(name = "detail", length = 1024)
     private String detail;
 
-    @Column(name = "raw_content", columnDefinition = "TEXT")
-    private String rawContent;
+    @Column(name = "raw_content_id", length = 128)
+    private String rawContentId;
 
     @Column(name = "status", nullable = false, length = 32)
     private String status;

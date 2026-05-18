@@ -639,7 +639,7 @@ class RoutingServiceTest {
             cert.trust();
         }
         if (withPrivateKey) {
-            cert.setPrivateKeyData("private-key-" + UUID.randomUUID());
+            cert.setPrivateKeySecretRef("keystore:certificate:" + UUID.randomUUID());
         }
         return cert;
     }

@@ -39,8 +39,7 @@ spring:
 
   flyway:
     enabled: true
-    baseline-on-migrate: true
-    baseline-version: 6
+    baseline-on-migrate: false
     validate-on-migrate: true
 
 # SealMail Configuration

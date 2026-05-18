@@ -10,6 +10,9 @@ export const getPrimaryRole = (user: UserContext | null): string =>
 export const canManageCa = (user: UserContext | null): boolean =>
   hasRole(user, 'SUPER_ADMIN') || hasRole(user, 'PKI_ADMIN') || hasRole(user, 'ADMIN');
 
+export const canManageUsers = (user: UserContext | null): boolean =>
+  hasRole(user, 'SUPER_ADMIN');
+
 export const canManageCertificates = (user: UserContext | null): boolean =>
   canManageCa(user) || hasRole(user, 'DOMAIN_ADMIN') || hasRole(user, 'DOMAIN_MANAGER');
 
@@ -39,6 +42,7 @@ export const canManageMailAuth = (user: UserContext | null): boolean =>
 
 export const getPermissionSummary = (user: UserContext | null): string[] => {
   const summary = [
+    canManageUsers(user) ? '用户管理' : null,
     canManageCa(user) ? 'PKI 管理' : null,
     canManageCertificates(user) ? '证书管理' : null,
     canManageDlp(user) ? 'DLP 管理' : null,

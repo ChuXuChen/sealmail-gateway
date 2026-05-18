@@ -1,0 +1,140 @@
+# Docker Gateway Stack
+
+This stack is intended for one gateway node. Run the same compose file on both
+servers and change `.env.gateway` for each side.
+
+## Files
+
+```text
+docker-compose.gateway.yml
+.env.gateway.example
+docker/postfix/Dockerfile
+docker/postfix/entrypoint.sh
+docker/sealmail-edge/Dockerfile
+docker/sealmail-edge/entrypoint.sh
+sealmail-backend/Dockerfile
+```
+
+The stack runs:
+
+```text
+PostgreSQL
+SealMail Backend
+Postfix
+SealMail Edge
+Mailpit
+```
+
+## First Run
+
+On each server:
+
+```bash
+cp .env.gateway.example .env.gateway
+mkdir -p runtime
+```
+
+Edit `.env.gateway`.
+
+For server A:
+
+```text
+SEALMAIL_SITE=alpha
+LOCAL_DOMAIN=alpha.sealmail.top
+REMOTE_DOMAIN=beta.sealmail.top
+POSTFIX_HOSTNAME=mx-alpha.sealmail.top
+REMOTE_STANDARD_HOST=<server-b-public-ip>
+EDGE_OUTBOUND_ROUTES=beta.sealmail.top=<server-b-public-ip>:2525
+```
+
+For server B:
+
+```text
+SEALMAIL_SITE=beta
+LOCAL_DOMAIN=beta.sealmail.top
+REMOTE_DOMAIN=alpha.sealmail.top
+POSTFIX_HOSTNAME=mx-beta.sealmail.top
+REMOTE_STANDARD_HOST=<server-a-public-ip>
+EDGE_OUTBOUND_ROUTES=alpha.sealmail.top=<server-a-public-ip>:2525
+```
+
+Then start:
+
+```bash
+docker compose --env-file .env.gateway -f docker-compose.gateway.yml up -d --build
+```
+
+## Public Ports
+
+Open only the ports you need:
+
+```text
+587   Postfix STARTTLS test entry
+2525  SealMail Edge STARTTLS entry
+2465  SealMail Edge implicit TLS entry
+22    SSH
+```
+
+For a public VPS, restrict `587`, `2525`, and `2465` in the cloud firewall to
+your peer server IP and your own admin IP where possible. The Postfix container
+is configured for a two-domain lab route, not as an authenticated public
+submission service.
+
+Keep these bound to localhost or behind SSH tunnel:
+
+```text
+5433  PostgreSQL debug mapping
+8080  SealMail API
+10025 SealMail content-filter SMTP debug mapping
+1025  Mailpit SMTP debug mapping
+8025  Mailpit UI
+2727  Edge admin
+```
+
+## Route Modes
+
+Standard SMTP STARTTLS path:
+
+```text
+REMOTE_ROUTE_MODE=standard
+REMOTE_STANDARD_HOST=<peer-public-ip-or-hostname>
+REMOTE_STANDARD_PORT=587
+```
+
+GM Edge path:
+
+```text
+REMOTE_ROUTE_MODE=gm
+EDGE_OUTBOUND_ROUTES=<remote-domain>=<peer-public-ip-or-hostname>:2525
+```
+
+The Edge TLS keystore/truststore is not generated automatically. Put the files
+under `runtime/<site>/edge-secrets/` and set:
+
+```text
+EDGE_TLS_KEY_STORE=/run/secrets/edge/sealmail-gm-edge.p12
+EDGE_TLS_KEY_STORE_PASSWORD=...
+EDGE_TLS_TRUST_STORE=/run/secrets/edge/sealmail-gm-trust.p12
+EDGE_TLS_TRUST_STORE_PASSWORD=...
+```
+
+For a quick trust-only lab, `EDGE_TLS_TRUST_ALL=true` can be used, but do not use
+that setting outside an isolated test.
+
+## Notes
+
+Postfix auto-generates a self-signed RSA TLS certificate if
+`runtime/<site>/postfix-tls/tls.crt` and `tls.key` do not exist. That is enough
+to test STARTTLS encryption with `POSTFIX_REMOTE_TLS_SECURITY_LEVEL=encrypt`,
+but it does not prove public CA trust or hostname verification.
+
+After startup, configure SealMail domain policies in the UI/API:
+
+```text
+local domain:  LOCAL_DOMAIN, localDomain=true
+remote domain: REMOTE_DOMAIN, localDomain=false, no deliveryHost/deliveryPort
+```
+
+Leaving the remote domain delivery route empty lets SealMail return outbound
+mail to Postfix on `10027`, and Postfix then chooses either the standard TLS
+transport or the Edge transport according to `REMOTE_ROUTE_MODE`.

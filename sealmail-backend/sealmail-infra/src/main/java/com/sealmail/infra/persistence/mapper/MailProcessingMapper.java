@@ -12,7 +12,6 @@ import org.springframework.stereotype.Component;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.stream.Collectors;
 
 @Component
 public class MailProcessingMapper {
@@ -28,7 +27,9 @@ public class MailProcessingMapper {
         entity.setId(mailProcessing.getId());
         entity.setMessageId(mailProcessing.getEnvelope().getMessageId());
         entity.setSenderEmail(mailProcessing.getEnvelope().getSender().getValue());
-        entity.setRecipients(serializeRecipients(mailProcessing.getEnvelope().getRecipients()));
+        entity.setRecipients(mailProcessing.getEnvelope().getRecipients().stream()
+                .map(EmailAddress::getValue)
+                .collect(java.util.stream.Collectors.toCollection(java.util.ArrayList::new)));
         entity.setRemoteHost(mailProcessing.getEnvelope().getRemoteHost());
         entity.setHelo(mailProcessing.getEnvelope().getHelo());
         entity.setReceivedAt(mailProcessing.getEnvelope().getReceivedAt());
@@ -39,7 +40,9 @@ public class MailProcessingMapper {
     }
 
     public MailProcessing toDomain(MailProcessingEntity entity) {
-        List<EmailAddress> recipients = deserializeRecipients(entity.getRecipients());
+        List<EmailAddress> recipients = entity.getRecipients().stream()
+                .map(EmailAddress::new)
+                .toList();
         EmailAddress sender = new EmailAddress(entity.getSenderEmail());
 
         MailEnvelope envelope = new MailEnvelope(
@@ -63,32 +66,6 @@ public class MailProcessingMapper {
 
         processing.clearDomainEvents();
         return processing;
-    }
-
-    private String serializeRecipients(List<EmailAddress> recipients) {
-        try {
-            List<String> emails = recipients.stream().map(EmailAddress::getValue).collect(Collectors.toList());
-            return objectMapper.writeValueAsString(emails);
-        } catch (JsonProcessingException e) {
-            throw new RuntimeException("Failed to serialize recipients", e);
-        }
-    }
-
-    private List<EmailAddress> deserializeRecipients(String json) {
-        try {
-            List<String> emails;
-            try {
-                // First try: direct deserialization
-                emails = objectMapper.readValue(json, new TypeReference<List<String>>() {});
-            } catch (JsonProcessingException e) {
-                // Second try: value was double-encoded, need to decode string first
-                String actualJson = objectMapper.readValue(json, String.class);
-                emails = objectMapper.readValue(actualJson, new TypeReference<List<String>>() {});
-            }
-            return emails.stream().map(EmailAddress::new).collect(Collectors.toList());
-        } catch (JsonProcessingException e) {
-            throw new RuntimeException("Failed to deserialize recipients: " + json, e);
-        }
     }
 
     public String serializeRoutingDecision(RoutingDecision decision) {

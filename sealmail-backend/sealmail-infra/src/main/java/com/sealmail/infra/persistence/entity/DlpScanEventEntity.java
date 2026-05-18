@@ -1,12 +1,19 @@
 package com.sealmail.infra.persistence.entity;
 
 import jakarta.persistence.Column;
+import jakarta.persistence.CollectionTable;
+import jakarta.persistence.ElementCollection;
 import jakarta.persistence.Entity;
+import jakarta.persistence.FetchType;
 import jakarta.persistence.Id;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.OrderColumn;
 import jakarta.persistence.Table;
 import lombok.Data;
 
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
 
 @Data
 @Entity
@@ -29,8 +36,11 @@ public class DlpScanEventEntity {
     @Column(name = "sender_email", length = 254)
     private String senderEmail;
 
-    @Column(name = "recipients", columnDefinition = "TEXT")
-    private String recipients;
+    @ElementCollection(fetch = FetchType.EAGER)
+    @CollectionTable(name = "dlp_scan_event_recipient", joinColumns = @JoinColumn(name = "event_id"))
+    @OrderColumn(name = "position")
+    @Column(name = "recipient_email", nullable = false, length = 254)
+    private List<String> recipients = new ArrayList<>();
 
     @Column(name = "subject", length = 1024)
     private String subject;
@@ -38,11 +48,17 @@ public class DlpScanEventEntity {
     @Column(name = "remote_address", length = 128)
     private String remoteAddress;
 
-    @Column(name = "policy_ids", columnDefinition = "TEXT")
-    private String policyIds;
+    @ElementCollection(fetch = FetchType.EAGER)
+    @CollectionTable(name = "dlp_scan_event_policy", joinColumns = @JoinColumn(name = "event_id"))
+    @OrderColumn(name = "position")
+    @Column(name = "policy_id", nullable = false, length = 128)
+    private List<String> policyIds = new ArrayList<>();
 
-    @Column(name = "rule_group_ids", columnDefinition = "TEXT")
-    private String ruleGroupIds;
+    @ElementCollection(fetch = FetchType.EAGER)
+    @CollectionTable(name = "dlp_scan_event_rule_group", joinColumns = @JoinColumn(name = "event_id"))
+    @OrderColumn(name = "position")
+    @Column(name = "rule_group_id", nullable = false, length = 128)
+    private List<String> ruleGroupIds = new ArrayList<>();
 
     @Column(name = "action", nullable = false, length = 32)
     private String action;
@@ -53,8 +69,11 @@ public class DlpScanEventEntity {
     @Column(name = "match_count", nullable = false)
     private int matchCount;
 
-    @Column(name = "extraction_warnings", columnDefinition = "TEXT")
-    private String extractionWarnings;
+    @ElementCollection(fetch = FetchType.EAGER)
+    @CollectionTable(name = "dlp_scan_event_extraction_warning", joinColumns = @JoinColumn(name = "event_id"))
+    @OrderColumn(name = "position")
+    @Column(name = "warning", nullable = false, length = 1024)
+    private List<String> extractionWarnings = new ArrayList<>();
 
     @Column(name = "monitor_mode", nullable = false)
     private boolean monitorMode;
@@ -65,8 +84,11 @@ public class DlpScanEventEntity {
     @Column(name = "uba_risk_level", nullable = false, length = 16)
     private String ubaRiskLevel;
 
-    @Column(name = "uba_risk_reasons", columnDefinition = "TEXT")
-    private String ubaRiskReasons;
+    @ElementCollection(fetch = FetchType.EAGER)
+    @CollectionTable(name = "dlp_scan_event_uba_risk_reason", joinColumns = @JoinColumn(name = "event_id"))
+    @OrderColumn(name = "position")
+    @Column(name = "risk_reason", nullable = false, length = 1024)
+    private List<String> ubaRiskReasons = new ArrayList<>();
 
     @Column(name = "uba_action_upgraded", nullable = false)
     private boolean ubaActionUpgraded;

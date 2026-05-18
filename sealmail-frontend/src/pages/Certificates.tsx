@@ -67,12 +67,21 @@ const Certificates: React.FC = () => {
 
   const openIssueByCaModal = () => {
     issueByCaForm.resetFields();
+    const firstCandidate = caCandidates[0];
     issueByCaForm.setFieldsValue({
-      algorithm: 'RSA',
+      intermediateCaId: firstCandidate?.id,
+      algorithm: firstCandidate?.algorithm === 'SM2' ? 'SM2' : 'RSA',
       validityDays: 365,
       trusted: true,
     });
     setIssueByCaModalVisible(true);
+  };
+
+  const handleIssueByCaSelectionChange = (certificateId: string) => {
+    const candidate = caCandidates.find((cert) => cert.id === certificateId);
+    if (candidate?.algorithm === 'RSA' || candidate?.algorithm === 'SM2') {
+      issueByCaForm.setFieldValue('algorithm', candidate.algorithm);
+    }
   };
 
   const handleImport = async (values: ImportCertificateValues) => {
@@ -171,6 +180,7 @@ const Certificates: React.FC = () => {
         form={issueByCaForm}
         issuing={issuing}
         open={issueByCaModalVisible}
+        onCaChange={handleIssueByCaSelectionChange}
         onCancel={() => setIssueByCaModalVisible(false)}
         onFinish={handleIssueByCa}
       />

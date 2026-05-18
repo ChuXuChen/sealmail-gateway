@@ -12,6 +12,7 @@ import {
   canManageDlp,
   canManageDomains,
   canManageMailAuth,
+  canManageUsers,
   canViewAuditLogs,
   canViewCrl,
   canViewQuarantine,
@@ -39,6 +40,7 @@ const RelayPolicyPage = React.lazy(() => import('../pages/policies/RelayPolicyPa
 const QuarantinePolicyPage = React.lazy(() => import('../pages/policies/QuarantinePolicyPage'));
 const SmtpProbePage = React.lazy(() => import('../pages/ops/SmtpProbePage'));
 const ProtectedTestMailPage = React.lazy(() => import('../pages/ops/ProtectedTestMailPage'));
+const Users = React.lazy(() => import('../pages/Users'));
 const Forbidden = React.lazy(() => import('../pages/Forbidden'));
 
 interface ProtectedRouteProps {
@@ -269,6 +271,10 @@ const router = createBrowserRouter([
           {
             path: 'audit-logs',
             element: roleElement(canViewAuditLogs, <AuditLogs />),
+          },
+          {
+            path: 'users',
+            element: roleElement(canManageUsers, <Users />),
           },
         ],
       },

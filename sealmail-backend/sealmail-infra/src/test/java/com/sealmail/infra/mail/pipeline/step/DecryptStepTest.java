@@ -1,6 +1,7 @@
 package com.sealmail.infra.mail.pipeline.step;
 
 import com.sealmail.domain.certificate.CertificateRepository;
+import com.sealmail.domain.certificate.spi.CertificatePrivateKeyStore;
 import com.sealmail.domain.certificate.spi.SMIMEOperations;
 import com.sealmail.domain.mailsecurity.MailEnvelope;
 import com.sealmail.domain.mailsecurity.MailProcessingContext;
@@ -36,6 +37,7 @@ class DecryptStepTest {
                 smimeOperations,
                 mock(KeyStoreService.class),
                 mock(CertificateRepository.class),
+                mock(CertificatePrivateKeyStore.class),
                 mock(DomainEventPublisher.class)
         );
         byte[] payload = "plain-text".getBytes();
@@ -55,6 +57,7 @@ class DecryptStepTest {
                 smimeOperations,
                 mock(KeyStoreService.class),
                 mock(CertificateRepository.class),
+                mock(CertificatePrivateKeyStore.class),
                 mock(DomainEventPublisher.class)
         );
         byte[] payload = "cipher-text".getBytes();

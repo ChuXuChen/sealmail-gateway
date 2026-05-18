@@ -36,6 +36,52 @@ export interface UserContext {
   role: string;
   roles?: string[];
   managedDomains?: string[];
+  active?: boolean;
+  locked?: boolean;
+}
+
+export interface UserAccount {
+  userId: string;
+  username: string;
+  email: string;
+  roles: string[];
+  managedDomains: string[];
+  active: boolean;
+  locked: boolean;
+  failedLoginAttempts: number;
+  lastLoginAt?: string;
+  lastPasswordChangedAt?: string;
+}
+
+export type UserStatusFilter = 'active' | 'disabled' | 'all';
+
+export interface CreateUserRequest {
+  username: string;
+  email: string;
+  password: string;
+  roles: string[];
+  managedDomains: string[];
+}
+
+export interface UpdateUserRequest {
+  username: string;
+  email: string;
+  roles: string[];
+  managedDomains: string[];
+}
+
+export interface UpdateProfileRequest {
+  username: string;
+  email: string;
+}
+
+export interface ChangePasswordRequest {
+  currentPassword: string;
+  newPassword: string;
+}
+
+export interface ResetPasswordRequest {
+  newPassword: string;
 }
 
 // Certificate Types

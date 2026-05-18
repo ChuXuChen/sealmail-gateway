@@ -52,8 +52,8 @@ public class CertificateMapper {
         entity.setRevocationCrlReason(certificate.getRevocationCrlReason());
         entity.setCreatedAt(certificate.getCreatedAt());
         entity.setUpdatedAt(certificate.getUpdatedAt());
-        entity.setPrivateKeyData(certificate.getPrivateKeyData());
-        entity.setHasPrivateKey(certificate.getPrivateKeyData() != null && !certificate.getPrivateKeyData().isBlank());
+        entity.setPrivateKeySecretRef(certificate.getPrivateKeySecretRef());
+        entity.setHasPrivateKey(certificate.hasPrivateKey());
         entity.setAlgorithm(certificate.getAlgorithm());
 
         entity.setCa(certificate.isCA());
@@ -128,9 +128,9 @@ public class CertificateMapper {
             } catch (JsonProcessingException ignored) {}
         }
 
-        // 恢复私钥数据
-        if (entity.getPrivateKeyData() != null && !entity.getPrivateKeyData().isBlank()) {
-            cert.setPrivateKeyData(entity.getPrivateKeyData());
+        // 恢复私钥引用；私钥材料本身由外部 secret/keystore 解析。
+        if (entity.getPrivateKeySecretRef() != null && !entity.getPrivateKeySecretRef().isBlank()) {
+            cert.setPrivateKeySecretRef(entity.getPrivateKeySecretRef());
         }
 
         // 恢复算法缓存

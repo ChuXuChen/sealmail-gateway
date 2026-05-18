@@ -30,4 +30,5 @@ export const ROUTES = {
   opsSmtpProbe: '/ops/smtp-probe',
   opsProtectedTestMail: '/ops/protected-test-mail',
   opsAuditLogs: '/ops/audit-logs',
+  opsUsers: '/ops/users',
 } as const;

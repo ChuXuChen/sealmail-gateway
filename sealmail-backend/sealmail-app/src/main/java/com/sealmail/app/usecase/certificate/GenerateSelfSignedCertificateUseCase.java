@@ -35,6 +35,7 @@ public class GenerateSelfSignedCertificateUseCase {
     private final PermissionChecker permissionChecker;
     private final CertificateCryptoPort certificateCryptoPort;
     private final CertificateMaterialAssembler certificateMaterialAssembler;
+    private final CertificatePrivateKeyMaterialService privateKeyMaterialService;
 
     public CertificateResponse execute(GenerateCertificateRequest request, UserContext user) {
         EmailAddress owner = new EmailAddress(request.getOwnerEmail());
@@ -65,7 +66,7 @@ public class GenerateSelfSignedCertificateUseCase {
             }
 
             Certificate cert = certificateMaterialAssembler.issued(material.certificate(), owner);
-            cert.setPrivateKeyData(material.privateKeyPem());
+            privateKeyMaterialService.store(cert, material.privateKeyPem());
             if (request.getAlias() != null && !request.getAlias().isBlank()) {
                 cert.assignAlias(request.getAlias());
             }

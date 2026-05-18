@@ -1,8 +1,5 @@
 package com.sealmail.infra.persistence.repository;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sealmail.domain.dlp.DlpContentKind;
 import com.sealmail.domain.dlp.DlpEvidence;
 import com.sealmail.domain.dlp.DlpRuleType;
@@ -29,15 +26,10 @@ import java.util.Optional;
 @Transactional
 public class DlpEventRepositoryImpl implements DlpEventRepository {
 
-    private static final TypeReference<List<String>> STRING_LIST = new TypeReference<>() {
-    };
-
     private final EntityManager entityManager;
-    private final ObjectMapper objectMapper;
 
-    public DlpEventRepositoryImpl(EntityManager entityManager, ObjectMapper objectMapper) {
+    public DlpEventRepositoryImpl(EntityManager entityManager) {
         this.entityManager = entityManager;
-        this.objectMapper = objectMapper;
     }
 
     @Override
@@ -176,19 +168,19 @@ public class DlpEventRepositoryImpl implements DlpEventRepository {
         entity.setProcessingId(event.processingId());
         entity.setDirection(event.direction() != null ? event.direction().name() : null);
         entity.setSenderEmail(event.senderEmail());
-        entity.setRecipients(serialize(event.recipients()));
+        entity.setRecipients(copy(event.recipients()));
         entity.setSubject(event.subject());
         entity.setRemoteAddress(event.remoteAddress());
-        entity.setPolicyIds(serialize(event.policyIds()));
-        entity.setRuleGroupIds(serialize(event.ruleGroupIds()));
+        entity.setPolicyIds(copy(event.policyIds()));
+        entity.setRuleGroupIds(copy(event.ruleGroupIds()));
         entity.setAction(event.action().name());
         entity.setMaxSeverity(event.maxSeverity());
         entity.setMatchCount(event.matchCount());
-        entity.setExtractionWarnings(serialize(event.extractionWarnings()));
+        entity.setExtractionWarnings(copy(event.extractionWarnings()));
         entity.setMonitorMode(event.monitorMode());
         entity.setScanDurationMs(event.scanDurationMs());
         entity.setUbaRiskLevel(event.ubaRiskLevel().name());
-        entity.setUbaRiskReasons(serialize(event.ubaRiskReasons()));
+        entity.setUbaRiskReasons(copy(event.ubaRiskReasons()));
         entity.setUbaActionUpgraded(event.ubaActionUpgraded());
         entity.setQuarantineId(event.quarantineId());
         entity.setFalsePositive(event.falsePositive());
@@ -206,19 +198,19 @@ public class DlpEventRepositoryImpl implements DlpEventRepository {
                 entity.getProcessingId(),
                 parseDirection(entity.getDirection()),
                 entity.getSenderEmail(),
-                deserialize(entity.getRecipients()),
+                List.copyOf(entity.getRecipients()),
                 entity.getSubject(),
                 entity.getRemoteAddress(),
-                deserialize(entity.getPolicyIds()),
-                deserialize(entity.getRuleGroupIds()),
+                List.copyOf(entity.getPolicyIds()),
+                List.copyOf(entity.getRuleGroupIds()),
                 DispositionAction.valueOf(entity.getAction()),
                 entity.getMaxSeverity(),
                 entity.getMatchCount(),
-                deserialize(entity.getExtractionWarnings()),
+                List.copyOf(entity.getExtractionWarnings()),
                 entity.isMonitorMode(),
                 entity.getScanDurationMs(),
                 parseUbaRiskLevel(entity.getUbaRiskLevel()),
-                deserialize(entity.getUbaRiskReasons()),
+                List.copyOf(entity.getUbaRiskReasons()),
                 entity.isUbaActionUpgraded(),
                 entity.getQuarantineId(),
                 entity.isFalsePositive(),
@@ -284,10 +276,17 @@ public class DlpEventRepositoryImpl implements DlpEventRepository {
             predicates.add("(LOWER(ev.ruleName) LIKE :rule OR LOWER(ev.ruleId) LIKE :rule)");
         }
         if (domain != null && !domain.isBlank()) {
-            predicates.add("(LOWER(e.senderEmail) LIKE :domain OR LOWER(e.recipients) LIKE :domain)");
+            predicates.add("(LOWER(e.senderEmail) LIKE :domain OR LOWER(recipient) LIKE :domain)");
+        }
+        StringBuilder joins = new StringBuilder();
+        if (evidenceJoin) {
+            joins.append("JOIN DlpScanEvidenceEntity ev ON ev.eventId = e.id ");
+        }
+        if (domain != null && !domain.isBlank()) {
+            joins.append("LEFT JOIN e.recipients recipient ");
         }
         return new QueryParts(
-                evidenceJoin ? "JOIN DlpScanEvidenceEntity ev ON ev.eventId = e.id " : "",
+                joins.toString(),
                 predicates.isEmpty() ? "" : " WHERE " + String.join(" AND ", predicates),
                 action,
                 minSeverity,
@@ -310,26 +309,8 @@ public class DlpEventRepositoryImpl implements DlpEventRepository {
         }
     }
 
-    private String serialize(List<String> values) {
-        if (values == null || values.isEmpty()) {
-            return null;
-        }
-        try {
-            return objectMapper.writeValueAsString(values);
-        } catch (JsonProcessingException e) {
-            throw new IllegalArgumentException("DLP event list cannot be serialized", e);
-        }
-    }
-
-    private List<String> deserialize(String values) {
-        if (values == null || values.isBlank()) {
-            return List.of();
-        }
-        try {
-            return objectMapper.readValue(values, STRING_LIST);
-        } catch (JsonProcessingException e) {
-            throw new IllegalStateException("DLP event list is invalid: " + e.getMessage(), e);
-        }
+    private List<String> copy(List<String> values) {
+        return values == null ? new ArrayList<>() : new ArrayList<>(values);
     }
 
     private MailDirection parseDirection(String direction) {

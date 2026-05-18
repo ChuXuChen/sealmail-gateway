@@ -826,18 +826,18 @@ public class DlpConfigService implements DlpConfigPort {
             entity.setDirection(null);
         }
         if (create || update.senderDomains() != null) {
-            entity.setSenderDomains(serializeList(normalizeDomains(update.senderDomains())));
+            entity.setSenderDomains(new ArrayList<>(normalizeDomains(update.senderDomains())));
         }
         if (create || update.recipientDomains() != null) {
-            entity.setRecipientDomains(serializeList(normalizeDomains(update.recipientDomains())));
+            entity.setRecipientDomains(new ArrayList<>(normalizeDomains(update.recipientDomains())));
         }
         if (create || update.senderAddressPatterns() != null) {
             validateWildcards(update.senderAddressPatterns());
-            entity.setSenderAddressPatterns(serializeList(normalizeTextList(update.senderAddressPatterns())));
+            entity.setSenderAddressPatterns(new ArrayList<>(normalizeTextList(update.senderAddressPatterns())));
         }
         if (create || update.recipientAddressPatterns() != null) {
             validateWildcards(update.recipientAddressPatterns());
-            entity.setRecipientAddressPatterns(serializeList(normalizeTextList(update.recipientAddressPatterns())));
+            entity.setRecipientAddressPatterns(new ArrayList<>(normalizeTextList(update.recipientAddressPatterns())));
         }
         if (create || update.attachmentRequired() != null) {
             entity.setAttachmentRequired(update.attachmentRequired() != null && update.attachmentRequired());
@@ -866,12 +866,14 @@ public class DlpConfigService implements DlpConfigPort {
         }
         if (create || update.patternIds() != null || update.patternMode() != null) {
             if (selectsAllPatterns(update)) {
-                entity.setPatternIds(null);
+                entity.setAllPatterns(true);
+                entity.getPatternIds().clear();
             } else {
                 List<String> patternIds = normalizePatternIds(update.patternIds());
                 require(patternIds != null && !patternIds.isEmpty(), "请选择至少一条 DLP 规则，或切换为全部规则");
                 patternIds.forEach(this::requirePattern);
-                entity.setPatternIds(serializePatternIds(patternIds));
+                entity.setAllPatterns(false);
+                entity.setPatternIds(new ArrayList<>(patternIds));
             }
         }
         if (create || update.enabled() != null) {
@@ -1083,7 +1085,7 @@ public class DlpConfigService implements DlpConfigPort {
                 entity.getId(),
                 DlpScopeType.valueOf(entity.getScopeType()),
                 entity.getScopeValue(),
-                deserializePatternIds(entity.getPatternIds()),
+                entity.isAllPatterns() ? null : List.copyOf(entity.getPatternIds()),
                 entity.isEnabled(),
                 entity.getCreatedAt(),
                 entity.getUpdatedAt()
@@ -1145,10 +1147,10 @@ public class DlpConfigService implements DlpConfigPort {
                 entity.getDescription(),
                 parseEnumOrDefault(DlpPolicyMode.class, entity.getMode(), DlpPolicyMode.ENFORCE, "DLP policy mode 无效"),
                 parseNullableEnum(MailDirection.class, entity.getDirection()),
-                deserializeStringList(entity.getSenderDomains()),
-                deserializeStringList(entity.getRecipientDomains()),
-                deserializeStringList(entity.getSenderAddressPatterns()),
-                deserializeStringList(entity.getRecipientAddressPatterns()),
+                List.copyOf(entity.getSenderDomains()),
+                List.copyOf(entity.getRecipientDomains()),
+                List.copyOf(entity.getSenderAddressPatterns()),
+                List.copyOf(entity.getRecipientAddressPatterns()),
                 entity.isAttachmentRequired(),
                 entity.isEnabled(),
                 entity.getPriority(),

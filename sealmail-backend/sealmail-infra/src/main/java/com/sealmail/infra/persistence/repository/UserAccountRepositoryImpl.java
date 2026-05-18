@@ -63,12 +63,36 @@ public class UserAccountRepositoryImpl implements UserAccountRepository {
 
     @Override
     @Transactional(readOnly = true)
+    public Optional<UserAccount> findByEmail(String email) {
+        TypedQuery<UserAccountEntity> query = entityManager.createQuery(
+                "SELECT u FROM UserAccountEntity u WHERE LOWER(u.email) = :email",
+                UserAccountEntity.class
+        );
+        query.setParameter("email", email == null ? null : email.toLowerCase(Locale.ROOT));
+        List<UserAccountEntity> results = query.getResultList();
+        return results.isEmpty() ? Optional.empty() : Optional.of(mapper.toDomain(results.get(0)));
+    }
+
+    @Override
+    @Transactional(readOnly = true)
     public boolean existsByUsername(String username) {
         Long count = entityManager.createQuery(
                         "SELECT COUNT(u) FROM UserAccountEntity u WHERE LOWER(u.username) = :username",
                         Long.class
                 )
                 .setParameter("username", username == null ? null : username.toLowerCase(Locale.ROOT))
+                .getSingleResult();
+        return count != null && count > 0;
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public boolean existsByEmail(String email) {
+        Long count = entityManager.createQuery(
+                        "SELECT COUNT(u) FROM UserAccountEntity u WHERE LOWER(u.email) = :email",
+                        Long.class
+                )
+                .setParameter("email", email == null ? null : email.toLowerCase(Locale.ROOT))
                 .getSingleResult();
         return count != null && count > 0;
     }

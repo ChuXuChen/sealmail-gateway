@@ -40,6 +40,9 @@ public class SeedUserAccountUseCase {
         String email = command.email() != null && !command.email().isBlank()
                 ? command.email()
                 : command.username() + "@sealmail.local";
+        if (userAccountRepository.existsByEmail(email)) {
+            return false;
+        }
 
         UserAccount userAccount = UserAccount.create(
                 userId,

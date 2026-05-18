@@ -3,6 +3,7 @@ package com.sealmail.infra.mail.pipeline.step;
 import com.sealmail.domain.certificate.Certificate;
 import com.sealmail.domain.certificate.CertificateId;
 import com.sealmail.domain.certificate.CertificateRepository;
+import com.sealmail.domain.certificate.spi.CertificatePrivateKeyStore;
 import com.sealmail.domain.certificate.KeyUsage;
 import com.sealmail.domain.certificate.ValidityPeriod;
 import com.sealmail.domain.certificate.spi.SMIMEOperations;
@@ -48,6 +49,7 @@ class SignStepTest {
                 smimeOperations,
                 keyStoreService,
                 certificateRepository,
+                mock(CertificatePrivateKeyStore.class),
                 mock(DomainEventPublisher.class));
 
         EmailAddress sender = new EmailAddress("sender@example.com");

@@ -5,6 +5,7 @@ import com.sealmail.domain.quarantine.QuarantineRepository;
 import com.sealmail.domain.quarantine.QuarantineStatus;
 import com.sealmail.domain.quarantine.QuarantinedMail;
 import com.sealmail.infra.events.DomainEventPublisher;
+import com.sealmail.infra.persistence.entity.MailRawContentEntity;
 import com.sealmail.infra.persistence.entity.QuarantinedMailEntity;
 import com.sealmail.infra.persistence.mapper.QuarantinedMailMapper;
 import jakarta.persistence.EntityManager;
@@ -13,8 +14,10 @@ import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
+import java.util.Base64;
 import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
 
 @Repository
 @Transactional
@@ -36,6 +39,11 @@ public class QuarantineRepositoryImpl implements QuarantineRepository {
     public QuarantinedMail save(QuarantinedMail quarantinedMail) {
         QuarantinedMailEntity entity = mapper.toEntity(quarantinedMail);
         QuarantinedMailEntity existing = entityManager.find(QuarantinedMailEntity.class, entity.getId());
+        String rawContentId = existing != null ? existing.getRawContentId() : null;
+        if (rawContentId == null && hasRawContent(quarantinedMail.getRawContent())) {
+            rawContentId = persistRawContent(quarantinedMail.getRawContent());
+        }
+        entity.setRawContentId(rawContentId);
         if (existing != null) {
             entity.setCreatedAt(existing.getCreatedAt());
             entity.setVersion(existing.getVersion());
@@ -51,7 +59,8 @@ public class QuarantineRepositoryImpl implements QuarantineRepository {
     @Transactional(readOnly = true)
     public Optional<QuarantinedMail> findById(String id) {
         QuarantinedMailEntity entity = entityManager.find(QuarantinedMailEntity.class, id);
-        return Optional.ofNullable(entity).map(mapper::toDomain);
+        return Optional.ofNullable(entity)
+                .map(value -> mapper.toDomain(value, loadRawContent(value.getRawContentId())));
     }
 
     @Override
@@ -159,7 +168,10 @@ public class QuarantineRepositoryImpl implements QuarantineRepository {
     public void deleteById(String id) {
         QuarantinedMailEntity entity = entityManager.find(QuarantinedMailEntity.class, id);
         if (entity != null) {
+            String rawContentId = entity.getRawContentId();
             entityManager.remove(entity);
+            entityManager.flush();
+            deleteRawContent(rawContentId);
         }
     }
 
@@ -168,10 +180,17 @@ public class QuarantineRepositoryImpl implements QuarantineRepository {
         if (cutoff == null) {
             throw new IllegalArgumentException("Cutoff cannot be null");
         }
-        return entityManager.createQuery(
+        List<String> rawContentIds = entityManager.createQuery(
+                        "SELECT q.rawContentId FROM QuarantinedMailEntity q WHERE q.createdAt < :cutoff AND q.rawContentId IS NOT NULL",
+                        String.class)
+                .setParameter("cutoff", cutoff)
+                .getResultList();
+        int deleted = entityManager.createQuery(
                         "DELETE FROM QuarantinedMailEntity q WHERE q.createdAt < :cutoff")
                 .setParameter("cutoff", cutoff)
                 .executeUpdate();
+        rawContentIds.forEach(this::deleteRawContent);
+        return deleted;
     }
 
     @Override
@@ -235,6 +254,56 @@ public class QuarantineRepositoryImpl implements QuarantineRepository {
             throw new IllegalArgumentException("Statuses cannot be empty");
         }
         return statuses.stream().map(QuarantineStatus::name).toList();
+    }
+
+    private boolean hasRawContent(byte[] rawContent) {
+        return rawContent != null && rawContent.length > 0;
+    }
+
+    private String persistRawContent(byte[] rawContent) {
+        MailRawContentEntity raw = new MailRawContentEntity();
+        raw.setId(UUID.randomUUID().toString());
+        raw.setContent(Base64.getEncoder().encodeToString(rawContent));
+        raw.setSha256(sha256(rawContent));
+        raw.setSizeBytes(rawContent.length);
+        raw.setContentType("message/rfc822;base64");
+        raw.setCreatedAt(Instant.now());
+        entityManager.persist(raw);
+        return raw.getId();
+    }
+
+    private byte[] loadRawContent(String rawContentId) {
+        if (rawContentId == null || rawContentId.isBlank()) {
+            return new byte[0];
+        }
+        MailRawContentEntity raw = entityManager.find(MailRawContentEntity.class, rawContentId);
+        if (raw == null || raw.getContent() == null || raw.getContent().isBlank()) {
+            return new byte[0];
+        }
+        return Base64.getDecoder().decode(raw.getContent());
+    }
+
+    private void deleteRawContent(String rawContentId) {
+        if (rawContentId == null || rawContentId.isBlank()) {
+            return;
+        }
+        MailRawContentEntity raw = entityManager.find(MailRawContentEntity.class, rawContentId);
+        if (raw != null) {
+            entityManager.remove(raw);
+        }
+    }
+
+    private String sha256(byte[] bytes) {
+        try {
+            byte[] digest = java.security.MessageDigest.getInstance("SHA-256").digest(bytes);
+            StringBuilder builder = new StringBuilder(digest.length * 2);
+            for (byte b : digest) {
+                builder.append(String.format("%02x", b));
+            }
+            return builder.toString();
+        } catch (java.security.NoSuchAlgorithmException e) {
+            throw new IllegalStateException("SHA-256 digest is not available", e);
+        }
     }
 
 }

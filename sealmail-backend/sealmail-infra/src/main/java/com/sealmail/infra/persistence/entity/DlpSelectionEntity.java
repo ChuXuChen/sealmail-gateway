@@ -4,6 +4,8 @@ import jakarta.persistence.*;
 import lombok.Data;
 
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
 
 @Data
 @Entity
@@ -20,8 +22,14 @@ public class DlpSelectionEntity {
     @Column(name = "scope_value", length = 254)
     private String scopeValue;
 
-    @Column(name = "pattern_ids", columnDefinition = "TEXT")
-    private String patternIds;
+    @Column(name = "all_patterns", nullable = false)
+    private boolean allPatterns;
+
+    @ElementCollection(fetch = FetchType.EAGER)
+    @CollectionTable(name = "dlp_selection_pattern", joinColumns = @JoinColumn(name = "selection_id"))
+    @OrderColumn(name = "position")
+    @Column(name = "pattern_id", nullable = false, length = 128)
+    private List<String> patternIds = new ArrayList<>();
 
     @Column(name = "enabled", nullable = false)
     private boolean enabled;

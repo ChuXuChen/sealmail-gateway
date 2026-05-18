@@ -10,7 +10,6 @@ import com.sealmail.domain.shared.model.EmailAddress;
 import com.sealmail.infra.persistence.entity.ExceptionMailEntity;
 import org.springframework.stereotype.Component;
 
-import java.util.Base64;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -36,12 +35,15 @@ public class ExceptionMailMapper {
         entity.setDetail(mail.getDetail());
         entity.setBlockedBy(mail.getBlockedBy());
         entity.setBlockComment(mail.getBlockComment());
-        entity.setRawContent(encodeRawContent(mail.getRawContent()));
         entity.setCreatedAt(mail.getCreatedAt());
         return entity;
     }
 
     public ExceptionMail toDomain(ExceptionMailEntity entity) {
+        return toDomain(entity, new byte[0]);
+    }
+
+    public ExceptionMail toDomain(ExceptionMailEntity entity, byte[] rawContent) {
         return ExceptionMail.restore(
                 entity.getId(),
                 entity.getMessageId(),
@@ -55,7 +57,7 @@ public class ExceptionMailMapper {
                 entity.getBlockedBy(),
                 entity.getBlockComment(),
                 entity.getCreatedAt(),
-                decodeRawContent(entity.getRawContent())
+                rawContent == null ? new byte[0] : rawContent
         );
     }
 
@@ -92,17 +94,4 @@ public class ExceptionMailMapper {
         }
     }
 
-    private String encodeRawContent(byte[] rawContent) {
-        if (rawContent == null || rawContent.length == 0) {
-            return null;
-        }
-        return Base64.getEncoder().encodeToString(rawContent);
-    }
-
-    private byte[] decodeRawContent(String rawContent) {
-        if (rawContent == null || rawContent.isBlank()) {
-            return new byte[0];
-        }
-        return Base64.getDecoder().decode(rawContent);
-    }
 }

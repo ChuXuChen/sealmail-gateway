@@ -8,7 +8,7 @@ import {
   Button,
 } from 'antd';
 import type { TableColumnsType } from 'antd';
-import { EyeOutlined } from '@ant-design/icons';
+import { EyeOutlined, ReloadOutlined } from '@ant-design/icons';
 import { ExceptionMailItem } from '../types';
 import { exceptionMailApi } from '../api/client';
 import { getApiErrorMessage } from '../api/errors';
@@ -141,6 +141,11 @@ const ExceptionMails: React.FC = () => {
       <PageHeader
         title="异常邮件"
         description="查看因策略、证书或邮件认证失败而被自动阻断的邮件记录。"
+        actions={(
+          <Button icon={<ReloadOutlined />} loading={loading} onClick={loadData}>
+            刷新
+          </Button>
+        )}
       />
 
       <FilterBar

@@ -1,0 +1,129 @@
+name: sealmail-gateway-${SEALMAIL_SITE:-node}
+
+services:
+  postgres:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${SEALMAIL_DB_NAME:-sealmail}
+      POSTGRES_USER: ${SEALMAIL_DB_USERNAME:-sealmail}
+      POSTGRES_PASSWORD: ${SEALMAIL_DB_PASSWORD:?Set SEALMAIL_DB_PASSWORD}
+    ports:
+      - "127.0.0.1:${SEALMAIL_DB_HOST_PORT:-5433}:5432"
+    volumes:
+      - ./runtime/${SEALMAIL_SITE:-node}/postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${SEALMAIL_DB_USERNAME:-sealmail} -d ${SEALMAIL_DB_NAME:-sealmail}"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  sealmail-backend:
+    build:
+      context: .
+      dockerfile: sealmail-backend/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      JAVA_TOOL_OPTIONS: ${SEALMAIL_JAVA_TOOL_OPTIONS:--Xms256m -Xmx1024m}
+      SPRING_PROFILES_ACTIVE: postgres
+      SEALMAIL_DB_URL: jdbc:postgresql://postgres:5432/${SEALMAIL_DB_NAME:-sealmail}
+      SEALMAIL_DB_USERNAME: ${SEALMAIL_DB_USERNAME:-sealmail}
+      SEALMAIL_DB_PASSWORD: ${SEALMAIL_DB_PASSWORD:?Set SEALMAIL_DB_PASSWORD}
+      SEALMAIL_JWT_SECRET: ${SEALMAIL_JWT_SECRET:?Set SEALMAIL_JWT_SECRET}
+      SEALMAIL_KEYSTORE_PATH: /var/lib/sealmail/keystore/sealmail-cert-keys.p12
+      SEALMAIL_KEYSTORE_PASSWORD: ${SEALMAIL_KEYSTORE_PASSWORD:?Set SEALMAIL_KEYSTORE_PASSWORD}
+      SEALMAIL_SMTP_SERVER_BIND_ADDRESS: 0.0.0.0
+      SEALMAIL_SMTP_SERVER_PORT: 10025
+      SEALMAIL_POSTFIX_ENABLED: "true"
+      SEALMAIL_POSTFIX_HOST: postfix
+      SEALMAIL_POSTFIX_AFTER_FILTER_PORT: 10026
+      SEALMAIL_POSTFIX_OUTBOUND_PORT: 10027
+      SEALMAIL_POSTFIX_TIMEOUT: 30000
+      SEALMAIL_CA_CRL_BASE_URL: ${SEALMAIL_CA_CRL_BASE_URL:-http://localhost:8080/api/v1/crl/}
+      SEALMAIL_AUTH_USERS_0_USER_ID: ${SEALMAIL_ADMIN_USER_ID:-admin}
+      SEALMAIL_AUTH_USERS_0_USERNAME: ${SEALMAIL_ADMIN_USERNAME:-admin}
+      SEALMAIL_AUTH_USERS_0_EMAIL: ${SEALMAIL_ADMIN_EMAIL:-admin@example.invalid}
+      SEALMAIL_AUTH_USERS_0_PASSWORD_SECRET_REF: env:SEALMAIL_ADMIN_PASSWORD
+      SEALMAIL_ADMIN_PASSWORD: ${SEALMAIL_ADMIN_PASSWORD:?Set SEALMAIL_ADMIN_PASSWORD}
+      SEALMAIL_AUTH_USERS_0_ROLES_0: SUPER_ADMIN
+      SEALMAIL_AUTH_USERS_0_MANAGED_DOMAINS_0: ${LOCAL_DOMAIN:?Set LOCAL_DOMAIN}
+    ports:
+      - "127.0.0.1:${SEALMAIL_BACKEND_HTTP_PORT:-8080}:8080"
+      - "127.0.0.1:${SEALMAIL_SMTP_DEBUG_PORT:-10025}:10025"
+    volumes:
+      - ./runtime/${SEALMAIL_SITE:-node}/keystore:/var/lib/sealmail/keystore
+
+  postfix:
+    build:
+      context: .
+      dockerfile: docker/postfix/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      - sealmail-backend
+      - mailpit
+    environment:
+      LOCAL_DOMAIN: ${LOCAL_DOMAIN:?Set LOCAL_DOMAIN}
+      REMOTE_DOMAIN: ${REMOTE_DOMAIN:-}
+      REMOTE_ROUTE_MODE: ${REMOTE_ROUTE_MODE:-standard}
+      REMOTE_STANDARD_HOST: ${REMOTE_STANDARD_HOST:-}
+      REMOTE_STANDARD_PORT: ${REMOTE_STANDARD_PORT:-587}
+      POSTFIX_HOSTNAME: ${POSTFIX_HOSTNAME:-mail.local}
+      POSTFIX_SMTPD_TLS_SECURITY_LEVEL: ${POSTFIX_SMTPD_TLS_SECURITY_LEVEL:-may}
+      POSTFIX_REMOTE_TLS_SECURITY_LEVEL: ${POSTFIX_REMOTE_TLS_SECURITY_LEVEL:-encrypt}
+      POSTFIX_EXTRA_MYNETWORKS: ${POSTFIX_EXTRA_MYNETWORKS:-}
+      SEALMAIL_HOST: sealmail-backend
+      SEALMAIL_PORT: 10025
+      MAILPIT_HOST: mailpit
+      MAILPIT_PORT: 1025
+      EDGE_OUTBOUND_HOST: sealmail-edge
+      EDGE_OUTBOUND_PORT: 2526
+      POSTFIX_AFTER_FILTER_PORT: 10026
+      POSTFIX_OUTBOUND_PORT: 10027
+      EDGE_INBOUND_POSTFIX_PORT: 2530
+    ports:
+      - "${POSTFIX_PUBLIC_SMTP_PORT:-587}:25"
+    volumes:
+      - ./runtime/${SEALMAIL_SITE:-node}/postfix-tls:/etc/postfix/tls
+
+  sealmail-edge:
+    build:
+      context: .
+      dockerfile: docker/sealmail-edge/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      - postfix
+    environment:
+      JAVA_TOOL_OPTIONS: ${EDGE_JAVA_TOOL_OPTIONS:--Xms128m -Xmx512m}
+      EDGE_POSTFIX_HOST: postfix
+      EDGE_POSTFIX_PORT: 2530
+      EDGE_INBOUND_ENABLED: ${EDGE_INBOUND_ENABLED:-true}
+      EDGE_OUTBOUND_ENABLED: ${EDGE_OUTBOUND_ENABLED:-true}
+      EDGE_ADMIN_ENABLED: ${EDGE_ADMIN_ENABLED:-true}
+      EDGE_ADMIN_BIND_ADDRESS: 0.0.0.0
+      EDGE_TLS_KEY_STORE: ${EDGE_TLS_KEY_STORE:-}
+      EDGE_TLS_KEY_STORE_PASSWORD: ${EDGE_TLS_KEY_STORE_PASSWORD:-}
+      EDGE_TLS_TRUST_STORE: ${EDGE_TLS_TRUST_STORE:-}
+      EDGE_TLS_TRUST_STORE_PASSWORD: ${EDGE_TLS_TRUST_STORE_PASSWORD:-}
+      EDGE_TLS_TRUST_ALL: ${EDGE_TLS_TRUST_ALL:-false}
+      EDGE_OUTBOUND_ROUTES: ${EDGE_OUTBOUND_ROUTES:-}
+    ports:
+      - "${EDGE_STARTTLS_PUBLIC_PORT:-2525}:2525"
+      - "${EDGE_IMPLICIT_TLS_PUBLIC_PORT:-2465}:2465"
+      - "127.0.0.1:${EDGE_ADMIN_HOST_PORT:-2727}:2727"
+    volumes:
+      - ./runtime/${SEALMAIL_SITE:-node}/edge-secrets:/run/secrets/edge:ro
+
+  mailpit:
+    image: axllent/mailpit:latest
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${MAILPIT_SMTP_DEBUG_PORT:-1025}:1025"
+      - "127.0.0.1:${MAILPIT_UI_HOST_PORT:-8025}:8025"
+    volumes:
+      - ./runtime/${SEALMAIL_SITE:-node}/mailpit:/data
+    environment:
+      MP_DATABASE: /data/mailpit.db
+

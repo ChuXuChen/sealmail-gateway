@@ -52,6 +52,10 @@ const DlpEvents: React.FC = () => {
     }
   }, []);
 
+  const refreshAll = useCallback(() => {
+    void Promise.all([loadData(), loadRisks()]);
+  }, [loadData, loadRisks]);
+
   useEffect(() => {
     void Promise.resolve().then(loadData);
   }, [loadData]);
@@ -104,7 +108,15 @@ const DlpEvents: React.FC = () => {
 
   return (
     <PageShell>
-      <PageHeader title="DLP 命中事件" description="查看 DLP 命中记录、策略来源、抽取 warning 和脱敏证据。" />
+      <PageHeader
+        title="DLP 命中事件"
+        description="查看 DLP 命中记录、策略来源、抽取 warning 和脱敏证据。"
+        actions={(
+          <Button icon={<ReloadOutlined />} loading={loading || riskLoading} onClick={refreshAll}>
+            刷新
+          </Button>
+        )}
+      />
 
       <Tabs
         className="config-tabs"

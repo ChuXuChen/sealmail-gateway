@@ -11,7 +11,6 @@ import com.sealmail.domain.shared.model.EmailAddress;
 import com.sealmail.infra.persistence.entity.QuarantinedMailEntity;
 import org.springframework.stereotype.Component;
 
-import java.util.Base64;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -35,7 +34,6 @@ public class QuarantinedMailMapper {
         entity.setRemoteAddress(quarantinedMail.getRemoteAddress());
         entity.setReason(quarantinedMail.getReason().name());
         entity.setDetail(quarantinedMail.getDetail());
-        entity.setRawContent(encodeRawContent(quarantinedMail.getRawContent()));
         entity.setStatus(quarantinedMail.getStatus().name());
         entity.setCreatedAt(quarantinedMail.getCreatedAt());
         entity.setResolvedAt(quarantinedMail.getResolvedAt());
@@ -50,6 +48,10 @@ public class QuarantinedMailMapper {
     }
 
     public QuarantinedMail toDomain(QuarantinedMailEntity entity) {
+        return toDomain(entity, new byte[0]);
+    }
+
+    public QuarantinedMail toDomain(QuarantinedMailEntity entity, byte[] rawContent) {
         List<EmailAddress> recipients = deserializeRecipients(entity.getRecipients());
         EmailAddress sender = new EmailAddress(entity.getSenderEmail());
 
@@ -68,7 +70,7 @@ public class QuarantinedMailMapper {
                 entity.getResolvedAt(),
                 entity.getProcessedBy(),
                 entity.getProcessComment(),
-                decodeRawContent(entity.getRawContent()),
+                rawContent == null ? new byte[0] : rawContent,
                 entity.getDlpEventId(),
                 entity.isFalsePositive(),
                 entity.getFalsePositiveAt(),
@@ -108,17 +110,4 @@ public class QuarantinedMailMapper {
         }
     }
 
-    private String encodeRawContent(byte[] rawContent) {
-        if (rawContent == null || rawContent.length == 0) {
-            return null;
-        }
-        return Base64.getEncoder().encodeToString(rawContent);
-    }
-
-    private byte[] decodeRawContent(String rawContent) {
-        if (rawContent == null || rawContent.isBlank()) {
-            return new byte[0];
-        }
-        return Base64.getDecoder().decode(rawContent);
-    }
 }

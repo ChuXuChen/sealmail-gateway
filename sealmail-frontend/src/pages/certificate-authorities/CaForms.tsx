@@ -18,6 +18,7 @@ interface IntermediateCaModalProps {
   issuing: boolean;
   open: boolean;
   rootCandidates: Certificate[];
+  onRootChange?: (certificateId: string) => void;
   onCancel: () => void;
   onFinish: (values: CreateIntermediateCaValues) => void | Promise<void>;
 }
@@ -77,6 +78,7 @@ export const IntermediateCaModal: React.FC<IntermediateCaModalProps> = ({
   issuing,
   open,
   rootCandidates,
+  onRootChange,
   onCancel,
   onFinish,
 }) => (
@@ -98,6 +100,7 @@ export const IntermediateCaModal: React.FC<IntermediateCaModalProps> = ({
       >
         <Select
           placeholder="请选择 Root CA"
+          onChange={onRootChange}
           options={rootCandidates.map((candidate) => ({
             value: candidate.id,
             label: `${getDisplayName(candidate)} (${candidate.algorithm}, ${candidate.id.substring(0, 12)}...)`,
@@ -108,7 +111,7 @@ export const IntermediateCaModal: React.FC<IntermediateCaModalProps> = ({
         <Input placeholder="例如：SealMail Intermediate CA" />
       </Form.Item>
       <Form.Item name="algorithm" label="算法" rules={[{ required: true }]}>
-        <Select options={algorithmOptions} />
+        <Select options={algorithmOptions} disabled />
       </Form.Item>
       <Form.Item name="subjectDn" label="Subject DN (可选)">
         <Input />

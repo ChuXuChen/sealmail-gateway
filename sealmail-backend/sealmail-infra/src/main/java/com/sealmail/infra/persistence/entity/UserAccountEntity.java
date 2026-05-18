@@ -1,14 +1,20 @@
 package com.sealmail.infra.persistence.entity;
 
 import jakarta.persistence.Column;
+import jakarta.persistence.CollectionTable;
+import jakarta.persistence.ElementCollection;
 import jakarta.persistence.Entity;
+import jakarta.persistence.FetchType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Index;
+import jakarta.persistence.JoinColumn;
 import jakarta.persistence.Table;
 import jakarta.persistence.Version;
 import lombok.Data;
 
 import java.time.Instant;
+import java.util.LinkedHashSet;
+import java.util.Set;
 
 @Data
 @Entity
@@ -31,11 +37,15 @@ public class UserAccountEntity {
     @Column(name = "password_hash", nullable = false, length = 256)
     private String passwordHash;
 
-    @Column(name = "roles", nullable = false, length = 1024)
-    private String roles;
+    @ElementCollection(fetch = FetchType.EAGER)
+    @CollectionTable(name = "user_account_role", joinColumns = @JoinColumn(name = "user_account_id"))
+    @Column(name = "role", nullable = false, length = 64)
+    private Set<String> roles = new LinkedHashSet<>();
 
-    @Column(name = "managed_domains", length = 2048)
-    private String managedDomains;
+    @ElementCollection(fetch = FetchType.EAGER)
+    @CollectionTable(name = "user_managed_domain", joinColumns = @JoinColumn(name = "user_account_id"))
+    @Column(name = "domain_name", nullable = false, length = 254)
+    private Set<String> managedDomains = new LinkedHashSet<>();
 
     @Column(name = "active", nullable = false)
     private boolean active;

@@ -3,6 +3,7 @@ package com.sealmail.infra.mail.pipeline.step;
 import com.sealmail.domain.audit.AuditLogType;
 import com.sealmail.domain.certificate.CertificateId;
 import com.sealmail.domain.certificate.CertificateRepository;
+import com.sealmail.domain.certificate.spi.CertificatePrivateKeyStore;
 import com.sealmail.domain.certificate.spi.SMIMEOperations;
 import com.sealmail.domain.mailsecurity.MailEnvelope;
 import com.sealmail.domain.mailsecurity.MailProcessingContext;
@@ -31,15 +32,18 @@ public class DecryptStep {
     private final SMIMEOperations smimeOperations;
     private final KeyStoreService keyStoreService;
     private final CertificateRepository certificateRepository;
+    private final CertificatePrivateKeyStore privateKeyStore;
     private final DomainEventPublisher domainEventPublisher;
 
     public DecryptStep(SMIMEOperations smimeOperations,
                        KeyStoreService keyStoreService,
                        CertificateRepository certificateRepository,
+                       CertificatePrivateKeyStore privateKeyStore,
                        DomainEventPublisher domainEventPublisher) {
         this.smimeOperations = smimeOperations;
         this.keyStoreService = keyStoreService;
         this.certificateRepository = certificateRepository;
+        this.privateKeyStore = privateKeyStore;
         this.domainEventPublisher = domainEventPublisher;
     }
 
@@ -65,7 +69,7 @@ public class DecryptStep {
             if (thumbprint != null && !thumbprint.isBlank()) {
                 var certOpt = certificateRepository.findById(new CertificateId(thumbprint));
                 if (certOpt.isPresent() && certOpt.get().hasPrivateKey()) {
-                    privateKey = certOpt.get().getPrivateKeyData();
+                    privateKey = privateKeyStore.resolve(certOpt.get().getPrivateKeySecretRef()).orElse(null);
                     log.info("使用证书关联私钥进行解密: thumbprint={}", thumbprint);
                 }
             }

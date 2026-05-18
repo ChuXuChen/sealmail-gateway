@@ -26,7 +26,7 @@ class DlpConfigServiceSelectionTest {
     void activePatternsForUsesOnlySelectedPatternIds() throws Exception {
         DlpConfigService service = serviceWithEntities(
                 List.of(pattern("warn", DispositionAction.WARN), pattern("block", DispositionAction.BLOCK)),
-                List.of(selection("[\"block\"]"))
+                List.of(selection("block"))
         );
 
         List<DlpPatternConfig> patterns = service.activePatternsFor(envelope());
@@ -97,7 +97,10 @@ class DlpConfigServiceSelectionTest {
         DlpSelectionEntity entity = new DlpSelectionEntity();
         entity.setId("selection-1");
         entity.setScopeType(DlpScopeType.GLOBAL.name());
-        entity.setPatternIds(patternIds);
+        entity.setAllPatterns(patternIds == null);
+        if (patternIds != null) {
+            entity.setPatternIds(new java.util.ArrayList<>(List.of(patternIds)));
+        }
         entity.setEnabled(true);
         entity.setCreatedAt(Instant.now());
         entity.setUpdatedAt(Instant.now());

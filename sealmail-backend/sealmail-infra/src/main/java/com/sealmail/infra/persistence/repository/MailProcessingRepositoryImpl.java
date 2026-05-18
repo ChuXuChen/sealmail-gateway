@@ -1,11 +1,9 @@
 package com.sealmail.infra.persistence.repository;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sealmail.domain.mailsecurity.MailProcessing;
 import com.sealmail.domain.mailsecurity.MailProcessingRepository;
 import com.sealmail.domain.mailsecurity.ProcessingResult;
 import com.sealmail.domain.mailsecurity.ProcessingStep;
-import com.sealmail.domain.shared.model.EmailAddress;
 import com.sealmail.infra.events.DomainEventPublisher;
 import com.sealmail.infra.persistence.entity.MailProcessingEntity;
 import com.sealmail.infra.persistence.mapper.MailProcessingMapper;
@@ -25,16 +23,13 @@ public class MailProcessingRepositoryImpl implements MailProcessingRepository {
 
     private final EntityManager entityManager;
     private final MailProcessingMapper mapper;
-    private final ObjectMapper objectMapper;
     private final DomainEventPublisher domainEventPublisher;
 
     public MailProcessingRepositoryImpl(EntityManager entityManager,
                                         MailProcessingMapper mapper,
-                                        ObjectMapper objectMapper,
                                         DomainEventPublisher domainEventPublisher) {
         this.entityManager = entityManager;
         this.mapper = mapper;
-        this.objectMapper = objectMapper;
         this.domainEventPublisher = domainEventPublisher;
     }
 
@@ -44,7 +39,9 @@ public class MailProcessingRepositoryImpl implements MailProcessingRepository {
         entity.setId(mailProcessing.getId());
         entity.setMessageId(mailProcessing.getEnvelope().getMessageId());
         entity.setSenderEmail(mailProcessing.getEnvelope().getSender().getValue());
-        entity.setRecipients(serializeRecipients(mailProcessing.getEnvelope().getRecipients()));
+        entity.setRecipients(mailProcessing.getEnvelope().getRecipients().stream()
+                .map(com.sealmail.domain.shared.model.EmailAddress::getValue)
+                .collect(java.util.stream.Collectors.toCollection(java.util.ArrayList::new)));
         entity.setRemoteHost(mailProcessing.getEnvelope().getRemoteHost());
         entity.setHelo(mailProcessing.getEnvelope().getHelo());
         entity.setReceivedAt(mailProcessing.getEnvelope().getReceivedAt());
@@ -93,15 +90,6 @@ public class MailProcessingRepositoryImpl implements MailProcessingRepository {
                     .setParameter("startedAt", step.getStartedAt())
                     .setParameter("completedAt", step.getCompletedAt())
                     .executeUpdate();
-        }
-    }
-
-    private String serializeRecipients(List<EmailAddress> recipients) {
-        try {
-            List<String> emails = recipients.stream().map(EmailAddress::getValue).toList();
-            return objectMapper.writeValueAsString(emails);
-        } catch (Exception e) {
-            throw new RuntimeException("Failed to serialize recipients", e);
         }
     }
 

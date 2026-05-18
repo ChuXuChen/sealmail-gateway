@@ -67,8 +67,20 @@ const CertificateAuthorities: React.FC = () => {
 
   const openIntermediateModal = () => {
     intForm.resetFields();
-    intForm.setFieldsValue({ algorithm: 'RSA', validityDays: 1825 });
+    const firstCandidate = rootCandidates[0];
+    intForm.setFieldsValue({
+      rootCaId: firstCandidate?.id,
+      algorithm: firstCandidate?.algorithm === 'SM2' ? 'SM2' : 'RSA',
+      validityDays: 1825,
+    });
     setIntModal(true);
+  };
+
+  const handleRootSelectionChange = (certificateId: string) => {
+    const candidate = rootCandidates.find((cert) => cert.id === certificateId);
+    if (candidate?.algorithm === 'RSA' || candidate?.algorithm === 'SM2') {
+      intForm.setFieldValue('algorithm', candidate.algorithm);
+    }
   };
 
   const openSignCsrModal = () => {
@@ -214,6 +226,7 @@ const CertificateAuthorities: React.FC = () => {
         issuing={issuing}
         open={intModal}
         rootCandidates={rootCandidates}
+        onRootChange={handleRootSelectionChange}
         onCancel={() => setIntModal(false)}
         onFinish={handleCreateIntermediate}
       />

@@ -8,6 +8,8 @@ import jakarta.persistence.Version;
 import lombok.Data;
 
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
 
 @Data
 @Entity
@@ -30,17 +32,29 @@ public class DlpPolicyEntity {
     @Column(name = "direction", length = 16)
     private String direction;
 
-    @Column(name = "sender_domains", columnDefinition = "TEXT")
-    private String senderDomains;
+    @jakarta.persistence.ElementCollection(fetch = jakarta.persistence.FetchType.EAGER)
+    @jakarta.persistence.CollectionTable(name = "dlp_policy_sender_domain", joinColumns = @jakarta.persistence.JoinColumn(name = "policy_id"))
+    @jakarta.persistence.OrderColumn(name = "position")
+    @Column(name = "domain_name", nullable = false, length = 254)
+    private List<String> senderDomains = new ArrayList<>();
 
-    @Column(name = "recipient_domains", columnDefinition = "TEXT")
-    private String recipientDomains;
+    @jakarta.persistence.ElementCollection(fetch = jakarta.persistence.FetchType.EAGER)
+    @jakarta.persistence.CollectionTable(name = "dlp_policy_recipient_domain", joinColumns = @jakarta.persistence.JoinColumn(name = "policy_id"))
+    @jakarta.persistence.OrderColumn(name = "position")
+    @Column(name = "domain_name", nullable = false, length = 254)
+    private List<String> recipientDomains = new ArrayList<>();
 
-    @Column(name = "sender_address_patterns", columnDefinition = "TEXT")
-    private String senderAddressPatterns;
+    @jakarta.persistence.ElementCollection(fetch = jakarta.persistence.FetchType.EAGER)
+    @jakarta.persistence.CollectionTable(name = "dlp_policy_sender_address_pattern", joinColumns = @jakarta.persistence.JoinColumn(name = "policy_id"))
+    @jakarta.persistence.OrderColumn(name = "position")
+    @Column(name = "address_pattern", nullable = false, length = 512)
+    private List<String> senderAddressPatterns = new ArrayList<>();
 
-    @Column(name = "recipient_address_patterns", columnDefinition = "TEXT")
-    private String recipientAddressPatterns;
+    @jakarta.persistence.ElementCollection(fetch = jakarta.persistence.FetchType.EAGER)
+    @jakarta.persistence.CollectionTable(name = "dlp_policy_recipient_address_pattern", joinColumns = @jakarta.persistence.JoinColumn(name = "policy_id"))
+    @jakarta.persistence.OrderColumn(name = "position")
+    @Column(name = "address_pattern", nullable = false, length = 512)
+    private List<String> recipientAddressPatterns = new ArrayList<>();
 
     @Column(name = "attachment_required", nullable = false)
     private boolean attachmentRequired;

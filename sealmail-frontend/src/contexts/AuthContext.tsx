@@ -14,6 +14,17 @@ const clearStoredAuth = () => {
   localStorage.removeItem('user');
 };
 
+const normalizeUser = (user: UserContext): UserContext => ({
+  ...user,
+  role: user.roles?.[0] || user.role || 'USER',
+});
+
+const storeUser = (user: UserContext) => {
+  const userData = normalizeUser(user);
+  localStorage.setItem('user', JSON.stringify(userData));
+  return userData;
+};
+
 export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const sessionExpiredNotified = useRef(false);
   const [user, setUser] = useState<UserContext | null>(() => {
@@ -50,10 +61,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     try {
       const response = await authApi.login({ username, password });
       const { accessToken, user } = response.data.data;
-      const userData: UserContext = {
-        ...user,
-        role: user.roles?.[0] || 'USER',
-      };
+      const userData = normalizeUser(user);
 
       localStorage.setItem('accessToken', accessToken);
       localStorage.setItem('user', JSON.stringify(userData));
@@ -78,6 +86,13 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     message.info('已退出登录');
   };
 
+  const refreshUser = async () => {
+    const response = await authApi.me();
+    const userData = storeUser(response.data.data);
+    setUser(userData);
+    return userData;
+  };
+
   return (
     <AuthContext.Provider
       value={{
@@ -86,6 +101,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         loading,
         login,
         logout,
+        refreshUser,
       }}
     >
       {children}

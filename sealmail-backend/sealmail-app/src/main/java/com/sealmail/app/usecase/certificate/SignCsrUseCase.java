@@ -29,7 +29,9 @@ public class SignCsrUseCase {
     private final PermissionChecker permissionChecker;
     private final CertificateCryptoPort certificateCryptoPort;
     private final CertificateMaterialAssembler certificateMaterialAssembler;
+    private final CertificatePrivateKeyMaterialService privateKeyMaterialService;
     private final CertificateChainService certificateChainService;
+    private final CertificateAlgorithmPolicy certificateAlgorithmPolicy;
     private final String crlBaseUrl;
 
     public SignCsrUseCase(CertificateRepository certificateRepository,
@@ -37,7 +39,9 @@ public class SignCsrUseCase {
                           PermissionChecker permissionChecker,
                           CertificateCryptoPort certificateCryptoPort,
                           CertificateMaterialAssembler certificateMaterialAssembler,
+                          CertificatePrivateKeyMaterialService privateKeyMaterialService,
                           CertificateChainService certificateChainService,
+                          CertificateAlgorithmPolicy certificateAlgorithmPolicy,
                           @Value("${sealmail.ca.crl-base-url:http://localhost:8080/api/v1/crl/}")
                           String crlBaseUrl) {
         this.certificateRepository = certificateRepository;
@@ -45,7 +49,9 @@ public class SignCsrUseCase {
         this.permissionChecker = permissionChecker;
         this.certificateCryptoPort = certificateCryptoPort;
         this.certificateMaterialAssembler = certificateMaterialAssembler;
+        this.privateKeyMaterialService = privateKeyMaterialService;
         this.certificateChainService = certificateChainService;
+        this.certificateAlgorithmPolicy = certificateAlgorithmPolicy;
         this.crlBaseUrl = crlBaseUrl;
     }
 
@@ -67,6 +73,11 @@ public class SignCsrUseCase {
 
         try {
             CertificateCryptoPort.CsrInfo csr = certificateCryptoPort.validateCsr(request.getCsrPem());
+            certificateAlgorithmPolicy.requireSameAlgorithm(
+                    "Intermediate CA",
+                    caCert.getAlgorithm(),
+                    "CSR",
+                    csr.algorithm());
             EmailAddress owner = csr.ownerEmail() == null ? null : new EmailAddress(csr.ownerEmail());
             if (owner == null) {
                 throw BusinessException.badRequest("CSR 的 Subject 中未找到 emailAddress 或可识别的邮箱");
@@ -79,7 +90,7 @@ public class SignCsrUseCase {
                     new CertificateCryptoPort.SignCsrCommand(
                             request.getCsrPem(),
                             caCert.getPemContent(),
-                            caCert.getPrivateKeyData(),
+                            privateKeyMaterialService.resolve(caCert, "所选 CA 证书没有关联私钥，无法签发"),
                             validity,
                             crlUrl));
 

@@ -105,7 +105,7 @@ class ManageCertificateBindingUseCaseTest {
                 "ski");
         certificate.setAlgorithm("RSA");
         if (privateKey) {
-            certificate.setPrivateKeyData("private-key");
+            certificate.setPrivateKeySecretRef("test-secret:" + certificate.getId().getThumbprint());
         }
         return certificate;
     }

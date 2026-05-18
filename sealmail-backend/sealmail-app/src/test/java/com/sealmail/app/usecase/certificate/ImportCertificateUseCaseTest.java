@@ -12,6 +12,7 @@ import com.sealmail.domain.certificate.CertificateRepository;
 import com.sealmail.domain.certificate.KeyUsage;
 import com.sealmail.domain.certificate.ValidityPeriod;
 import com.sealmail.domain.certificate.spi.CertificateCryptoPort;
+import com.sealmail.domain.certificate.spi.CertificatePrivateKeyStore;
 import com.sealmail.domain.certificate.spi.CertificateValidator;
 import com.sealmail.domain.shared.model.EmailAddress;
 import org.junit.jupiter.api.BeforeEach;
@@ -44,7 +45,8 @@ class ImportCertificateUseCaseTest {
                 new CertificateDtoMapper(chainService),
                 new PermissionChecker(),
                 cryptoPort,
-                new CertificateMaterialAssembler()
+                new CertificateMaterialAssembler(),
+                new CertificatePrivateKeyMaterialService(new FakeCertificatePrivateKeyStore())
         );
     }
 
@@ -74,6 +76,8 @@ class ImportCertificateUseCaseTest {
 
         Certificate stored = repository.findById(new CertificateId(response.getId())).orElseThrow();
         assertTrue(stored.isCA());
+        assertTrue(stored.hasPrivateKey());
+        assertEquals("test-secret:ca-id", stored.getPrivateKeySecretRef());
         assertEquals(1, stored.getPathLenConstraint());
         assertEquals("http://localhost:8080/api/v1/crl/imported-root", stored.getCrlDistributionPointUrl());
     }
@@ -226,6 +230,18 @@ class ImportCertificateUseCaseTest {
         @Override
         public CrlContent generateCrl(GenerateCrlCommand command) {
             throw new UnsupportedOperationException();
+        }
+    }
+
+    private static final class FakeCertificatePrivateKeyStore implements CertificatePrivateKeyStore {
+        @Override
+        public String store(String ownerEmail, String certificateThumbprint, String certificatePem, String privateKeyPem) {
+            return "test-secret:" + certificateThumbprint;
+        }
+
+        @Override
+        public Optional<String> resolve(String privateKeyRef) {
+            return Optional.of("resolved-private-key");
         }
     }
 

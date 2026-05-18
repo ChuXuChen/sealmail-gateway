@@ -2,11 +2,7 @@ package com.sealmail.infra.persistence.entity;
 
 import jakarta.persistence.*;
 import lombok.Data;
-import org.hibernate.annotations.JdbcTypeCode;
-import org.hibernate.type.SqlTypes;
-
 import java.time.Instant;
-import java.util.Set;
 
 @Data
 @Entity
@@ -47,8 +43,8 @@ public class CertificateEntity {
     @Column(name = "subject_key_id", length = 128)
     private String subjectKeyIdentifier;
 
-    @Column(name = "private_key_data", columnDefinition = "TEXT")
-    private String privateKeyData;
+    @Column(name = "private_key_secret_ref", length = 1024)
+    private String privateKeySecretRef;
 
     @Column(name = "has_private_key", nullable = false)
     private boolean hasPrivateKey;

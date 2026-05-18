@@ -30,6 +30,7 @@ public class ImportCertificateUseCase {
     private final PermissionChecker permissionChecker;
     private final CertificateCryptoPort certificateCryptoPort;
     private final CertificateMaterialAssembler certificateMaterialAssembler;
+    private final CertificatePrivateKeyMaterialService privateKeyMaterialService;
 
     @Transactional
     public CertificateResponse execute(ImportCertificateRequest request, UserContext user) {
@@ -74,7 +75,7 @@ public class ImportCertificateUseCase {
             }
             if (request.getPrivateKeyData() != null && !request.getPrivateKeyData().isBlank()) {
                 certificateCryptoPort.validateCertificateMatchesPrivateKey(request.getPemData(), request.getPrivateKeyData());
-                cert.setPrivateKeyData(request.getPrivateKeyData());
+                privateKeyMaterialService.store(cert, request.getPrivateKeyData());
             }
 
             certificateRepository.save(cert);

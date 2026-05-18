@@ -10,11 +10,11 @@ import com.sealmail.infra.persistence.entity.QuarantinedMailEntity;
 import org.junit.jupiter.api.Test;
 
 import java.time.Instant;
-import java.util.Base64;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 
 class QuarantinedMailMapperTest {
 
@@ -41,9 +41,8 @@ class QuarantinedMailMapperTest {
         entity.setResolvedAt(resolvedAt);
         entity.setProcessedBy("admin");
         entity.setProcessComment("ok");
-        entity.setRawContent(Base64.getEncoder().encodeToString(rawContent));
 
-        QuarantinedMail mail = mapper.toDomain(entity);
+        QuarantinedMail mail = mapper.toDomain(entity, rawContent);
 
         assertEquals(QuarantineStatus.RELEASED, mail.getStatus());
         assertEquals(MailDirection.OUTBOUND, mail.getDirection());
@@ -55,7 +54,7 @@ class QuarantinedMailMapperTest {
     }
 
     @Test
-    void toEntitySerializesRawContent() {
+    void toEntityDoesNotStoreRawContentInline() {
         byte[] rawContent = "raw-mail".getBytes();
         QuarantinedMail mail = QuarantinedMail.create(
                 "q-1",
@@ -71,7 +70,7 @@ class QuarantinedMailMapperTest {
 
         QuarantinedMailEntity entity = mapper.toEntity(mail);
 
-        assertEquals(Base64.getEncoder().encodeToString(rawContent), entity.getRawContent());
+        assertNull(entity.getRawContentId());
         assertEquals(null, entity.getDirection());
     }
 }

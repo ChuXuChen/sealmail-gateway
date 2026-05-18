@@ -1,10 +1,12 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
+  Button,
   Input,
   Segmented,
   Select,
   message,
 } from 'antd';
+import { ReloadOutlined } from '@ant-design/icons';
 import { AuditLog } from '../types';
 import { auditLogApi } from '../api/client';
 import { getApiErrorMessage } from '../api/errors';
@@ -188,6 +190,11 @@ const AuditLogs: React.FC = () => {
       <PageHeader
         title="审计日志"
         description="按事件范围、结果和具体行为快速定位系统操作记录。"
+        actions={(
+          <Button icon={<ReloadOutlined />} loading={loading} onClick={loadData}>
+            刷新
+          </Button>
+        )}
       />
 
       <FilterBar

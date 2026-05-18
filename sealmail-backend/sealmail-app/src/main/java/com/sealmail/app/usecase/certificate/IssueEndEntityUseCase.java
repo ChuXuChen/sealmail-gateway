@@ -40,7 +40,9 @@ public class IssueEndEntityUseCase {
     private final PermissionChecker permissionChecker;
     private final CertificateCryptoPort certificateCryptoPort;
     private final CertificateMaterialAssembler certificateMaterialAssembler;
+    private final CertificatePrivateKeyMaterialService privateKeyMaterialService;
     private final CertificateChainService certificateChainService;
+    private final CertificateAlgorithmPolicy certificateAlgorithmPolicy;
     private final String crlBaseUrl;
     private final int defaultEndEntityValidityDays;
 
@@ -49,7 +51,9 @@ public class IssueEndEntityUseCase {
                                  PermissionChecker permissionChecker,
                                  CertificateCryptoPort certificateCryptoPort,
                                  CertificateMaterialAssembler certificateMaterialAssembler,
+                                 CertificatePrivateKeyMaterialService privateKeyMaterialService,
                                  CertificateChainService certificateChainService,
+                                 CertificateAlgorithmPolicy certificateAlgorithmPolicy,
                                  @Value("${sealmail.ca.crl-base-url:http://localhost:8080/api/v1/crl/}")
                                  String crlBaseUrl,
                                  @Value("${sealmail.ca.default-end-entity-validity-days:365}")
@@ -59,7 +63,9 @@ public class IssueEndEntityUseCase {
         this.permissionChecker = permissionChecker;
         this.certificateCryptoPort = certificateCryptoPort;
         this.certificateMaterialAssembler = certificateMaterialAssembler;
+        this.privateKeyMaterialService = privateKeyMaterialService;
         this.certificateChainService = certificateChainService;
+        this.certificateAlgorithmPolicy = certificateAlgorithmPolicy;
         this.crlBaseUrl = crlBaseUrl;
         this.defaultEndEntityValidityDays = defaultEndEntityValidityDays;
     }
@@ -71,6 +77,11 @@ public class IssueEndEntityUseCase {
         Certificate intermediateCa = certificateRepository.findById(new CertificateId(request.getIntermediateCaId()))
                 .orElseThrow(() -> new ResourceNotFoundException("Certificate", request.getIntermediateCaId()));
         validateIntermediate(intermediateCa);
+        certificateAlgorithmPolicy.requireSameAlgorithm(
+                "Intermediate CA",
+                intermediateCa.getAlgorithm(),
+                "终端证书",
+                request.getAlgorithm());
 
         try {
             String subjectDn = request.getSubjectDn();
@@ -86,7 +97,7 @@ public class IssueEndEntityUseCase {
                             subjectDn,
                             request.getAlgorithm(),
                             intermediateCa.getPemContent(),
-                            intermediateCa.getPrivateKeyData(),
+                            privateKeyMaterialService.resolve(intermediateCa, "Intermediate CA 没有关联私钥，无法签发"),
                             validity,
                             false,
                             0,
@@ -100,7 +111,7 @@ public class IssueEndEntityUseCase {
             }
 
             Certificate cert = certificateMaterialAssembler.issued(material.certificate(), owner);
-            cert.setPrivateKeyData(material.privateKeyPem());
+            privateKeyMaterialService.store(cert, material.privateKeyPem());
             cert.setIssuerCertId(intermediateCa.getId().getThumbprint());
             cert.setCrlDistributionPointUrl(crlUrl);
             if (request.getAlias() != null && !request.getAlias().isBlank()) {

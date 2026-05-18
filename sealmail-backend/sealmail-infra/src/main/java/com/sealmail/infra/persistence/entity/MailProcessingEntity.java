@@ -4,6 +4,8 @@ import jakarta.persistence.*;
 import lombok.Data;
 
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
 
 @Data
 @Entity
@@ -23,8 +25,11 @@ public class MailProcessingEntity {
     @Column(name = "sender_email", nullable = false, length = 254)
     private String senderEmail;
 
-    @Column(name = "recipients", nullable = false, length = 2048)
-    private String recipients;
+    @ElementCollection(fetch = FetchType.EAGER)
+    @CollectionTable(name = "mail_processing_recipient", joinColumns = @JoinColumn(name = "mail_processing_id"))
+    @OrderColumn(name = "position")
+    @Column(name = "recipient_email", nullable = false, length = 254)
+    private List<String> recipients = new ArrayList<>();
 
     @Column(name = "remote_host", length = 254)
     private String remoteHost;

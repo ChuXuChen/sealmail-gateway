@@ -2,6 +2,7 @@ package com.sealmail.infra.mail.pipeline.step;
 
 import com.sealmail.domain.audit.AuditLogType;
 import com.sealmail.domain.certificate.CertificateRepository;
+import com.sealmail.domain.certificate.spi.CertificatePrivateKeyStore;
 import com.sealmail.domain.certificate.spi.SMIMEOperations;
 import com.sealmail.domain.mailsecurity.CryptoProfile;
 import com.sealmail.domain.mailsecurity.MailEnvelope;
@@ -30,15 +31,18 @@ public class SignStep {
     private final SMIMEOperations smimeOperations;
     private final KeyStoreService keyStoreService;
     private final CertificateRepository certificateRepository;
+    private final CertificatePrivateKeyStore privateKeyStore;
     private final DomainEventPublisher domainEventPublisher;
 
     public SignStep(SMIMEOperations smimeOperations,
                     KeyStoreService keyStoreService,
                     CertificateRepository certificateRepository,
+                    CertificatePrivateKeyStore privateKeyStore,
                     DomainEventPublisher domainEventPublisher) {
         this.smimeOperations = smimeOperations;
         this.keyStoreService = keyStoreService;
         this.certificateRepository = certificateRepository;
+        this.privateKeyStore = privateKeyStore;
         this.domainEventPublisher = domainEventPublisher;
     }
 
@@ -76,7 +80,7 @@ public class SignStep {
                     var certOpt = certificateRepository.findById(
                             new com.sealmail.domain.certificate.CertificateId(thumbprint));
                     if (certOpt.isPresent() && certOpt.get().hasPrivateKey()) {
-                        privateKey = certOpt.get().getPrivateKeyData();
+                        privateKey = privateKeyStore.resolve(certOpt.get().getPrivateKeySecretRef()).orElse(null);
                         log.info("使用证书关联私钥进行签名: thumbprint={}", thumbprint);
                     }
                 }
