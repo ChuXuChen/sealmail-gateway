@@ -8,7 +8,8 @@ import {
   StopOutlined,
   WarningOutlined,
 } from '@ant-design/icons';
-import CryptoCapabilityTags, { cryptoCapabilityIcon } from '../settings/CryptoCapabilityTags';
+import CryptoCapabilityTags from '../settings/CryptoCapabilityTags';
+import { cryptoCapabilityIcon } from '../settings/cryptoCapabilityPresentation';
 import type { DashboardViewModel } from './dashboardModel';
 import type { SystemSettings } from '../../types';
 
