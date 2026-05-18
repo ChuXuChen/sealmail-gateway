@@ -4,7 +4,7 @@ import { domainConfigApi } from '../../api/client';
 import { getApiErrorMessage } from '../../api/errors';
 import type { DomainConfig } from '../../types';
 import type { DomainConfigFormValues } from './domainConfigUtils';
-import { normalizeDeliveryHost, normalizeDomain } from './domainConfigUtils';
+import { deliveryProfilePort, normalizeDeliveryHost, normalizeDomain } from './domainConfigUtils';
 
 export const useDomainConfigs = () => {
   const [data, setData] = useState<DomainConfig[]>([]);
@@ -34,6 +34,9 @@ export const useDomainConfigs = () => {
         dkimEnabled: values.dkimEnabled || false,
         deliveryHost,
         deliveryTransportProfile: deliveryHost ? values.deliveryTransportProfile || 'SMTP_CLEAR' : undefined,
+        deliveryPort: deliveryHost
+          ? values.deliveryPort ?? deliveryProfilePort(values.deliveryTransportProfile)
+          : undefined,
         decryptionMode: values.decryptionMode || 'GATEWAY_TERMINATED',
         active: values.active ?? true,
       });
@@ -59,6 +62,9 @@ export const useDomainConfigs = () => {
         dkimEnabled: values.dkimEnabled,
         deliveryHost: deliveryHost || '',
         deliveryTransportProfile: deliveryHost ? values.deliveryTransportProfile || 'SMTP_CLEAR' : 'SMTP_CLEAR',
+        deliveryPort: deliveryHost
+          ? values.deliveryPort ?? deliveryProfilePort(values.deliveryTransportProfile)
+          : undefined,
         decryptionMode: values.decryptionMode,
         active: values.active,
       });

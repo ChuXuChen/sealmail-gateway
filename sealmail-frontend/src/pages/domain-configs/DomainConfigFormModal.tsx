@@ -1,5 +1,5 @@
 import React from 'react';
-import { Button, Form, Input, Modal, Select, Space, Switch, Tag } from 'antd';
+import { Button, Form, Input, InputNumber, Modal, Select, Space, Switch, Tag } from 'antd';
 import type { FormInstance } from 'antd';
 import type { DomainConfigFormValues } from './domainConfigUtils';
 import { deliveryProfilePort, deliveryTransportProfiles, domainPattern } from './domainConfigUtils';
@@ -39,8 +39,10 @@ const DomainConfigFormModal: React.FC<DomainConfigFormModalProps> = ({
   const isCreate = mode === 'create';
   const localDomain = Form.useWatch('localDomain', form);
   const deliveryTransportProfile = Form.useWatch('deliveryTransportProfile', form);
+  const deliveryPort = Form.useWatch('deliveryPort', form);
   const deliveryRouteDisabled = Boolean(localDomain);
-  const resolvedPort = deliveryProfilePort(deliveryTransportProfile);
+  const defaultPort = deliveryProfilePort(deliveryTransportProfile);
+  const resolvedPort = deliveryPort ?? defaultPort;
 
   return (
     <Modal
@@ -68,7 +70,7 @@ const DomainConfigFormModal: React.FC<DomainConfigFormModalProps> = ({
                 onChange={(checked) => {
                   form.setFieldValue('encryptionPolicy', checked ? 'MANDATORY' : 'ALLOW');
                   if (checked) {
-                    form.setFieldsValue({ deliveryHost: undefined });
+                    form.setFieldsValue({ deliveryHost: undefined, deliveryPort: undefined });
                   }
                 }}
               />
@@ -135,14 +137,45 @@ const DomainConfigFormModal: React.FC<DomainConfigFormModalProps> = ({
               disabled={deliveryRouteDisabled}
               placeholder="请选择传输配置"
               style={{ width: 240 }}
+              onChange={(profile) => {
+                form.setFieldValue('deliveryPort', deliveryProfilePort(profile));
+              }}
               options={deliveryTransportProfiles.map((profile) => ({
                 value: profile.value,
-                label: `${profile.label} (${profile.port})`,
+                label: `${profile.label} (默认 ${profile.port})`,
               }))}
             />
           </Form.Item>
-          <Form.Item label="解析端口">
-            <Tag color={deliveryRouteDisabled ? 'default' : 'processing'}>{deliveryRouteDisabled ? '-' : resolvedPort}</Tag>
+          <Form.Item
+            name="deliveryPort"
+            label="端口"
+            extra="端口可按对端网关调整；传输配置决定是否明文、STARTTLS 或隐式 TLS。"
+            rules={[
+              ({ getFieldValue }) => ({
+                validator: (_, value) => {
+                  const host = getFieldValue('deliveryHost');
+                  if (!host || value === undefined || value === null) {
+                    return Promise.resolve();
+                  }
+                  return value >= 1 && value <= 65535
+                    ? Promise.resolve()
+                    : Promise.reject(new Error('端口必须在 1 到 65535 之间'));
+                },
+              }),
+            ]}
+          >
+            <InputNumber
+              disabled={deliveryRouteDisabled}
+              min={1}
+              max={65535}
+              placeholder={`${defaultPort}`}
+              style={{ width: 120 }}
+            />
+          </Form.Item>
+          <Form.Item label="实际端口">
+            <Tag color={deliveryRouteDisabled ? 'default' : 'processing'}>
+              {deliveryRouteDisabled ? '-' : resolvedPort}
+            </Tag>
           </Form.Item>
         </Space>
         <Form.Item name="active" label="启用配置" valuePropName="checked">

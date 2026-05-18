@@ -70,11 +70,14 @@ public class UpdateDomainConfigUseCase {
         if (request.getDeliveryHost() != null
                 || request.getDeliveryTransportProfile() != null
                 || request.getDeliveryPort() != null) {
+            Integer deliveryPort = request.getDeliveryPort() != null
+                    ? request.getDeliveryPort()
+                    : config.getDeliveryPort();
             configureDeliveryRoute(
                     config,
                     request.getDeliveryHost() != null ? request.getDeliveryHost() : config.getDeliveryHost(),
                     request.getDeliveryTransportProfile(),
-                    request.getDeliveryPort());
+                    deliveryPort);
         }
 
         if (request.getDecryptionMode() != null) {
@@ -103,14 +106,12 @@ public class UpdateDomainConfigUseCase {
     private void configureDeliveryRoute(DomainConfig config,
                                         String deliveryHost,
                                         String deliveryTransportProfile,
-                                        Integer legacyDeliveryPort) {
+                                        Integer deliveryPort) {
         try {
             DeliveryTransportProfile profile = deliveryTransportProfile != null
                     ? parseEnum(DeliveryTransportProfile.class, deliveryTransportProfile, "不支持的投递传输配置: ")
-                    : (legacyDeliveryPort != null
-                    ? DeliveryTransportProfile.fromLegacyPort(legacyDeliveryPort)
-                    : config.getDeliveryTransportProfile());
-            config.configureDeliveryRoute(deliveryHost, profile);
+                    : config.getDeliveryTransportProfile();
+            config.configureDeliveryRoute(deliveryHost, profile, deliveryPort);
         } catch (IllegalArgumentException e) {
             throw BusinessException.badRequest(e.getMessage());
         }

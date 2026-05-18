@@ -9,6 +9,7 @@ export interface DomainConfigFormValues {
   dkimEnabled?: boolean;
   deliveryHost?: string;
   deliveryTransportProfile?: DeliveryTransportProfile;
+  deliveryPort?: number;
   decryptionMode?: 'GATEWAY_TERMINATED' | 'END_TO_END_PASSTHROUGH';
   active?: boolean;
 }

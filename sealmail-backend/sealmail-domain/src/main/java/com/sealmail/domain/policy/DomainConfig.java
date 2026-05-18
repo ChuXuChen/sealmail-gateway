@@ -19,6 +19,7 @@ public class DomainConfig extends AggregateRoot<String> {
     private boolean dkimEnabled;
     private String deliveryHost;
     private DeliveryTransportProfile deliveryTransportProfile;
+    private Integer deliveryPort;
     private DecryptionMode decryptionMode;
     private boolean active;
 
@@ -131,20 +132,32 @@ public class DomainConfig extends AggregateRoot<String> {
     }
 
     public void configureDeliveryRoute(String host, DeliveryTransportProfile transportProfile) {
+        configureDeliveryRoute(host, transportProfile, null);
+    }
+
+    public void configureDeliveryRoute(String host,
+                                       DeliveryTransportProfile transportProfile,
+                                       Integer deliveryPort) {
         String normalizedHost = normalizeDeliveryHost(host);
         if (normalizedHost == null) {
             this.deliveryHost = null;
             this.deliveryTransportProfile = DeliveryTransportProfile.SMTP_CLEAR;
+            this.deliveryPort = null;
             return;
         }
-        this.deliveryHost = normalizedHost;
-        this.deliveryTransportProfile = transportProfile != null
+        DeliveryTransportProfile resolvedProfile = transportProfile != null
                 ? transportProfile
                 : DeliveryTransportProfile.SMTP_CLEAR;
+        this.deliveryHost = normalizedHost;
+        this.deliveryTransportProfile = resolvedProfile;
+        this.deliveryPort = deliveryPort != null
+                ? requireValidDeliveryPort(deliveryPort)
+                : resolvedProfile.defaultPort();
     }
 
     public void configureDeliveryRoute(String host, Integer legacyPort) {
-        configureDeliveryRoute(host, DeliveryTransportProfile.fromLegacyPort(legacyPort));
+        DeliveryTransportProfile profile = DeliveryTransportProfile.fromLegacyPort(legacyPort);
+        configureDeliveryRoute(host, profile, legacyPort != null ? legacyPort : profile.defaultPort());
     }
 
     public void changeDecryptionMode(DecryptionMode decryptionMode) {
@@ -155,7 +168,10 @@ public class DomainConfig extends AggregateRoot<String> {
     }
 
     public boolean hasDeliveryRoute() {
-        return deliveryHost != null && !deliveryHost.isBlank() && deliveryTransportProfile != null;
+        return deliveryHost != null
+                && !deliveryHost.isBlank()
+                && deliveryTransportProfile != null
+                && deliveryPort != null;
     }
 
     public String getDeliveryHost() {
@@ -163,7 +179,7 @@ public class DomainConfig extends AggregateRoot<String> {
     }
 
     public Integer getDeliveryPort() {
-        return hasDeliveryRoute() ? deliveryTransportProfile.defaultPort() : null;
+        return hasDeliveryRoute() ? deliveryPort : null;
     }
 
     public DeliveryTransportProfile getDeliveryTransportProfile() {
@@ -190,5 +206,12 @@ public class DomainConfig extends AggregateRoot<String> {
             throw new IllegalArgumentException("外部投递主机不能包含空白字符");
         }
         return normalizedHost;
+    }
+
+    private Integer requireValidDeliveryPort(Integer port) {
+        if (port == null || port < 1 || port > 65535) {
+            throw new IllegalArgumentException("外部投递端口必须在 1 到 65535 之间");
+        }
+        return port;
     }
 }

@@ -94,12 +94,12 @@ public class CreateDomainConfigUseCase {
     private void configureDeliveryRoute(DomainConfig config,
                                         String deliveryHost,
                                         String deliveryTransportProfile,
-                                        Integer legacyDeliveryPort) {
+                                        Integer deliveryPort) {
         try {
             DeliveryTransportProfile profile = deliveryTransportProfile != null
                     ? parseEnum(DeliveryTransportProfile.class, deliveryTransportProfile, "不支持的投递传输配置: ")
-                    : DeliveryTransportProfile.fromLegacyPort(legacyDeliveryPort);
-            config.configureDeliveryRoute(deliveryHost, profile);
+                    : DeliveryTransportProfile.fromLegacyPort(deliveryPort);
+            config.configureDeliveryRoute(deliveryHost, profile, deliveryPort);
         } catch (IllegalArgumentException e) {
             throw BusinessException.badRequest(e.getMessage());
         }

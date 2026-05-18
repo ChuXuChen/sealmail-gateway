@@ -39,6 +39,7 @@ const DomainConfigs: React.FC = () => {
       dkimEnabled: false,
       deliveryHost: undefined,
       deliveryTransportProfile: 'SMTP_CLEAR',
+      deliveryPort: 25,
       decryptionMode: 'GATEWAY_TERMINATED',
       active: true,
     });
@@ -55,6 +56,7 @@ const DomainConfigs: React.FC = () => {
       localDomain: domain.localDomain,
       deliveryHost: domain.deliveryHost,
       deliveryTransportProfile: domain.deliveryTransportProfile || 'SMTP_CLEAR',
+      deliveryPort: domain.deliveryPort,
       decryptionMode: domain.decryptionMode || 'GATEWAY_TERMINATED',
       active: domain.active,
     });

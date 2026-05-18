@@ -67,6 +67,46 @@ class CreateDomainConfigUseCaseTest {
         assertEquals("NO_ENCRYPTION", response.getEncryptionPolicy());
     }
 
+    @Test
+    void deliveryTransportProfileDoesNotForceDefaultPort() {
+        DomainConfigRepository repository = mock(DomainConfigRepository.class);
+        when(repository.existsByDomain("partner.example")).thenReturn(false);
+        when(repository.save(any(DomainConfig.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        CreateDomainConfigUseCase useCase = new CreateDomainConfigUseCase(repository, new DomainDtoMapper());
+
+        CreateDomainConfigRequest request = new CreateDomainConfigRequest();
+        request.setDomain("partner.example");
+        request.setLocalDomain(false);
+        request.setDeliveryHost("smtp.partner.example");
+        request.setDeliveryTransportProfile("SMTP_CLEAR");
+        request.setDeliveryPort(587);
+
+        var response = useCase.execute(request, admin());
+
+        assertEquals("SMTP_CLEAR", response.getDeliveryTransportProfile());
+        assertEquals(587, response.getDeliveryPort());
+    }
+
+    @Test
+    void startTlsProfileCanUsePort25() {
+        DomainConfigRepository repository = mock(DomainConfigRepository.class);
+        when(repository.existsByDomain("partner.example")).thenReturn(false);
+        when(repository.save(any(DomainConfig.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        CreateDomainConfigUseCase useCase = new CreateDomainConfigUseCase(repository, new DomainDtoMapper());
+
+        CreateDomainConfigRequest request = new CreateDomainConfigRequest();
+        request.setDomain("partner.example");
+        request.setLocalDomain(false);
+        request.setDeliveryHost("smtp.partner.example");
+        request.setDeliveryTransportProfile("SMTP_STARTTLS_STANDARD");
+        request.setDeliveryPort(25);
+
+        var response = useCase.execute(request, admin());
+
+        assertEquals("SMTP_STARTTLS_STANDARD", response.getDeliveryTransportProfile());
+        assertEquals(25, response.getDeliveryPort());
+    }
+
     private static UserContext admin() {
         return UserContext.builder()
                 .userId("admin")

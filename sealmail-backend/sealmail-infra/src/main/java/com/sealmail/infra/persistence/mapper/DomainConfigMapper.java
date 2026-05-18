@@ -56,7 +56,7 @@ public class DomainConfigMapper {
         DeliveryTransportProfile profile = entity.getDeliveryTransportProfile() != null
                 ? DeliveryTransportProfile.valueOf(entity.getDeliveryTransportProfile())
                 : DeliveryTransportProfile.fromLegacyPort(entity.getDeliveryPort());
-        config.configureDeliveryRoute(entity.getDeliveryHost(), profile);
+        config.configureDeliveryRoute(entity.getDeliveryHost(), profile, entity.getDeliveryPort());
         if (entity.getDecryptionMode() != null) {
             config.changeDecryptionMode(DecryptionMode.valueOf(entity.getDecryptionMode()));
         }

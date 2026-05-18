@@ -170,7 +170,7 @@ public class MailTestUseCase {
 	            DeliveryTransportProfile profile = DeliveryTransportProfile.fromLegacyPort(relay.port());
 	            appendProbeResult(result, "direct-relay", new SmtpRelayProbe.SmtpConnectionSettings(
 	                    relay.host(),
-	                    profile.defaultPort(),
+	                    relay.port(),
 	                    relay.username(),
 	                    relay.password(),
 	                    relay.timeoutMs(),

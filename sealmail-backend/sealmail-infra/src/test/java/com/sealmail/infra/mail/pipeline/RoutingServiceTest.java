@@ -27,6 +27,7 @@ import com.sealmail.domain.mailsecurity.MailProcessingRepository;
 import com.sealmail.domain.mailsecurity.MailRecordDisposition;
 import com.sealmail.domain.mailsecurity.MailRouter;
 import com.sealmail.domain.mailsecurity.RoutingDecision;
+import com.sealmail.domain.policy.DeliveryTransportProfile;
 import com.sealmail.domain.policy.DomainConfig;
 import com.sealmail.domain.policy.DomainConfigRepository;
 import com.sealmail.domain.quarantine.QuarantineReason;
@@ -227,7 +228,7 @@ class RoutingServiceTest {
         MailEnvelope envelope = envelope(sender, recipient);
         DomainConfig local = DomainConfig.create("domain-1", "example.com", true);
         DomainConfig remote = DomainConfig.create("domain-2", "partner.test", false);
-        remote.configureDeliveryRoute("192.0.2.20", 2525);
+        remote.configureDeliveryRoute("192.0.2.20", DeliveryTransportProfile.SMTP_CLEAR, 587);
 
         when(domainConfigRepository.findByDomain("example.com")).thenReturn(Optional.of(local));
         when(domainConfigRepository.findByDomain("partner.test")).thenReturn(Optional.of(remote));
@@ -241,7 +242,8 @@ class RoutingServiceTest {
 
         MailProcessingContext context = (MailProcessingContext) routed.getHeaders().get(MailProcessingHeaders.CONTEXT);
         assertEquals("192.0.2.20", context.relayProfile().host());
-        assertEquals(2525, context.relayProfile().port());
+        assertEquals(587, context.relayProfile().port());
+        assertEquals(DeliveryTransportProfile.SMTP_CLEAR, context.relayProfile().transportProfile());
         assertEquals("mailer@example.com", context.relayProfile().envelopeFrom());
     }
 
