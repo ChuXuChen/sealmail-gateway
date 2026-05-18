@@ -5,6 +5,7 @@ import com.sealmail.domain.certificate.CertificateId;
 import com.sealmail.domain.certificate.CertificateRepository;
 import com.sealmail.domain.certificate.KeyUsage;
 import com.sealmail.domain.certificate.ValidityPeriod;
+import com.sealmail.domain.config.RelayPolicyPort;
 import com.sealmail.domain.mailauth.DkimKeyRef;
 import com.sealmail.domain.mailauth.DkimSelector;
 import com.sealmail.domain.mailauth.DkimSigningPolicy;
@@ -69,7 +70,8 @@ class RoutingServiceTest {
                 mailProcessingRepository,
                 postfixProperties,
                 null,
-                null
+                null,
+                relayPolicy(true)
         );
 
         EmailAddress sender = new EmailAddress("alice@example.com");
@@ -127,7 +129,8 @@ class RoutingServiceTest {
                 mailProcessingRepository,
                 postfixProperties,
                 null,
-                null
+                null,
+                relayPolicy(true)
         );
 
         EmailAddress sender = new EmailAddress("sender@example.com");
@@ -175,7 +178,8 @@ class RoutingServiceTest {
                 mailProcessingRepository,
                 postfixProperties(),
                 null,
-                null
+                null,
+                relayPolicy(true)
         );
 
         EmailAddress sender = new EmailAddress("alice@example.com");
@@ -210,7 +214,8 @@ class RoutingServiceTest {
                 mailProcessingRepository,
                 postfixProperties(),
                 null,
-                null
+                null,
+                relayPolicy(true)
         );
 
         EmailAddress sender = new EmailAddress("alice@example.com");
@@ -249,7 +254,8 @@ class RoutingServiceTest {
                 mailProcessingRepository,
                 postfixProperties(),
                 mailAuthPolicies(Optional.of(dkimReadyPolicy())),
-                null
+                null,
+                relayPolicy(true)
         );
 
         EmailAddress sender = new EmailAddress("alice@example.com");
@@ -283,7 +289,8 @@ class RoutingServiceTest {
                 mailProcessingRepository,
                 postfixProperties(),
                 null,
-                null
+                null,
+                relayPolicy(true)
         );
 
         EmailAddress sender = new EmailAddress("alice@example.com");
@@ -325,7 +332,8 @@ class RoutingServiceTest {
                 mailProcessingRepository,
                 postfixProperties(),
                 null,
-                null
+                null,
+                relayPolicy(true)
         );
 
         EmailAddress sender = new EmailAddress("alice@example.com");
@@ -370,7 +378,8 @@ class RoutingServiceTest {
                 mailProcessingRepository,
                 postfixProperties(),
                 null,
-                null
+                null,
+                relayPolicy(true)
         );
 
         EmailAddress sender = new EmailAddress("alice@example.com");
@@ -395,6 +404,124 @@ class RoutingServiceTest {
     }
 
     @Test
+    void routeOutboundQuarantinesUnconfiguredExternalRecipientDomainByDefault() {
+        MailRouter mailRouter = mock(MailRouter.class);
+        DomainConfigRepository domainConfigRepository = mock(DomainConfigRepository.class);
+        CertificateRepository certificateRepository = mock(CertificateRepository.class);
+        MailProcessingRepository mailProcessingRepository = mock(MailProcessingRepository.class);
+        RoutingService routingService = new RoutingService(
+                mailRouter,
+                domainConfigRepository,
+                cryptoSelectionService(certificateRepository),
+                mailProcessingRepository,
+                postfixProperties(),
+                null,
+                null,
+                relayPolicy(false)
+        );
+
+        EmailAddress sender = new EmailAddress("alice@example.com");
+        EmailAddress recipient = new EmailAddress("bob@unknown.test");
+        MailEnvelope envelope = envelope(sender, recipient);
+        DomainConfig local = DomainConfig.create("domain-1", "example.com", true);
+
+        when(domainConfigRepository.findByDomain("example.com")).thenReturn(Optional.of(local));
+        when(domainConfigRepository.findByDomain("unknown.test")).thenReturn(Optional.empty());
+        when(mailProcessingRepository.save(any(MailProcessing.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        Message<byte[]> routed = routingService.routeOutbound(MessageBuilder.withPayload("hello".getBytes())
+                .setHeader(MailProcessingHeaders.CONTEXT, MailProcessingContext.create(envelope))
+                .build());
+
+        MailProcessingContext context = (MailProcessingContext) routed.getHeaders().get(MailProcessingHeaders.CONTEXT);
+        assertTrue(context.decision().requiresQuarantine());
+        assertEquals("DOMAIN_NOT_CONFIGURED", context.decision().quarantine().reason());
+        assertEquals("Recipient domain is not configured and enabled for outbound delivery: unknown.test",
+                context.decision().quarantine().detail());
+        verify(mailRouter, never()).route(any(), any(), any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void routeOutboundAllowsUnconfiguredExternalRecipientDomainWhenPolicyEnabled() {
+        MailRouter mailRouter = mock(MailRouter.class);
+        DomainConfigRepository domainConfigRepository = mock(DomainConfigRepository.class);
+        CertificateRepository certificateRepository = mock(CertificateRepository.class);
+        MailProcessingRepository mailProcessingRepository = mock(MailProcessingRepository.class);
+        RoutingService routingService = new RoutingService(
+                mailRouter,
+                domainConfigRepository,
+                cryptoSelectionService(certificateRepository),
+                mailProcessingRepository,
+                postfixProperties(),
+                null,
+                null,
+                relayPolicy(true)
+        );
+
+        EmailAddress sender = new EmailAddress("alice@example.com");
+        EmailAddress recipient = new EmailAddress("bob@unknown.test");
+        MailEnvelope envelope = envelope(sender, recipient);
+        DomainConfig local = DomainConfig.create("domain-1", "example.com", true);
+
+        when(domainConfigRepository.findByDomain("example.com")).thenReturn(Optional.of(local));
+        when(domainConfigRepository.findByDomain("unknown.test")).thenReturn(Optional.empty());
+        when(mailRouter.route(any(), any(), any(), any(), any(), any(), any()))
+                .thenReturn(new RoutingDecision.PassThrough());
+        when(mailProcessingRepository.save(any(MailProcessing.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        Message<byte[]> routed = routingService.routeOutbound(MessageBuilder.withPayload("hello".getBytes())
+                .setHeader(MailProcessingHeaders.CONTEXT, MailProcessingContext.create(envelope))
+                .build());
+
+        MailProcessingContext context = (MailProcessingContext) routed.getHeaders().get(MailProcessingHeaders.CONTEXT);
+        assertNotNull(context);
+        assertEquals(false, context.decision().requiresQuarantine());
+        assertEquals("127.0.0.1", context.relayProfile().host());
+        assertEquals(10027, context.relayProfile().port());
+        verify(mailRouter).route(any(), any(), any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void routeOutboundRejectsInactiveConfiguredRecipientDomainEvenWhenUnconfiguredExternalAllowed() {
+        MailRouter mailRouter = mock(MailRouter.class);
+        DomainConfigRepository domainConfigRepository = mock(DomainConfigRepository.class);
+        CertificateRepository certificateRepository = mock(CertificateRepository.class);
+        MailProcessingRepository mailProcessingRepository = mock(MailProcessingRepository.class);
+        RoutingService routingService = new RoutingService(
+                mailRouter,
+                domainConfigRepository,
+                cryptoSelectionService(certificateRepository),
+                mailProcessingRepository,
+                postfixProperties(),
+                null,
+                null,
+                relayPolicy(true)
+        );
+
+        EmailAddress sender = new EmailAddress("alice@example.com");
+        EmailAddress recipient = new EmailAddress("bob@partner.test");
+        MailEnvelope envelope = envelope(sender, recipient);
+        DomainConfig local = DomainConfig.create("domain-1", "example.com", true);
+        DomainConfig inactiveRecipient = DomainConfig.create("domain-2", "partner.test", false);
+        inactiveRecipient.deactivate();
+
+        when(domainConfigRepository.findByDomain("example.com")).thenReturn(Optional.of(local));
+        when(domainConfigRepository.findByDomain("partner.test")).thenReturn(Optional.of(inactiveRecipient));
+        when(mailProcessingRepository.save(any(MailProcessing.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        Message<byte[]> routed = routingService.routeOutbound(MessageBuilder.withPayload("hello".getBytes())
+                .setHeader(MailProcessingHeaders.CONTEXT, MailProcessingContext.create(envelope))
+                .build());
+
+        MailProcessingContext context = (MailProcessingContext) routed.getHeaders().get(MailProcessingHeaders.CONTEXT);
+        assertTrue(context.decision().requiresQuarantine());
+        assertEquals("DOMAIN_NOT_CONFIGURED", context.decision().quarantine().reason());
+        assertEquals("Recipient domain is not configured and enabled for outbound delivery: partner.test",
+                context.decision().quarantine().detail());
+        verify(mailRouter, never()).route(any(), any(), any(), any(), any(), any(), any());
+    }
+
+    @Test
     void routeOutboundQuarantinesWhenSenderDomainIsNotActiveLocalDomain() {
         MailRouter mailRouter = mock(MailRouter.class);
         DomainConfigRepository domainConfigRepository = mock(DomainConfigRepository.class);
@@ -407,7 +534,8 @@ class RoutingServiceTest {
                 mailProcessingRepository,
                 postfixProperties(),
                 null,
-                null
+                null,
+                relayPolicy(true)
         );
 
         EmailAddress sender = new EmailAddress("alice@example.com");
@@ -452,7 +580,8 @@ class RoutingServiceTest {
                 mailProcessingRepository,
                 postfixProperties(),
                 null,
-                null
+                null,
+                relayPolicy(true)
         );
 
         EmailAddress sender = new EmailAddress("sender@remote.test");
@@ -528,6 +657,35 @@ class RoutingServiceTest {
 
     private static MailCryptoSelectionService cryptoSelectionService(CertificateRepository certificateRepository) {
         return new MailCryptoSelectionService(certificateRepository, new CryptoProfileSelector());
+    }
+
+    private static RelayPolicyPort relayPolicy(boolean allowUnconfiguredExternalRecipientDomains) {
+        return new RelayPolicyPort() {
+            @Override
+            public RelayPolicySettings getSettings() {
+                return new RelayPolicySettings(
+                        true,
+                        "relay.example.test",
+                        25,
+                        null,
+                        false,
+                        null,
+                        30000,
+                        null,
+                        allowUnconfiguredExternalRecipientDomains,
+                        Instant.now());
+            }
+
+            @Override
+            public RelayProbeSettings getProbeSettings() {
+                return new RelayProbeSettings(true, "relay.example.test", 25, "", "", 30000);
+            }
+
+            @Override
+            public RelayPolicySettings updateSettings(RelayPolicySettingsUpdate update) {
+                return getSettings();
+            }
+        };
     }
 
     private static DomainMailAuthPolicy dkimReadyPolicy() {

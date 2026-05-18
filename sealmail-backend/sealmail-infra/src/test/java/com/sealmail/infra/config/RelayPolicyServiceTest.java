@@ -43,6 +43,7 @@ class RelayPolicyServiceTest {
         assertNull(settings.passwordSecretRef());
         assertEquals(30000, settings.timeoutMs());
         assertNull(settings.envelopeFrom());
+        assertFalse(settings.allowUnconfiguredExternalRecipientDomains());
         verify(entityManager).persist(org.mockito.ArgumentMatchers.any(RelayPolicyEntity.class));
         verify(entityManager).flush();
         verify(secretResolver, never()).resolve(org.mockito.ArgumentMatchers.anyString());
@@ -81,18 +82,21 @@ class RelayPolicyServiceTest {
                 "env:NEW_SMTP_PASSWORD",
                 false,
                 20000,
-                "new-bounce@example.net"
+                "new-bounce@example.net",
+                true
         ));
 
         assertEquals("smtp2.example.net", entity.getHost());
         assertEquals(465, entity.getPort());
         assertEquals("new-user", entity.getUsername());
         assertEquals("env:NEW_SMTP_PASSWORD", entity.getPasswordSecretRef());
+        assertTrue(entity.isAllowUnconfiguredExternalRecipientDomains());
         ArgumentCaptor<RelayPolicyChanged> eventCaptor = ArgumentCaptor.forClass(RelayPolicyChanged.class);
         verify(eventPublisher).publishEvent(eventCaptor.capture());
         assertEquals("default", eventCaptor.getValue().getConfigId());
         assertTrue(eventCaptor.getValue().getChangedFields().contains("connection"));
         assertTrue(eventCaptor.getValue().getChangedFields().contains("authentication"));
+        assertTrue(eventCaptor.getValue().getChangedFields().contains("recipientDomainScope"));
     }
 
     private static RelayPolicyService service(EntityManager entityManager,
@@ -115,6 +119,7 @@ class RelayPolicyServiceTest {
         entity.setPasswordSecretRef(null);
         entity.setTimeoutMs(15000);
         entity.setEnvelopeFrom("bounce@example.net");
+        entity.setAllowUnconfiguredExternalRecipientDomains(false);
         entity.setCreatedAt(Instant.now());
         entity.setUpdatedAt(Instant.now());
         return entity;

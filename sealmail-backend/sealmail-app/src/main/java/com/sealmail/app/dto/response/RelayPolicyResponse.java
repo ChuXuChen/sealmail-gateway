@@ -11,6 +11,7 @@ public record RelayPolicyResponse(
         String passwordSecretRef,
         int timeoutMs,
         String envelopeFrom,
+        boolean allowUnconfiguredExternalRecipientDomains,
         Instant updatedAt
 ) {
 }

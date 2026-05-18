@@ -339,6 +339,7 @@ const MailSection: React.FC<MailSectionProps> = ({
             host: relayPolicy?.host ?? 'localhost',
             port: relayPolicy?.port ?? 25,
             timeoutMs: relayPolicy?.timeoutMs ?? 30000,
+            allowUnconfiguredExternalRecipientDomains: relayPolicy?.allowUnconfiguredExternalRecipientDomains ?? false,
           }}
         >
           <Row gutter={12}>
@@ -380,6 +381,16 @@ const MailSection: React.FC<MailSectionProps> = ({
             <Col xs={24} md={8}>
               <Form.Item name="envelopeFrom" label="Envelope From">
                 <Input />
+              </Form.Item>
+            </Col>
+            <Col xs={24} md={8}>
+              <Form.Item
+                name="allowUnconfiguredExternalRecipientDomains"
+                label="允许未配置外部收件域"
+                valuePropName="checked"
+                extra="开启后未知外部域会走全局 Relay，DLP、强制加密和隔离仍优先。"
+              >
+                <Switch />
               </Form.Item>
             </Col>
           </Row>

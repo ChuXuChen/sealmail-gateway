@@ -9,12 +9,14 @@ import com.sealmail.domain.dlp.DlpPolicyResolution;
 import com.sealmail.domain.dlp.DlpScanEvent;
 import com.sealmail.domain.dlp.DlpScanRequest;
 import com.sealmail.domain.dlp.DlpTestRequest;
+import com.sealmail.domain.dlp.DlpUbaAssessment;
 import com.sealmail.domain.dlp.spi.DlpContentExtractor;
 import com.sealmail.domain.dlp.spi.DlpDetector;
 import com.sealmail.domain.dlp.spi.DlpEvaluationPort;
 import com.sealmail.domain.dlp.spi.DlpEventRepository;
 import com.sealmail.domain.dlp.spi.DlpEvidenceMasker;
 import com.sealmail.domain.dlp.spi.DlpPolicyResolver;
+import com.sealmail.domain.dlp.spi.DlpUbaRiskEvaluator;
 import com.sealmail.domain.mailsecurity.MailDirection;
 import com.sealmail.domain.mailsecurity.MailEnvelope;
 import com.sealmail.domain.mailsecurity.MailProcessingContext;
@@ -42,17 +44,20 @@ public class DlpEvaluationService implements DlpEvaluationPort {
     private final List<DlpDetector> detectors;
     private final DlpEvidenceMasker evidenceMasker;
     private final DlpEventRepository eventRepository;
+    private final DlpUbaRiskEvaluator ubaRiskEvaluator;
 
     public DlpEvaluationService(DlpContentExtractor contentExtractor,
                                 DlpPolicyResolver policyResolver,
                                 List<DlpDetector> detectors,
                                 DlpEvidenceMasker evidenceMasker,
-                                DlpEventRepository eventRepository) {
+                                DlpEventRepository eventRepository,
+                                DlpUbaRiskEvaluator ubaRiskEvaluator) {
         this.contentExtractor = contentExtractor;
         this.policyResolver = policyResolver;
         this.detectors = detectors == null ? List.of() : List.copyOf(detectors);
         this.evidenceMasker = evidenceMasker;
         this.eventRepository = eventRepository;
+        this.ubaRiskEvaluator = ubaRiskEvaluator;
     }
 
     @Override
@@ -107,6 +112,14 @@ public class DlpEvaluationService implements DlpEvaluationPort {
         }
         matches = thresholdMatches(matches);
         DispositionAction recommended = finalAction(matches);
+        DlpUbaAssessment ubaAssessment = persistEvent && ubaRiskEvaluator != null
+                ? ubaRiskEvaluator.assess(scanRequest, matches, recommended)
+                : DlpUbaAssessment.low(recommended);
+        if (ubaAssessment.actionUpgraded()) {
+            recommended = ubaAssessment.upgradedAction();
+            warnings.add("UBA risk upgraded DLP action to " + recommended + ": "
+                    + String.join("; ", ubaAssessment.reasons()));
+        }
         boolean monitorMode = resolution.monitorMode();
         DispositionAction action = monitorMode && recommended != DispositionAction.WARN
                 ? DispositionAction.WARN
@@ -119,7 +132,7 @@ public class DlpEvaluationService implements DlpEvaluationPort {
         long duration = System.currentTimeMillis() - start;
 
         if (persistEvent && !matches.isEmpty()) {
-            DlpScanEvent event = event(eventId, context, resolution, action, maxSeverity, matches.size(), warnings, monitorMode, duration);
+            DlpScanEvent event = event(eventId, context, resolution, action, maxSeverity, matches.size(), warnings, monitorMode, duration, ubaAssessment);
             eventRepository.save(event, evidence);
         }
 
@@ -134,7 +147,10 @@ public class DlpEvaluationService implements DlpEvaluationPort {
                 resolution.policyIds(),
                 resolution.ruleGroupIds(),
                 monitorMode,
-                duration);
+                duration,
+                ubaAssessment.riskLevel(),
+                ubaAssessment.reasons(),
+                ubaAssessment.actionUpgraded());
     }
 
     private DlpScanEvent event(String eventId,
@@ -145,7 +161,8 @@ public class DlpEvaluationService implements DlpEvaluationPort {
                                int matchCount,
                                List<String> warnings,
                                boolean monitorMode,
-                               long duration) {
+                               long duration,
+                               DlpUbaAssessment ubaAssessment) {
         MailEnvelope envelope = context != null ? context.envelope() : null;
         return new DlpScanEvent(
                 eventId,
@@ -164,6 +181,9 @@ public class DlpEvaluationService implements DlpEvaluationPort {
                 warnings.stream().distinct().toList(),
                 monitorMode,
                 duration,
+                ubaAssessment.riskLevel(),
+                ubaAssessment.reasons(),
+                ubaAssessment.actionUpgraded(),
                 null,
                 false,
                 null,

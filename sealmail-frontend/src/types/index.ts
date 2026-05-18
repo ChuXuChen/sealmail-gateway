@@ -129,7 +129,7 @@ export interface ExceptionMailItem {
 
 export type DlpAction = 'WARN' | 'MUST_ENCRYPT' | 'QUARANTINE' | 'BLOCK';
 export type DlpScopeType = 'GLOBAL' | 'SENDER_DOMAIN' | 'RECIPIENT_DOMAIN';
-export type DlpRuleType = 'REGEX' | 'KEYWORD' | 'BUILTIN' | 'DICTIONARY' | 'COMPOSITE';
+export type DlpRuleType = 'PATTERN' | 'EDM' | 'FINGERPRINT' | 'REGEX' | 'KEYWORD' | 'BUILTIN' | 'DICTIONARY' | 'COMPOSITE';
 export type DlpPolicyMode = 'MONITOR' | 'ENFORCE';
 export type DlpContentKind =
   | 'SUBJECT'
@@ -245,6 +245,9 @@ export interface DlpEvent {
   extractionWarnings: string[];
   monitorMode: boolean;
   scanDurationMs: number;
+  ubaRiskLevel?: 'LOW' | 'MEDIUM' | 'HIGH';
+  ubaRiskReasons: string[];
+  ubaActionUpgraded: boolean;
   quarantineId?: string;
   falsePositive: boolean;
   falsePositiveAt?: string;
@@ -265,6 +268,9 @@ export interface DlpEvaluation {
   scanDurationMs: number;
   warnings: string[];
   evidence: DlpEvidence[];
+  ubaRiskLevel?: 'LOW' | 'MEDIUM' | 'HIGH';
+  ubaRiskReasons: string[];
+  ubaActionUpgraded: boolean;
 }
 
 export interface DlpSelection {
@@ -275,6 +281,48 @@ export interface DlpSelection {
   patternMode?: 'ALL' | 'SELECTED';
   enabled: boolean;
   createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface DlpEdmDataset {
+  id: string;
+  name: string;
+  description?: string;
+  enabled: boolean;
+  valueCount: number;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface DlpFingerprintLibrary {
+  id: string;
+  name: string;
+  description?: string;
+  enabled: boolean;
+  documentCount: number;
+  chunkCount: number;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface DlpImportResult {
+  importedCount: number;
+  duplicateCount: number;
+  ignoredCount: number;
+  totalCount: number;
+}
+
+export interface DlpUbaSenderRisk {
+  senderEmail: string;
+  totalMessages: number;
+  outboundMessages: number;
+  externalDomainCount: number;
+  dlpHitCount: number;
+  highRiskCount: number;
+  riskLevel: 'LOW' | 'MEDIUM' | 'HIGH';
+  lastReasons: string[];
+  firstSeenAt?: string;
+  lastSeenAt?: string;
   updatedAt?: string;
 }
 
@@ -634,6 +682,7 @@ export interface RelayPolicy {
   passwordSecretRef?: string;
   timeoutMs: number;
   envelopeFrom?: string;
+  allowUnconfiguredExternalRecipientDomains: boolean;
   updatedAt?: string;
 }
 
@@ -723,6 +772,19 @@ export type UpdateDlpSelectionRequest = Partial<CreateDlpSelectionRequest>;
 export type DlpRuleRequest = Omit<DlpRule, 'id' | 'createdAt' | 'updatedAt'>;
 export type DlpRuleGroupRequest = Omit<DlpRuleGroup, 'id' | 'createdAt' | 'updatedAt'>;
 export type DlpPolicyRequest = Omit<DlpPolicy, 'id' | 'createdAt' | 'updatedAt'>;
+export type DlpDatasetRequest = {
+  name?: string;
+  description?: string;
+  enabled?: boolean;
+};
+export type DlpImportValuesRequest = {
+  values?: string[];
+  text?: string;
+};
+export type DlpFingerprintImportRequest = {
+  documentName?: string;
+  text?: string;
+};
 export interface DlpTestRequest {
   subject?: string;
   body?: string;

@@ -140,6 +140,7 @@ export const RelayPolicySummaryPanel: React.FC<RelayPolicySummaryPanelProps> = (
         </Descriptions.Item>
         <Descriptions.Item label="密码 Secret">{configuredTag(Boolean(relayPolicy?.passwordSecretRef))}</Descriptions.Item>
         <Descriptions.Item label="Envelope From">{relayPolicy?.envelopeFrom || '-'}</Descriptions.Item>
+        <Descriptions.Item label="未配置外部域">{configuredTag(Boolean(relayPolicy?.allowUnconfiguredExternalRecipientDomains))}</Descriptions.Item>
         <Descriptions.Item label="更新时间">{formatDateTime(relayPolicy?.updatedAt)}</Descriptions.Item>
       </Descriptions>
     </Card>

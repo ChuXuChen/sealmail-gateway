@@ -8,6 +8,7 @@ import com.sealmail.domain.dlp.DlpMaskingStrategy;
 import com.sealmail.domain.dlp.DlpMatch;
 import com.sealmail.domain.dlp.DlpRule;
 import com.sealmail.domain.dlp.DlpRuleType;
+import com.sealmail.domain.dlp.DlpUbaRiskLevel;
 import com.sealmail.domain.dlp.spi.DlpEvaluationPort;
 import com.sealmail.domain.mailsecurity.MailEnvelope;
 import com.sealmail.domain.mailsecurity.MailProcessingContext;
@@ -174,7 +175,10 @@ class DlpStepTest {
                 List.of("policy-1"),
                 List.of("group-1"),
                 false,
-                1);
+                1,
+                DlpUbaRiskLevel.LOW,
+                List.of(),
+                false);
     }
 
     private byte[] mailPayload() {

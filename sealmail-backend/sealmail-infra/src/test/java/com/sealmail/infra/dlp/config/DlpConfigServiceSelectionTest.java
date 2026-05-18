@@ -2,6 +2,7 @@ package com.sealmail.infra.dlp.config;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sealmail.domain.dlp.DlpScopeType;
+import com.sealmail.domain.dlp.DlpRuleType;
 import com.sealmail.domain.mailsecurity.MailEnvelope;
 import com.sealmail.domain.policy.DispositionAction;
 import com.sealmail.domain.shared.model.EmailAddress;
@@ -44,6 +45,19 @@ class DlpConfigServiceSelectionTest {
         List<DlpPatternConfig> patterns = service.activePatternsFor(envelope());
 
         assertEquals(2, patterns.size());
+    }
+
+    @Test
+    void legacyKeywordPatternIsReturnedAsEscapedPatternRule() throws Exception {
+        DlpPatternEntity legacy = pattern("keyword", DispositionAction.WARN);
+        legacy.setRuleType(DlpRuleType.KEYWORD.name());
+        legacy.setRegex("project.alpha");
+        DlpConfigService service = serviceWithEntities(List.of(legacy), List.of());
+
+        DlpPatternConfig config = service.activePatternsFor(envelope()).getFirst();
+
+        assertEquals(DlpRuleType.PATTERN, config.type());
+        assertEquals("(?:\\Qproject.alpha\\E)", config.regex());
     }
 
     private static DlpConfigService serviceWithEntities(List<DlpPatternEntity> patterns,

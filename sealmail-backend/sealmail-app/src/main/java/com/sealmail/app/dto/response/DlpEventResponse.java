@@ -20,6 +20,9 @@ public record DlpEventResponse(
         List<String> extractionWarnings,
         boolean monitorMode,
         long scanDurationMs,
+        String ubaRiskLevel,
+        List<String> ubaRiskReasons,
+        boolean ubaActionUpgraded,
         String quarantineId,
         boolean falsePositive,
         Instant falsePositiveAt,
@@ -32,5 +35,6 @@ public record DlpEventResponse(
         policyIds = policyIds == null ? List.of() : List.copyOf(policyIds);
         ruleGroupIds = ruleGroupIds == null ? List.of() : List.copyOf(ruleGroupIds);
         extractionWarnings = extractionWarnings == null ? List.of() : List.copyOf(extractionWarnings);
+        ubaRiskReasons = ubaRiskReasons == null ? List.of() : List.copyOf(ubaRiskReasons);
     }
 }

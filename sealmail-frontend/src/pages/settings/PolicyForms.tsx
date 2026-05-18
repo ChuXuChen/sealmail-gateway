@@ -293,6 +293,7 @@ export const RelayPolicyForm: React.FC<RelayPolicyFormProps> = ({ form, policy, 
         host: policy?.host ?? 'localhost',
         port: policy?.port ?? 25,
         timeoutMs: policy?.timeoutMs ?? 30000,
+        allowUnconfiguredExternalRecipientDomains: policy?.allowUnconfiguredExternalRecipientDomains ?? false,
       }}
     >
       <Row gutter={12}>
@@ -334,6 +335,16 @@ export const RelayPolicyForm: React.FC<RelayPolicyFormProps> = ({ form, policy, 
         <Col xs={24} md={8}>
           <Form.Item name="envelopeFrom" label="Envelope From">
             <Input />
+          </Form.Item>
+        </Col>
+        <Col xs={24} md={8}>
+          <Form.Item
+            name="allowUnconfiguredExternalRecipientDomains"
+            label="允许未配置外部收件域"
+            valuePropName="checked"
+            extra="开启后未知外部域会走全局 Relay，DLP、强制加密和隔离仍优先。"
+          >
+            <Switch />
           </Form.Item>
         </Col>
       </Row>

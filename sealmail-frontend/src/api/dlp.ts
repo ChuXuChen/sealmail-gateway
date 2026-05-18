@@ -2,9 +2,15 @@ import type {
   ApiResponse,
   CreateDlpPatternRequest,
   CreateDlpSelectionRequest,
+  DlpDatasetRequest,
+  DlpEdmDataset,
   DlpEvaluation,
   DlpEvent,
   DlpEvidence,
+  DlpFingerprintImportRequest,
+  DlpFingerprintLibrary,
+  DlpImportResult,
+  DlpImportValuesRequest,
   DlpPattern,
   DlpPolicy,
   DlpPolicyRequest,
@@ -14,6 +20,7 @@ import type {
   DlpRuleRequest,
   DlpSelection,
   DlpTestRequest,
+  DlpUbaSenderRisk,
   ExceptionMailItem,
   ExceptionMailStats,
   PageResponse,
@@ -142,4 +149,37 @@ export const dlpApi = {
 
   eventEvidence: (id: string) =>
     apiClient.get<ApiResponse<DlpEvidence[]>>(`/api/v1/dlp/events/${id}/evidence`),
+
+  listEdmDatasets: () =>
+    apiClient.get<ApiResponse<DlpEdmDataset[]>>('/api/v1/dlp/edm-datasets'),
+
+  createEdmDataset: (data: DlpDatasetRequest) =>
+    apiClient.post<ApiResponse<DlpEdmDataset>>('/api/v1/dlp/edm-datasets', data),
+
+  updateEdmDataset: (id: string, data: DlpDatasetRequest) =>
+    apiClient.put<ApiResponse<DlpEdmDataset>>(`/api/v1/dlp/edm-datasets/${id}`, data),
+
+  importEdmDataset: (id: string, data: DlpImportValuesRequest) =>
+    apiClient.post<ApiResponse<DlpImportResult>>(`/api/v1/dlp/edm-datasets/${id}/import`, data),
+
+  deleteEdmDataset: (id: string) =>
+    apiClient.delete<ApiResponse<void>>(`/api/v1/dlp/edm-datasets/${id}`),
+
+  listFingerprintLibraries: () =>
+    apiClient.get<ApiResponse<DlpFingerprintLibrary[]>>('/api/v1/dlp/fingerprint-libraries'),
+
+  createFingerprintLibrary: (data: DlpDatasetRequest) =>
+    apiClient.post<ApiResponse<DlpFingerprintLibrary>>('/api/v1/dlp/fingerprint-libraries', data),
+
+  updateFingerprintLibrary: (id: string, data: DlpDatasetRequest) =>
+    apiClient.put<ApiResponse<DlpFingerprintLibrary>>(`/api/v1/dlp/fingerprint-libraries/${id}`, data),
+
+  importFingerprintDocument: (id: string, data: DlpFingerprintImportRequest) =>
+    apiClient.post<ApiResponse<DlpImportResult>>(`/api/v1/dlp/fingerprint-libraries/${id}/import`, data),
+
+  deleteFingerprintLibrary: (id: string) =>
+    apiClient.delete<ApiResponse<void>>(`/api/v1/dlp/fingerprint-libraries/${id}`),
+
+  listUbaSenderRisks: (params?: { limit?: number }) =>
+    apiClient.get<ApiResponse<DlpUbaSenderRisk[]>>('/api/v1/dlp/uba/senders', { params }),
 };

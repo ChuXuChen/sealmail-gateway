@@ -68,6 +68,7 @@ const DlpEvents: React.FC = () => {
     { title: '发件人', dataIndex: 'senderEmail', key: 'senderEmail', width: 190, ellipsis: true },
     { title: '主题', dataIndex: 'subject', key: 'subject', width: 240, ellipsis: true },
     { title: '模式', dataIndex: 'monitorMode', key: 'monitorMode', width: 90, render: (value: boolean) => value ? <Tag color="blue">监控</Tag> : <Tag color="red">执行</Tag> },
+    { title: 'UBA', dataIndex: 'ubaRiskLevel', key: 'ubaRiskLevel', width: 80, render: (value?: string) => value || 'LOW' },
     { title: '误报', dataIndex: 'falsePositive', key: 'falsePositive', width: 80, render: (value: boolean) => value ? <Tag color="green">是</Tag> : '-' },
     { title: '操作', key: 'actions', width: 90, fixed: 'right', render: (_: unknown, record) => <Button type="link" size="small" onClick={() => openDetail(record)}>查看</Button> },
   ];
@@ -112,6 +113,9 @@ const DlpEvents: React.FC = () => {
               <Descriptions.Item label="策略">{selected.policyIds.join(', ') || '-'}</Descriptions.Item>
               <Descriptions.Item label="规则组">{selected.ruleGroupIds.join(', ') || '-'}</Descriptions.Item>
               <Descriptions.Item label="抽取 Warning">{selected.extractionWarnings.join('; ') || '-'}</Descriptions.Item>
+              <Descriptions.Item label="UBA 风险">{selected.ubaRiskLevel || 'LOW'}</Descriptions.Item>
+              <Descriptions.Item label="UBA 升级">{selected.ubaActionUpgraded ? '是' : '否'}</Descriptions.Item>
+              <Descriptions.Item label="UBA 原因">{selected.ubaRiskReasons?.join('; ') || '-'}</Descriptions.Item>
               <Descriptions.Item label="关联隔离">{selected.quarantineId || '-'}</Descriptions.Item>
             </Descriptions>
             <Table<DlpEvidence>

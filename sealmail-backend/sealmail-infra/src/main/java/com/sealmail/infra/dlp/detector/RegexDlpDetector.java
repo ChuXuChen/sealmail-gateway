@@ -29,7 +29,7 @@ public class RegexDlpDetector implements DlpDetector {
 
     @Override
     public boolean supports(DlpRuleType type) {
-        return type == DlpRuleType.REGEX;
+        return type == DlpRuleType.PATTERN || type == DlpRuleType.REGEX;
     }
 
     @Override

@@ -7,6 +7,7 @@ import com.sealmail.domain.dlp.DlpContentKind;
 import com.sealmail.domain.dlp.DlpEvidence;
 import com.sealmail.domain.dlp.DlpRuleType;
 import com.sealmail.domain.dlp.DlpScanEvent;
+import com.sealmail.domain.dlp.DlpUbaRiskLevel;
 import com.sealmail.domain.dlp.spi.DlpEventRepository;
 import com.sealmail.domain.mailsecurity.MailDirection;
 import com.sealmail.domain.policy.DispositionAction;
@@ -186,6 +187,9 @@ public class DlpEventRepositoryImpl implements DlpEventRepository {
         entity.setExtractionWarnings(serialize(event.extractionWarnings()));
         entity.setMonitorMode(event.monitorMode());
         entity.setScanDurationMs(event.scanDurationMs());
+        entity.setUbaRiskLevel(event.ubaRiskLevel().name());
+        entity.setUbaRiskReasons(serialize(event.ubaRiskReasons()));
+        entity.setUbaActionUpgraded(event.ubaActionUpgraded());
         entity.setQuarantineId(event.quarantineId());
         entity.setFalsePositive(event.falsePositive());
         entity.setFalsePositiveAt(event.falsePositiveAt());
@@ -213,6 +217,9 @@ public class DlpEventRepositoryImpl implements DlpEventRepository {
                 deserialize(entity.getExtractionWarnings()),
                 entity.isMonitorMode(),
                 entity.getScanDurationMs(),
+                parseUbaRiskLevel(entity.getUbaRiskLevel()),
+                deserialize(entity.getUbaRiskReasons()),
+                entity.isUbaActionUpgraded(),
                 entity.getQuarantineId(),
                 entity.isFalsePositive(),
                 entity.getFalsePositiveAt(),
@@ -330,6 +337,13 @@ public class DlpEventRepositoryImpl implements DlpEventRepository {
             return null;
         }
         return MailDirection.valueOf(direction);
+    }
+
+    private DlpUbaRiskLevel parseUbaRiskLevel(String value) {
+        if (value == null || value.isBlank()) {
+            return DlpUbaRiskLevel.LOW;
+        }
+        return DlpUbaRiskLevel.valueOf(value);
     }
 
     private record QueryParts(

@@ -27,7 +27,7 @@ public record DlpPatternConfig(
         Instant updatedAt
 ) {
     public DlpPatternConfig {
-        type = type != null ? type : DlpRuleType.REGEX;
+        type = type != null ? type : DlpRuleType.PATTERN;
         contentKinds = contentKinds == null ? List.of() : List.copyOf(contentKinds);
         minMatchCount = Math.max(1, minMatchCount);
         maxEvidenceCount = maxEvidenceCount <= 0 ? 5 : maxEvidenceCount;
@@ -44,7 +44,7 @@ public record DlpPatternConfig(
                             boolean enabled,
                             Instant createdAt,
                             Instant updatedAt) {
-        this(id, name, description, regex, DlpRuleType.REGEX, null, List.of(),
+        this(id, name, description, regex, DlpRuleType.PATTERN, null, List.of(),
                 1, 5, DlpMaskingStrategy.DEFAULT, action, severity, priority, enabled, createdAt, updatedAt);
     }
 }

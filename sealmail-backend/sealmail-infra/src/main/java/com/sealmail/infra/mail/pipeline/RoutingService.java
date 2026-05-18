@@ -1,6 +1,7 @@
 package com.sealmail.infra.mail.pipeline;
 
 import com.sealmail.domain.certificate.Certificate;
+import com.sealmail.domain.config.RelayPolicyPort;
 import com.sealmail.domain.mailauth.MailAuthPolicyRepository;
 import com.sealmail.domain.mailsecurity.*;
 import com.sealmail.domain.policy.DomainConfig;
@@ -31,6 +32,7 @@ public class RoutingService {
     private final PostfixProperties postfixProperties;
     private final MailAuthPolicyRepository mailAuthPolicyRepository;
     private final DomainEventPublisher domainEventPublisher;
+    private final RelayPolicyPort relayPolicyPort;
 
     public RoutingService(MailRouter mailRouter,
                            DomainConfigRepository domainConfigRepository,
@@ -38,7 +40,8 @@ public class RoutingService {
                            MailProcessingRepository mailProcessingRepository,
                            PostfixProperties postfixProperties,
                            MailAuthPolicyRepository mailAuthPolicyRepository,
-                           DomainEventPublisher domainEventPublisher) {
+                           DomainEventPublisher domainEventPublisher,
+                           RelayPolicyPort relayPolicyPort) {
         this.mailRouter = mailRouter;
         this.domainConfigRepository = domainConfigRepository;
         this.cryptoSelectionService = cryptoSelectionService;
@@ -46,6 +49,7 @@ public class RoutingService {
         this.postfixProperties = postfixProperties;
         this.mailAuthPolicyRepository = mailAuthPolicyRepository;
         this.domainEventPublisher = domainEventPublisher;
+        this.relayPolicyPort = relayPolicyPort;
     }
 
     @Transactional
@@ -114,6 +118,11 @@ public class RoutingService {
                     "Sender domain is not configured and enabled as a local domain: " + senderDomain);
         }
 
+        Optional<Message<byte[]>> recipientDomainFailure = rejectUnconfiguredExternalRecipients(message, envelope);
+        if (recipientDomainFailure.isPresent()) {
+            return recipientDomainFailure.get();
+        }
+
         CryptoProfile requestedProfile = CryptoProfile.fromDomainConfig(domainConfig.get());
         List<Certificate> recipientCerts = cryptoSelectionService.outboundRoutingCertificates(envelope);
 
@@ -167,6 +176,45 @@ public class RoutingService {
                 .map(this::findActiveLocalDomainConfig)
                 .flatMap(Optional::stream)
                 .findFirst();
+    }
+
+    private Optional<Message<byte[]>> rejectUnconfiguredExternalRecipients(Message<byte[]> message,
+                                                                           MailEnvelope envelope) {
+        boolean allowUnconfiguredExternalRecipientDomains = allowUnconfiguredExternalRecipientDomains();
+        List<String> unconfiguredDomains = envelope.getRecipients().stream()
+                .map(EmailAddress::getDomain)
+                .distinct()
+                .filter(domain -> recipientDomainNotAllowed(domain, allowUnconfiguredExternalRecipientDomains))
+                .toList();
+        if (unconfiguredDomains.isEmpty()) {
+            return Optional.empty();
+        }
+        return Optional.of(exceptionByDomainPolicy(
+                message,
+                envelope,
+                MailDirection.OUTBOUND,
+                "Recipient domain is not configured and enabled for outbound delivery: "
+                        + String.join(", ", unconfiguredDomains)));
+    }
+
+    private boolean recipientDomainNotAllowed(String domain, boolean allowUnconfiguredExternalRecipientDomains) {
+        Optional<DomainConfig> configured = domainConfigRepository.findByDomain(domain);
+        if (configured.isPresent()) {
+            return !configured.get().isActive();
+        }
+        return !allowUnconfiguredExternalRecipientDomains;
+    }
+
+    private boolean allowUnconfiguredExternalRecipientDomains() {
+        if (relayPolicyPort == null) {
+            return false;
+        }
+        try {
+            return relayPolicyPort.getSettings().allowUnconfiguredExternalRecipientDomains();
+        } catch (Exception e) {
+            log.warn("Cannot read relay recipient domain scope setting, using secure default: {}", e.getMessage());
+            return false;
+        }
     }
 
     private Message<byte[]> quarantineByRoutingPolicy(Message<byte[]> message,

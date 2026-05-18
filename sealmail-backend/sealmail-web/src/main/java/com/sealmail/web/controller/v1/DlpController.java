@@ -2,6 +2,9 @@ package com.sealmail.web.controller.v1;
 
 import com.sealmail.app.dto.request.CreateDlpPatternRequest;
 import com.sealmail.app.dto.request.CreateDlpSelectionRequest;
+import com.sealmail.app.dto.request.DlpDatasetRequest;
+import com.sealmail.app.dto.request.DlpFingerprintImportRequest;
+import com.sealmail.app.dto.request.DlpImportValuesRequest;
 import com.sealmail.app.dto.request.DlpPolicyRequest;
 import com.sealmail.app.dto.request.DlpRuleGroupRequest;
 import com.sealmail.app.dto.request.DlpRuleRequest;
@@ -10,14 +13,18 @@ import com.sealmail.app.dto.request.UpdateDlpPatternRequest;
 import com.sealmail.app.dto.request.UpdateDlpSelectionRequest;
 import com.sealmail.app.dto.common.PageRequest;
 import com.sealmail.app.dto.common.PageResponse;
+import com.sealmail.app.dto.response.DlpEdmDatasetResponse;
 import com.sealmail.app.dto.response.DlpEvaluationResponse;
 import com.sealmail.app.dto.response.DlpEventResponse;
 import com.sealmail.app.dto.response.DlpEvidenceResponse;
+import com.sealmail.app.dto.response.DlpFingerprintLibraryResponse;
+import com.sealmail.app.dto.response.DlpImportResultResponse;
 import com.sealmail.app.dto.response.DlpPatternResponse;
 import com.sealmail.app.dto.response.DlpPolicyResponse;
 import com.sealmail.app.dto.response.DlpRuleGroupResponse;
 import com.sealmail.app.dto.response.DlpRuleResponse;
 import com.sealmail.app.dto.response.DlpSelectionResponse;
+import com.sealmail.app.dto.response.DlpUbaSenderRiskResponse;
 import com.sealmail.app.security.UserContext;
 import com.sealmail.app.usecase.config.ManageDlpConfigUseCase;
 import com.sealmail.app.usecase.dlp.DlpOperationsUseCase;
@@ -203,6 +210,88 @@ public class DlpController {
         return ApiResponse.ok();
     }
 
+    @GetMapping("/edm-datasets")
+    @Operation(summary = "查询 EDM 数据集")
+    public ApiResponse<List<DlpEdmDatasetResponse>> listEdmDatasets(@AuthenticationPrincipal UserContext user) {
+        return ApiResponse.ok(manageDlpConfigUseCase.listEdmDatasets(user));
+    }
+
+    @PostMapping("/edm-datasets")
+    @Operation(summary = "创建 EDM 数据集")
+    public ApiResponse<DlpEdmDatasetResponse> createEdmDataset(
+            @RequestBody DlpDatasetRequest request,
+            @AuthenticationPrincipal UserContext user) {
+        return ApiResponse.ok(manageDlpConfigUseCase.createEdmDataset(request, user));
+    }
+
+    @PutMapping("/edm-datasets/{id}")
+    @Operation(summary = "更新 EDM 数据集")
+    public ApiResponse<DlpEdmDatasetResponse> updateEdmDataset(
+            @PathVariable String id,
+            @RequestBody DlpDatasetRequest request,
+            @AuthenticationPrincipal UserContext user) {
+        return ApiResponse.ok(manageDlpConfigUseCase.updateEdmDataset(id, request, user));
+    }
+
+    @PostMapping("/edm-datasets/{id}/import")
+    @Operation(summary = "导入 EDM 哈希值")
+    public ApiResponse<DlpImportResultResponse> importEdmDataset(
+            @PathVariable String id,
+            @RequestBody DlpImportValuesRequest request,
+            @AuthenticationPrincipal UserContext user) {
+        return ApiResponse.ok(manageDlpConfigUseCase.importEdmDataset(id, request, user));
+    }
+
+    @DeleteMapping("/edm-datasets/{id}")
+    @Operation(summary = "删除 EDM 数据集")
+    public ApiResponse<Void> deleteEdmDataset(
+            @PathVariable String id,
+            @AuthenticationPrincipal UserContext user) {
+        manageDlpConfigUseCase.deleteEdmDataset(id, user);
+        return ApiResponse.ok();
+    }
+
+    @GetMapping("/fingerprint-libraries")
+    @Operation(summary = "查询文档指纹库")
+    public ApiResponse<List<DlpFingerprintLibraryResponse>> listFingerprintLibraries(@AuthenticationPrincipal UserContext user) {
+        return ApiResponse.ok(manageDlpConfigUseCase.listFingerprintLibraries(user));
+    }
+
+    @PostMapping("/fingerprint-libraries")
+    @Operation(summary = "创建文档指纹库")
+    public ApiResponse<DlpFingerprintLibraryResponse> createFingerprintLibrary(
+            @RequestBody DlpDatasetRequest request,
+            @AuthenticationPrincipal UserContext user) {
+        return ApiResponse.ok(manageDlpConfigUseCase.createFingerprintLibrary(request, user));
+    }
+
+    @PutMapping("/fingerprint-libraries/{id}")
+    @Operation(summary = "更新文档指纹库")
+    public ApiResponse<DlpFingerprintLibraryResponse> updateFingerprintLibrary(
+            @PathVariable String id,
+            @RequestBody DlpDatasetRequest request,
+            @AuthenticationPrincipal UserContext user) {
+        return ApiResponse.ok(manageDlpConfigUseCase.updateFingerprintLibrary(id, request, user));
+    }
+
+    @PostMapping("/fingerprint-libraries/{id}/import")
+    @Operation(summary = "导入文档指纹")
+    public ApiResponse<DlpImportResultResponse> importFingerprintDocument(
+            @PathVariable String id,
+            @RequestBody DlpFingerprintImportRequest request,
+            @AuthenticationPrincipal UserContext user) {
+        return ApiResponse.ok(manageDlpConfigUseCase.importFingerprintDocument(id, request, user));
+    }
+
+    @DeleteMapping("/fingerprint-libraries/{id}")
+    @Operation(summary = "删除文档指纹库")
+    public ApiResponse<Void> deleteFingerprintLibrary(
+            @PathVariable String id,
+            @AuthenticationPrincipal UserContext user) {
+        manageDlpConfigUseCase.deleteFingerprintLibrary(id, user);
+        return ApiResponse.ok();
+    }
+
     @PostMapping("/test")
     @Operation(summary = "测试 DLP 内容")
     public ApiResponse<DlpEvaluationResponse> test(
@@ -245,5 +334,13 @@ public class DlpController {
             @PathVariable String id,
             @AuthenticationPrincipal UserContext user) {
         return ApiResponse.ok(dlpOperationsUseCase.eventEvidence(id, user));
+    }
+
+    @GetMapping("/uba/senders")
+    @Operation(summary = "查询 UBA 发件人风险概览")
+    public ApiResponse<List<DlpUbaSenderRiskResponse>> listUbaSenderRisks(
+            @RequestParam(defaultValue = "50") int limit,
+            @AuthenticationPrincipal UserContext user) {
+        return ApiResponse.ok(dlpOperationsUseCase.listUbaSenderRisks(limit, user));
     }
 }

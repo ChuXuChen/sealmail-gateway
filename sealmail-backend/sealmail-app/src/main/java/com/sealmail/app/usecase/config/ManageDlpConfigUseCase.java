@@ -2,11 +2,17 @@ package com.sealmail.app.usecase.config;
 
 import com.sealmail.app.dto.request.CreateDlpPatternRequest;
 import com.sealmail.app.dto.request.CreateDlpSelectionRequest;
+import com.sealmail.app.dto.request.DlpDatasetRequest;
+import com.sealmail.app.dto.request.DlpFingerprintImportRequest;
+import com.sealmail.app.dto.request.DlpImportValuesRequest;
 import com.sealmail.app.dto.request.DlpPolicyRequest;
 import com.sealmail.app.dto.request.DlpRuleGroupRequest;
 import com.sealmail.app.dto.request.DlpRuleRequest;
 import com.sealmail.app.dto.request.UpdateDlpPatternRequest;
 import com.sealmail.app.dto.request.UpdateDlpSelectionRequest;
+import com.sealmail.app.dto.response.DlpEdmDatasetResponse;
+import com.sealmail.app.dto.response.DlpFingerprintLibraryResponse;
+import com.sealmail.app.dto.response.DlpImportResultResponse;
 import com.sealmail.app.dto.response.DlpPatternResponse;
 import com.sealmail.app.dto.response.DlpPolicyResponse;
 import com.sealmail.app.dto.response.DlpRuleGroupResponse;
@@ -159,6 +165,74 @@ public class ManageDlpConfigUseCase {
         dlpConfigPort.deletePolicy(id);
     }
 
+    @Transactional(readOnly = true)
+    public List<DlpEdmDatasetResponse> listEdmDatasets(UserContext user) {
+        requireAdmin(user);
+        return dlpConfigPort.listEdmDatasetSettings().stream()
+                .map(this::toEdmDatasetResponse)
+                .toList();
+    }
+
+    @Transactional
+    public DlpEdmDatasetResponse createEdmDataset(DlpDatasetRequest request, UserContext user) {
+        requireAdmin(user);
+        return toEdmDatasetResponse(dlpConfigPort.createEdmDataset(toEdmUpdate(request)));
+    }
+
+    @Transactional
+    public DlpEdmDatasetResponse updateEdmDataset(String id, DlpDatasetRequest request, UserContext user) {
+        requireAdmin(user);
+        return toEdmDatasetResponse(dlpConfigPort.updateEdmDataset(id, toEdmUpdate(request)));
+    }
+
+    @Transactional
+    public DlpImportResultResponse importEdmDataset(String id, DlpImportValuesRequest request, UserContext user) {
+        requireAdmin(user);
+        return toImportResultResponse(dlpConfigPort.importEdmDatasetValues(id, new DlpConfigPort.DlpImportValues(
+                request != null ? request.values() : List.of(),
+                request != null ? request.text() : null)));
+    }
+
+    @Transactional
+    public void deleteEdmDataset(String id, UserContext user) {
+        requireAdmin(user);
+        dlpConfigPort.deleteEdmDataset(id);
+    }
+
+    @Transactional(readOnly = true)
+    public List<DlpFingerprintLibraryResponse> listFingerprintLibraries(UserContext user) {
+        requireAdmin(user);
+        return dlpConfigPort.listFingerprintLibrarySettings().stream()
+                .map(this::toFingerprintLibraryResponse)
+                .toList();
+    }
+
+    @Transactional
+    public DlpFingerprintLibraryResponse createFingerprintLibrary(DlpDatasetRequest request, UserContext user) {
+        requireAdmin(user);
+        return toFingerprintLibraryResponse(dlpConfigPort.createFingerprintLibrary(toFingerprintUpdate(request)));
+    }
+
+    @Transactional
+    public DlpFingerprintLibraryResponse updateFingerprintLibrary(String id, DlpDatasetRequest request, UserContext user) {
+        requireAdmin(user);
+        return toFingerprintLibraryResponse(dlpConfigPort.updateFingerprintLibrary(id, toFingerprintUpdate(request)));
+    }
+
+    @Transactional
+    public DlpImportResultResponse importFingerprintDocument(String id, DlpFingerprintImportRequest request, UserContext user) {
+        requireAdmin(user);
+        return toImportResultResponse(dlpConfigPort.importFingerprintDocument(id, new DlpConfigPort.DlpFingerprintImport(
+                request != null ? request.documentName() : null,
+                request != null ? request.text() : null)));
+    }
+
+    @Transactional
+    public void deleteFingerprintLibrary(String id, UserContext user) {
+        requireAdmin(user);
+        dlpConfigPort.deleteFingerprintLibrary(id);
+    }
+
     private void requireAdmin(UserContext user) {
         if (user == null || !user.isAdmin()) {
             throw SecurityException.accessDenied("Only administrators can manage DLP");
@@ -244,6 +318,20 @@ public class ManageDlpConfigUseCase {
                 request.priority(),
                 request.ruleGroupIds()
         );
+    }
+
+    private DlpConfigPort.DlpEdmDatasetSettingsUpdate toEdmUpdate(DlpDatasetRequest request) {
+        return new DlpConfigPort.DlpEdmDatasetSettingsUpdate(
+                request != null ? request.name() : null,
+                request != null ? request.description() : null,
+                request != null ? request.enabled() : null);
+    }
+
+    private DlpConfigPort.DlpFingerprintLibrarySettingsUpdate toFingerprintUpdate(DlpDatasetRequest request) {
+        return new DlpConfigPort.DlpFingerprintLibrarySettingsUpdate(
+                request != null ? request.name() : null,
+                request != null ? request.description() : null,
+                request != null ? request.enabled() : null);
     }
 
     private DlpConfigPort.DlpSelectionSettingsUpdate toSelectionUpdate(CreateDlpSelectionRequest request) {
@@ -350,6 +438,40 @@ public class ManageDlpConfigUseCase {
                 settings.enabled(),
                 settings.createdAt(),
                 settings.updatedAt()
+        );
+    }
+
+    private DlpEdmDatasetResponse toEdmDatasetResponse(DlpConfigPort.DlpEdmDatasetSettings settings) {
+        return new DlpEdmDatasetResponse(
+                settings.id(),
+                settings.name(),
+                settings.description(),
+                settings.enabled(),
+                settings.valueCount(),
+                settings.createdAt(),
+                settings.updatedAt()
+        );
+    }
+
+    private DlpFingerprintLibraryResponse toFingerprintLibraryResponse(DlpConfigPort.DlpFingerprintLibrarySettings settings) {
+        return new DlpFingerprintLibraryResponse(
+                settings.id(),
+                settings.name(),
+                settings.description(),
+                settings.enabled(),
+                settings.documentCount(),
+                settings.chunkCount(),
+                settings.createdAt(),
+                settings.updatedAt()
+        );
+    }
+
+    private DlpImportResultResponse toImportResultResponse(DlpConfigPort.DlpImportResult result) {
+        return new DlpImportResultResponse(
+                result.importedCount(),
+                result.duplicateCount(),
+                result.ignoredCount(),
+                result.totalCount()
         );
     }
 }

@@ -53,6 +53,26 @@ public interface DlpConfigPort {
 
     void deletePolicy(String id);
 
+    List<DlpEdmDatasetSettings> listEdmDatasetSettings();
+
+    DlpEdmDatasetSettings createEdmDataset(DlpEdmDatasetSettingsUpdate update);
+
+    DlpEdmDatasetSettings updateEdmDataset(String id, DlpEdmDatasetSettingsUpdate update);
+
+    DlpImportResult importEdmDatasetValues(String id, DlpImportValues update);
+
+    void deleteEdmDataset(String id);
+
+    List<DlpFingerprintLibrarySettings> listFingerprintLibrarySettings();
+
+    DlpFingerprintLibrarySettings createFingerprintLibrary(DlpFingerprintLibrarySettingsUpdate update);
+
+    DlpFingerprintLibrarySettings updateFingerprintLibrary(String id, DlpFingerprintLibrarySettingsUpdate update);
+
+    DlpImportResult importFingerprintDocument(String id, DlpFingerprintImport update);
+
+    void deleteFingerprintLibrary(String id);
+
     record DlpPatternSettings(
             String id,
             String name,
@@ -250,5 +270,65 @@ public interface DlpConfigPort {
             recipientAddressPatterns = recipientAddressPatterns == null ? null : List.copyOf(recipientAddressPatterns);
             ruleGroupIds = ruleGroupIds == null ? null : List.copyOf(ruleGroupIds);
         }
+    }
+
+    record DlpEdmDatasetSettings(
+            String id,
+            String name,
+            String description,
+            boolean enabled,
+            long valueCount,
+            Instant createdAt,
+            Instant updatedAt
+    ) {
+    }
+
+    record DlpEdmDatasetSettingsUpdate(
+            String name,
+            String description,
+            Boolean enabled
+    ) {
+    }
+
+    record DlpImportValues(
+            List<String> values,
+            String text
+    ) {
+        public DlpImportValues {
+            values = values == null ? List.of() : List.copyOf(values);
+        }
+    }
+
+    record DlpFingerprintLibrarySettings(
+            String id,
+            String name,
+            String description,
+            boolean enabled,
+            long documentCount,
+            long chunkCount,
+            Instant createdAt,
+            Instant updatedAt
+    ) {
+    }
+
+    record DlpFingerprintLibrarySettingsUpdate(
+            String name,
+            String description,
+            Boolean enabled
+    ) {
+    }
+
+    record DlpFingerprintImport(
+            String documentName,
+            String text
+    ) {
+    }
+
+    record DlpImportResult(
+            long importedCount,
+            long duplicateCount,
+            long ignoredCount,
+            long totalCount
+    ) {
     }
 }

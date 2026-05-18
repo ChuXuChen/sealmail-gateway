@@ -19,6 +19,7 @@ public interface RelayPolicyPort {
             String passwordSecretRef,
             int timeoutMs,
             String envelopeFrom,
+            boolean allowUnconfiguredExternalRecipientDomains,
             Instant updatedAt
     ) {
     }
@@ -31,7 +32,8 @@ public interface RelayPolicyPort {
             String passwordSecretRef,
             Boolean clearPasswordSecretRef,
             Integer timeoutMs,
-            String envelopeFrom
+            String envelopeFrom,
+            Boolean allowUnconfiguredExternalRecipientDomains
     ) {
     }
 

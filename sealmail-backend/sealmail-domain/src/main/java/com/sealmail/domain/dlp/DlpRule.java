@@ -30,7 +30,7 @@ public record DlpRule(
         if (name == null || name.isBlank()) {
             throw new IllegalArgumentException("DLP rule name cannot be blank");
         }
-        type = type != null ? type : DlpRuleType.REGEX;
+        type = type != null ? type : DlpRuleType.PATTERN;
         contentKinds = contentKinds == null ? List.of() : List.copyOf(contentKinds);
         minMatchCount = Math.max(1, minMatchCount);
         maxEvidenceCount = maxEvidenceCount <= 0 ? 5 : maxEvidenceCount;

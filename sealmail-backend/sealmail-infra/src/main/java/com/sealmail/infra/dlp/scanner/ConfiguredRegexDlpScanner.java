@@ -2,6 +2,7 @@ package com.sealmail.infra.dlp.scanner;
 
 import com.sealmail.domain.dlp.DlpScanResult;
 import com.sealmail.domain.dlp.DlpViolation;
+import com.sealmail.domain.dlp.DlpRuleType;
 import com.sealmail.domain.mailsecurity.MailEnvelope;
 import com.sealmail.domain.dlp.spi.DlpContentScanner;
 import com.sealmail.infra.dlp.config.DlpConfigService;
@@ -44,6 +45,9 @@ public class ConfiguredRegexDlpScanner implements DlpContentScanner {
         List<DlpViolation> violations = new ArrayList<>();
 
         for (DlpPatternConfig rule : configService.activePatternsFor(envelope)) {
+            if (rule.type() != DlpRuleType.PATTERN && rule.type() != DlpRuleType.REGEX) {
+                continue;
+            }
             Matcher matcher = Pattern.compile(rule.regex()).matcher(content);
             if (matcher.find()) {
                 violations.add(new DlpViolation(

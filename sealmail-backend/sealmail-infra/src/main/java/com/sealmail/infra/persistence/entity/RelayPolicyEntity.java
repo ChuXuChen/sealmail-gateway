@@ -39,6 +39,9 @@ public class RelayPolicyEntity {
     @Column(name = "envelope_from", length = 254)
     private String envelopeFrom;
 
+    @Column(name = "allow_unconfigured_external_recipient_domains", nullable = false)
+    private boolean allowUnconfiguredExternalRecipientDomains;
+
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
 

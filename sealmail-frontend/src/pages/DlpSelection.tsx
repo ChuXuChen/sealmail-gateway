@@ -4,8 +4,8 @@ import { DeleteOutlined, EditOutlined, PlusOutlined, ReloadOutlined } from '@ant
 import type { TableColumnsType } from 'antd';
 import { dlpApi } from '../api/client';
 import { getApiErrorMessage } from '../api/errors';
-import type { DlpPolicy, DlpRule, DlpRuleGroup, DlpSelection } from '../types';
-import { DataTable, EnabledTag, PageHeader, PageShell, confirmDeleteAction } from '../components/Page';
+import type { DlpPolicy, DlpRule, DlpRuleGroup, DlpSelection, DlpUbaSenderRisk } from '../types';
+import { DataTable, EnabledTag, PageHeader, PageShell, confirmDeleteAction, formatDateTime } from '../components/Page';
 
 const modeLabels: Record<string, string> = { MONITOR: '监控', ENFORCE: '执行' };
 const scopeLabels: Record<string, string> = { GLOBAL: '全局', SENDER_DOMAIN: '发件域', RECIPIENT_DOMAIN: '收件域' };
@@ -15,6 +15,7 @@ const DlpSelection: React.FC = () => {
   const [groups, setGroups] = useState<DlpRuleGroup[]>([]);
   const [policies, setPolicies] = useState<DlpPolicy[]>([]);
   const [selections, setSelections] = useState<DlpSelection[]>([]);
+  const [ubaRisks, setUbaRisks] = useState<DlpUbaSenderRisk[]>([]);
   const [loading, setLoading] = useState(false);
   const [groupOpen, setGroupOpen] = useState(false);
   const [policyOpen, setPolicyOpen] = useState(false);
@@ -34,16 +35,18 @@ const DlpSelection: React.FC = () => {
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
-      const [rulesResponse, groupsResponse, policiesResponse, selectionsResponse] = await Promise.all([
+      const [rulesResponse, groupsResponse, policiesResponse, selectionsResponse, ubaResponse] = await Promise.all([
         dlpApi.listRules(),
         dlpApi.listRuleGroups(),
         dlpApi.listPolicies(),
         dlpApi.listSelections(),
+        dlpApi.listUbaSenderRisks({ limit: 100 }),
       ]);
       setRules(rulesResponse.data.data);
       setGroups(groupsResponse.data.data);
       setPolicies(policiesResponse.data.data);
       setSelections(selectionsResponse.data.data);
+      setUbaRisks(ubaResponse.data.data);
     } catch (error) {
       message.error(getApiErrorMessage(error, '加载 DLP 策略配置失败'));
     } finally {
@@ -260,6 +263,17 @@ const DlpSelection: React.FC = () => {
     },
   ];
 
+  const ubaColumns: TableColumnsType<DlpUbaSenderRisk> = [
+    { title: '发件人', dataIndex: 'senderEmail', key: 'senderEmail', width: 220, ellipsis: true },
+    { title: '风险', dataIndex: 'riskLevel', key: 'riskLevel', width: 90, render: (value: string) => <Tag color={value === 'HIGH' ? 'red' : value === 'MEDIUM' ? 'orange' : 'green'}>{value}</Tag> },
+    { title: '外发', dataIndex: 'outboundMessages', key: 'outboundMessages', width: 90 },
+    { title: '外部域', dataIndex: 'externalDomainCount', key: 'externalDomainCount', width: 90 },
+    { title: 'DLP 命中', dataIndex: 'dlpHitCount', key: 'dlpHitCount', width: 100 },
+    { title: '高风险', dataIndex: 'highRiskCount', key: 'highRiskCount', width: 90 },
+    { title: '原因', dataIndex: 'lastReasons', key: 'lastReasons', ellipsis: true, render: (values: string[]) => values.join('；') || '-' },
+    { title: '最近活动', dataIndex: 'lastSeenAt', key: 'lastSeenAt', width: 170, render: formatDateTime },
+  ];
+
   return (
     <PageShell>
       <PageHeader
@@ -298,6 +312,13 @@ const DlpSelection: React.FC = () => {
                 <Space style={{ marginBottom: 12 }}><Button icon={<PlusOutlined />} onClick={showCreateLegacy}>添加范围</Button></Space>
                 <DataTable<DlpSelection> rowKey="id" loading={loading} dataSource={selections} columns={legacyColumns} scroll={{ x: 720 }} pagination={{ pageSize: 20, total: selections.length }} />
               </>
+            ),
+          },
+          {
+            key: 'uba',
+            label: 'UBA 风险',
+            children: (
+              <DataTable<DlpUbaSenderRisk> rowKey="senderEmail" loading={loading} dataSource={ubaRisks} columns={ubaColumns} scroll={{ x: 1040 }} pagination={{ pageSize: 20, total: ubaRisks.length }} />
             ),
           },
         ]}

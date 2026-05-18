@@ -8,6 +8,7 @@ public record RelayPolicyRequest(
         String passwordSecretRef,
         Boolean clearPasswordSecretRef,
         Integer timeoutMs,
-        String envelopeFrom
+        String envelopeFrom,
+        Boolean allowUnconfiguredExternalRecipientDomains
 ) {
 }

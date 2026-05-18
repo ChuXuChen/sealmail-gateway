@@ -138,6 +138,8 @@ public class DlpStep {
                             + ", recommendedAction=" + result.recommendedAction()
                             + ", severity=" + result.maxSeverity()
                             + ", eventId=" + result.eventId()
+                            + ", ubaRisk=" + result.ubaRiskLevel()
+                            + ", ubaActionUpgraded=" + result.ubaActionUpgraded()
                             + ", rules=" + String.join(",", ruleNames(result)));
         } catch (Exception e) {
             log.warn("Failed to record DLP audit log: {}", e.getMessage());

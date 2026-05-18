@@ -7,14 +7,17 @@ import com.sealmail.app.dto.request.DlpTestApiRequest;
 import com.sealmail.app.dto.response.DlpEvaluationResponse;
 import com.sealmail.app.dto.response.DlpEventResponse;
 import com.sealmail.app.dto.response.DlpEvidenceResponse;
+import com.sealmail.app.dto.response.DlpUbaSenderRiskResponse;
 import com.sealmail.app.security.PermissionChecker;
 import com.sealmail.app.security.UserContext;
 import com.sealmail.domain.dlp.DlpEvaluationResult;
 import com.sealmail.domain.dlp.DlpEvidence;
 import com.sealmail.domain.dlp.DlpScanEvent;
 import com.sealmail.domain.dlp.DlpTestRequest;
+import com.sealmail.domain.dlp.DlpUbaSenderRisk;
 import com.sealmail.domain.dlp.spi.DlpEvaluationPort;
 import com.sealmail.domain.dlp.spi.DlpEventRepository;
+import com.sealmail.domain.dlp.spi.DlpUbaAnalyticsPort;
 import com.sealmail.domain.mailsecurity.MailDirection;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -26,13 +29,16 @@ public class DlpOperationsUseCase {
 
     private final DlpEvaluationPort dlpEvaluationPort;
     private final DlpEventRepository eventRepository;
+    private final DlpUbaAnalyticsPort ubaAnalyticsPort;
     private final PermissionChecker permissionChecker;
 
     public DlpOperationsUseCase(DlpEvaluationPort dlpEvaluationPort,
                                 DlpEventRepository eventRepository,
+                                DlpUbaAnalyticsPort ubaAnalyticsPort,
                                 PermissionChecker permissionChecker) {
         this.dlpEvaluationPort = dlpEvaluationPort;
         this.eventRepository = eventRepository;
+        this.ubaAnalyticsPort = ubaAnalyticsPort;
         this.permissionChecker = permissionChecker;
     }
 
@@ -86,6 +92,14 @@ public class DlpOperationsUseCase {
                 .toList();
     }
 
+    @Transactional(readOnly = true)
+    public List<DlpUbaSenderRiskResponse> listUbaSenderRisks(int limit, UserContext user) {
+        permissionChecker.checkCanViewQuarantine(user);
+        return ubaAnalyticsPort.listSenderRisks(limit).stream()
+                .map(this::toUbaRiskResponse)
+                .toList();
+    }
+
     @Transactional
     public void markFalsePositive(String quarantineId, DlpFalsePositiveRequest request, UserContext user) {
         permissionChecker.checkCanManageQuarantine(user);
@@ -124,7 +138,10 @@ public class DlpOperationsUseCase {
                 result.monitorMode(),
                 result.scanDurationMs(),
                 result.warnings(),
-                result.evidence().stream().map(this::toEvidenceResponse).toList()
+                result.evidence().stream().map(this::toEvidenceResponse).toList(),
+                result.ubaRiskLevel().name(),
+                result.ubaRiskReasons(),
+                result.ubaActionUpgraded()
         );
     }
 
@@ -146,6 +163,9 @@ public class DlpOperationsUseCase {
                 event.extractionWarnings(),
                 event.monitorMode(),
                 event.scanDurationMs(),
+                event.ubaRiskLevel().name(),
+                event.ubaRiskReasons(),
+                event.ubaActionUpgraded(),
                 event.quarantineId(),
                 event.falsePositive(),
                 event.falsePositiveAt(),
@@ -173,6 +193,22 @@ public class DlpOperationsUseCase {
                 evidence.severity(),
                 evidence.action().name(),
                 evidence.createdAt()
+        );
+    }
+
+    private DlpUbaSenderRiskResponse toUbaRiskResponse(DlpUbaSenderRisk risk) {
+        return new DlpUbaSenderRiskResponse(
+                risk.senderEmail(),
+                risk.totalMessages(),
+                risk.outboundMessages(),
+                risk.externalDomainCount(),
+                risk.dlpHitCount(),
+                risk.highRiskCount(),
+                risk.riskLevel().name(),
+                risk.lastReasons(),
+                risk.firstSeenAt(),
+                risk.lastSeenAt(),
+                risk.updatedAt()
         );
     }
 }

@@ -62,6 +62,15 @@ public class DlpScanEventEntity {
     @Column(name = "scan_duration_ms", nullable = false)
     private long scanDurationMs;
 
+    @Column(name = "uba_risk_level", nullable = false, length = 16)
+    private String ubaRiskLevel;
+
+    @Column(name = "uba_risk_reasons", columnDefinition = "TEXT")
+    private String ubaRiskReasons;
+
+    @Column(name = "uba_action_upgraded", nullable = false)
+    private boolean ubaActionUpgraded;
+
     @Column(name = "quarantine_id", length = 128)
     private String quarantineId;
 

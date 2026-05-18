@@ -229,6 +229,7 @@ enabled=false
 host=localhost
 port=25
 timeoutMs=30000
+allowUnconfiguredExternalRecipientDomains=false
 ```
 
 API：
@@ -251,11 +252,14 @@ curl -X PUT http://localhost:8080/api/v1/runtime-policies/relay \
     "username": "sealmail",
     "passwordSecretRef": "file:/run/secrets/sealmail_relay_password",
     "timeoutMs": 30000,
-    "envelopeFrom": "gateway@example.test"
+    "envelopeFrom": "gateway@example.test",
+    "allowUnconfiguredExternalRecipientDomains": false
   }'
 ```
 
 密码只保存 secret 引用，不保存明文。
+
+`allowUnconfiguredExternalRecipientDomains` 默认为 `false`。开启后，仅允许未配置的外部收件域继续使用全局 Relay 投递；发件人域仍必须是启用的本地域，已配置但停用的收件域仍会被拒绝，DLP、强制加密失败和隔离策略仍优先执行。
 
 ### 8.2 隔离策略
 
@@ -361,9 +365,13 @@ DLP 配置同样在数据库里。主要资源：
 
 ```text
 /api/v1/dlp/patterns
+/api/v1/dlp/rules
 /api/v1/dlp/rule-groups
 /api/v1/dlp/policies
 /api/v1/dlp/selections
+/api/v1/dlp/edm-datasets
+/api/v1/dlp/fingerprint-libraries
+/api/v1/dlp/uba/senders
 /api/v1/dlp/test
 /api/v1/dlp/policies/{id}/simulate
 /api/v1/dlp/quarantine
@@ -371,11 +379,19 @@ DLP 配置同样在数据库里。主要资源：
 
 建议配置顺序：
 
-1. 建规则：正则或内置规则、命中次数、证据数量、脱敏策略、动作、严重度、优先级。
+1. 建规则：`PATTERN`、`EDM` 或 `FINGERPRINT`，并设置命中次数、证据数量、脱敏策略、动作、严重度、优先级。
 2. 建规则组：把多个规则组合成可复用集合。
 3. 建策略：指定方向、模式和规则组。
 4. 建生效范围：按全局、域名、发件人、收件人等范围绑定策略或规则。
 5. 用 test/simulate 验证，再放量启用。
+
+`PATTERN` 规则覆盖正则、关键词和内置模板。旧 `REGEX`、`KEYWORD`、`BUILTIN` 请求会在保存后映射为 `PATTERN`；关键词会转义为正则，内置模板支持身份证、银行卡、API Key/Token、私钥块和中国手机号。
+
+EDM 精确匹配先创建数据集，再导入敏感值。导入时系统只保存规范化后的 SHA-256 哈希和必要索引，不保存明文值；规则的 `pattern` 字段填写数据集 ID。
+
+文档指纹先创建指纹库，再导入已抽取文本。系统按文本片段生成哈希指纹；规则的 `pattern` 字段填写指纹库 ID。第一版主要覆盖正文、HTML 和已能抽取文本的附件。
+
+UBA 风险不会单独阻断邮件，而是在 DLP 命中后根据发件人历史基线、首次外部域、非常规时间、大附件和历史 DLP 命中提升风险。高风险可把 `WARN` 升级为 `MUST_ENCRYPT` 或 `QUARANTINE`；风险概览可通过 `/api/v1/dlp/uba/senders` 查询。
 
 ## 9. 可选：配置国密 GM Edge
 

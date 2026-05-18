@@ -117,6 +117,7 @@ public class RelayPolicyService implements RelayPolicyPort {
         entity.setPasswordSecretRef(null);
         entity.setTimeoutMs(30000);
         entity.setEnvelopeFrom(null);
+        entity.setAllowUnconfiguredExternalRecipientDomains(false);
         entity.setCreatedAt(now);
         entity.setUpdatedAt(now);
         return entity;
@@ -151,6 +152,9 @@ public class RelayPolicyService implements RelayPolicyPort {
         if (update.envelopeFrom() != null) {
             entity.setEnvelopeFrom(blankToNull(update.envelopeFrom()));
         }
+        if (update.allowUnconfiguredExternalRecipientDomains() != null) {
+            entity.setAllowUnconfiguredExternalRecipientDomains(update.allowUnconfiguredExternalRecipientDomains());
+        }
     }
 
     private RelayPolicySettings toSettings(RelayPolicyEntity entity) {
@@ -163,6 +167,7 @@ public class RelayPolicyService implements RelayPolicyPort {
                 entity.getPasswordSecretRef(),
                 entity.getTimeoutMs(),
                 entity.getEnvelopeFrom(),
+                entity.isAllowUnconfiguredExternalRecipientDomains(),
                 entity.getUpdatedAt());
     }
 
@@ -182,6 +187,9 @@ public class RelayPolicyService implements RelayPolicyPort {
         }
         if (update.envelopeFrom() != null) {
             fields.add("envelopeFrom");
+        }
+        if (update.allowUnconfiguredExternalRecipientDomains() != null) {
+            fields.add("recipientDomainScope");
         }
         return fields.isEmpty() ? List.of("GENERAL") : List.copyOf(fields);
     }

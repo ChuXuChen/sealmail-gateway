@@ -15,7 +15,12 @@ import com.sealmail.domain.policy.event.DlpPatternConfigChanged;
 import com.sealmail.domain.policy.event.DlpSelectionConfigChanged;
 import com.sealmail.domain.policy.DispositionAction;
 import com.sealmail.domain.shared.model.EmailAddress;
+import com.sealmail.infra.dlp.DlpHashSupport;
 import com.sealmail.infra.events.DomainEventPublisher;
+import com.sealmail.infra.persistence.entity.DlpEdmDatasetEntity;
+import com.sealmail.infra.persistence.entity.DlpEdmValueEntity;
+import com.sealmail.infra.persistence.entity.DlpFingerprintChunkEntity;
+import com.sealmail.infra.persistence.entity.DlpFingerprintLibraryEntity;
 import com.sealmail.infra.persistence.entity.DlpPatternEntity;
 import com.sealmail.infra.persistence.entity.DlpPolicyEntity;
 import com.sealmail.infra.persistence.entity.DlpPolicyRuleGroupEntity;
@@ -30,7 +35,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
@@ -316,6 +323,183 @@ public class DlpConfigService implements DlpConfigPort {
         entityManager.remove(entity);
     }
 
+    @Override
+    @Transactional(readOnly = true)
+    public List<DlpEdmDatasetSettings> listEdmDatasetSettings() {
+        return entityManager.createQuery(
+                        "SELECT d FROM DlpEdmDatasetEntity d ORDER BY d.name ASC",
+                        DlpEdmDatasetEntity.class)
+                .getResultList()
+                .stream()
+                .map(this::toEdmDatasetSettings)
+                .toList();
+    }
+
+    @Override
+    public DlpEdmDatasetSettings createEdmDataset(DlpEdmDatasetSettingsUpdate update) {
+        if (update == null) {
+            throw new IllegalArgumentException("EDM dataset request cannot be empty");
+        }
+        Instant now = Instant.now();
+        DlpEdmDatasetEntity entity = new DlpEdmDatasetEntity();
+        entity.setId(UUID.randomUUID().toString());
+        entity.setCreatedAt(now);
+        applyEdmDatasetUpdate(entity, update, true);
+        entity.setValueCount(0);
+        entityManager.persist(entity);
+        return toEdmDatasetSettings(entity);
+    }
+
+    @Override
+    public DlpEdmDatasetSettings updateEdmDataset(String id, DlpEdmDatasetSettingsUpdate update) {
+        if (update == null) {
+            throw new IllegalArgumentException("EDM dataset request cannot be empty");
+        }
+        DlpEdmDatasetEntity entity = requireEdmDataset(id);
+        applyEdmDatasetUpdate(entity, update, false);
+        entityManager.merge(entity);
+        return toEdmDatasetSettings(entity);
+    }
+
+    @Override
+    public DlpImportResult importEdmDatasetValues(String id, DlpImportValues update) {
+        DlpEdmDatasetEntity dataset = requireEdmDataset(id);
+        List<String> values = importValues(update);
+        Set<String> existingHashes = edmHashes(id);
+        long imported = 0;
+        long duplicate = 0;
+        long ignored = 0;
+        Instant now = Instant.now();
+        for (String value : values) {
+            String normalized = DlpHashSupport.normalizeExactValue(value);
+            if (normalized.length() < 3) {
+                ignored++;
+                continue;
+            }
+            String hash = DlpHashSupport.sha256(normalized);
+            if (!existingHashes.add(hash)) {
+                duplicate++;
+                continue;
+            }
+            DlpEdmValueEntity entity = new DlpEdmValueEntity();
+            entity.setId(UUID.randomUUID().toString());
+            entity.setDatasetId(id);
+            entity.setValueHash(hash);
+            entity.setCreatedAt(now);
+            entityManager.persist(entity);
+            imported++;
+
+            String compactDigits = DlpHashSupport.compactDigits(value);
+            if (compactDigits.length() >= 8) {
+                String compactHash = DlpHashSupport.sha256(compactDigits);
+                if (existingHashes.add(compactHash)) {
+                    DlpEdmValueEntity compact = new DlpEdmValueEntity();
+                    compact.setId(UUID.randomUUID().toString());
+                    compact.setDatasetId(id);
+                    compact.setValueHash(compactHash);
+                    compact.setCreatedAt(now);
+                    entityManager.persist(compact);
+                }
+            }
+        }
+        dataset.setValueCount(countEdmValues(id));
+        dataset.setUpdatedAt(now);
+        entityManager.merge(dataset);
+        return new DlpImportResult(imported, duplicate, ignored, values.size());
+    }
+
+    @Override
+    public void deleteEdmDataset(String id) {
+        DlpEdmDatasetEntity entity = requireEdmDataset(id);
+        entityManager.remove(entity);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<DlpFingerprintLibrarySettings> listFingerprintLibrarySettings() {
+        return entityManager.createQuery(
+                        "SELECT l FROM DlpFingerprintLibraryEntity l ORDER BY l.name ASC",
+                        DlpFingerprintLibraryEntity.class)
+                .getResultList()
+                .stream()
+                .map(this::toFingerprintLibrarySettings)
+                .toList();
+    }
+
+    @Override
+    public DlpFingerprintLibrarySettings createFingerprintLibrary(DlpFingerprintLibrarySettingsUpdate update) {
+        if (update == null) {
+            throw new IllegalArgumentException("Fingerprint library request cannot be empty");
+        }
+        Instant now = Instant.now();
+        DlpFingerprintLibraryEntity entity = new DlpFingerprintLibraryEntity();
+        entity.setId(UUID.randomUUID().toString());
+        entity.setCreatedAt(now);
+        applyFingerprintLibraryUpdate(entity, update, true);
+        entity.setDocumentCount(0);
+        entity.setChunkCount(0);
+        entityManager.persist(entity);
+        return toFingerprintLibrarySettings(entity);
+    }
+
+    @Override
+    public DlpFingerprintLibrarySettings updateFingerprintLibrary(String id, DlpFingerprintLibrarySettingsUpdate update) {
+        if (update == null) {
+            throw new IllegalArgumentException("Fingerprint library request cannot be empty");
+        }
+        DlpFingerprintLibraryEntity entity = requireFingerprintLibrary(id);
+        applyFingerprintLibraryUpdate(entity, update, false);
+        entityManager.merge(entity);
+        return toFingerprintLibrarySettings(entity);
+    }
+
+    @Override
+    public DlpImportResult importFingerprintDocument(String id, DlpFingerprintImport update) {
+        DlpFingerprintLibraryEntity library = requireFingerprintLibrary(id);
+        String text = update != null ? update.text() : null;
+        if (text == null || text.isBlank()) {
+            throw new IllegalArgumentException("Fingerprint document text cannot be blank");
+        }
+        String documentId = UUID.randomUUID().toString();
+        String documentName = update.documentName() == null || update.documentName().isBlank()
+                ? "document-" + documentId
+                : update.documentName().trim();
+        List<String> chunks = fingerprintChunks(text);
+        Set<String> unique = new LinkedHashSet<>(chunks);
+        Instant now = Instant.now();
+        long imported = 0;
+        long duplicate = 0;
+        Set<String> existing = fingerprintHashes(id);
+        for (String hash : unique) {
+            if (!existing.add(hash)) {
+                duplicate++;
+                continue;
+            }
+            DlpFingerprintChunkEntity entity = new DlpFingerprintChunkEntity();
+            entity.setId(UUID.randomUUID().toString());
+            entity.setLibraryId(id);
+            entity.setDocumentId(documentId);
+            entity.setDocumentName(documentName);
+            entity.setChunkHash(hash);
+            entity.setCreatedAt(now);
+            entityManager.persist(entity);
+            imported++;
+        }
+        if (!unique.isEmpty()) {
+            library.setDocumentCount(library.getDocumentCount() + 1);
+        }
+        library.setChunkCount(countFingerprintChunks(id));
+        library.setUpdatedAt(now);
+        entityManager.merge(library);
+        return new DlpImportResult(imported, duplicate, chunks.size() - unique.size(), chunks.size());
+    }
+
+    @Override
+    public void deleteFingerprintLibrary(String id) {
+        DlpFingerprintLibraryEntity entity = requireFingerprintLibrary(id);
+        entityManager.remove(entity);
+    }
+
     @Transactional(readOnly = true)
     public List<DlpPolicy> listPolicies() {
         return entityManager.createQuery(
@@ -337,6 +521,44 @@ public class DlpConfigService implements DlpConfigPort {
     @Transactional(readOnly = true)
     public boolean appliesTo(MailEnvelope envelope) {
         return !activePatternsFor(envelope).isEmpty();
+    }
+
+    @Transactional(readOnly = true)
+    public boolean edmDatasetEnabled(String datasetId) {
+        return Optional.ofNullable(entityManager.find(DlpEdmDatasetEntity.class, datasetId))
+                .map(DlpEdmDatasetEntity::isEnabled)
+                .orElse(false);
+    }
+
+    @Transactional(readOnly = true)
+    public Set<String> edmHashes(String datasetId) {
+        if (datasetId == null || datasetId.isBlank()) {
+            return Set.of();
+        }
+        return new HashSet<>(entityManager.createQuery(
+                        "SELECT v.valueHash FROM DlpEdmValueEntity v WHERE v.datasetId = :datasetId",
+                        String.class)
+                .setParameter("datasetId", datasetId)
+                .getResultList());
+    }
+
+    @Transactional(readOnly = true)
+    public boolean fingerprintLibraryEnabled(String libraryId) {
+        return Optional.ofNullable(entityManager.find(DlpFingerprintLibraryEntity.class, libraryId))
+                .map(DlpFingerprintLibraryEntity::isEnabled)
+                .orElse(false);
+    }
+
+    @Transactional(readOnly = true)
+    public Set<String> fingerprintHashes(String libraryId) {
+        if (libraryId == null || libraryId.isBlank()) {
+            return Set.of();
+        }
+        return new HashSet<>(entityManager.createQuery(
+                        "SELECT c.chunkHash FROM DlpFingerprintChunkEntity c WHERE c.libraryId = :libraryId",
+                        String.class)
+                .setParameter("libraryId", libraryId)
+                .getResultList());
     }
 
     @Transactional(readOnly = true)
@@ -434,13 +656,47 @@ public class DlpConfigService implements DlpConfigPort {
         return toPolicy(entity);
     }
 
+    private void applyEdmDatasetUpdate(DlpEdmDatasetEntity entity,
+                                       DlpEdmDatasetSettingsUpdate update,
+                                       boolean create) {
+        if (create || update.name() != null) {
+            entity.setName(requireText(update.name(), "EDM 数据集名称不能为空"));
+        }
+        if (update.description() != null) {
+            entity.setDescription(blankToNull(update.description()));
+        } else if (create) {
+            entity.setDescription(null);
+        }
+        if (create || update.enabled() != null) {
+            entity.setEnabled(update.enabled() == null || update.enabled());
+        }
+        entity.setUpdatedAt(Instant.now());
+    }
+
+    private void applyFingerprintLibraryUpdate(DlpFingerprintLibraryEntity entity,
+                                               DlpFingerprintLibrarySettingsUpdate update,
+                                               boolean create) {
+        if (create || update.name() != null) {
+            entity.setName(requireText(update.name(), "文档指纹库名称不能为空"));
+        }
+        if (update.description() != null) {
+            entity.setDescription(blankToNull(update.description()));
+        } else if (create) {
+            entity.setDescription(null);
+        }
+        if (create || update.enabled() != null) {
+            entity.setEnabled(update.enabled() == null || update.enabled());
+        }
+        entity.setUpdatedAt(Instant.now());
+    }
+
     private void applyPatternUpdate(DlpPatternEntity entity, DlpPatternUpdate update, boolean create) {
         if (update == null) {
             throw new IllegalArgumentException("DLP pattern request cannot be empty");
         }
-        DlpRuleType type = create || update.type() != null
-                ? parseEnumOrDefault(DlpRuleType.class, update.type(), DlpRuleType.REGEX, "DLP rule type 无效")
-                : parseEnumOrDefault(DlpRuleType.class, entity.getRuleType(), DlpRuleType.REGEX, "DLP rule type 无效");
+        DlpRuleType requestedType = create || update.type() != null
+                ? parseEnumOrDefault(DlpRuleType.class, update.type(), DlpRuleType.PATTERN, "DLP rule type 无效")
+                : parseEnumOrDefault(DlpRuleType.class, entity.getRuleType(), DlpRuleType.PATTERN, "DLP rule type 无效");
         if (create || update.name() != null) {
             String name = requireText(update.name(), "规则名称不能为空");
             entity.setName(name);
@@ -450,9 +706,6 @@ public class DlpConfigService implements DlpConfigPort {
         } else if (create) {
             entity.setDescription(null);
         }
-        if (create || update.type() != null) {
-            entity.setRuleType(type.name());
-        }
         if (update.builtinCode() != null) {
             entity.setBuiltinCode(blankToNull(update.builtinCode()));
         } else if (create) {
@@ -460,17 +713,35 @@ public class DlpConfigService implements DlpConfigPort {
         }
         if (create || update.regex() != null || update.type() != null) {
             String pattern = firstNonNull(update.regex(), entity.getRegex());
-            if (type == DlpRuleType.REGEX) {
-                pattern = requireText(pattern, "正则表达式不能为空");
+            String builtinCode = firstNonNull(update.builtinCode(), entity.getBuiltinCode());
+            if (requestedType == DlpRuleType.REGEX || requestedType == DlpRuleType.PATTERN) {
+                pattern = requireText(pattern, "检测模式不能为空");
                 validateRegex(pattern);
-            } else if (type == DlpRuleType.KEYWORD) {
+                entity.setRuleType(DlpRuleType.PATTERN.name());
+            } else if (requestedType == DlpRuleType.KEYWORD) {
                 pattern = requireText(pattern, "关键词不能为空");
-            } else if (type == DlpRuleType.BUILTIN) {
-                if (update.builtinCode() != null || create) {
-                    entity.setBuiltinCode(requireText(firstNonNull(update.builtinCode(), entity.getBuiltinCode()), "内置规则编码不能为空"));
-                }
+                pattern = keywordRegex(pattern);
+                validateRegex(pattern);
+                entity.setRuleType(DlpRuleType.PATTERN.name());
+            } else if (requestedType == DlpRuleType.BUILTIN) {
+                String code = requireText(builtinCode, "内置规则编码不能为空");
+                entity.setBuiltinCode(code);
+                pattern = builtinRegex(code);
+                entity.setRuleType(DlpRuleType.PATTERN.name());
+            } else if (requestedType == DlpRuleType.EDM) {
+                pattern = requireText(pattern, "EDM 数据集 ID 不能为空");
+                entity.setRuleType(DlpRuleType.EDM.name());
+            } else if (requestedType == DlpRuleType.FINGERPRINT) {
+                pattern = requireText(pattern, "文档指纹库 ID 不能为空");
+                entity.setRuleType(DlpRuleType.FINGERPRINT.name());
+            } else {
+                throw new IllegalArgumentException("DLP rule type 无效");
             }
             entity.setRegex(blankToNull(pattern));
+        } else if (create) {
+            entity.setRuleType(DlpRuleType.PATTERN.name());
+        } else if (update.type() != null) {
+            entity.setRuleType(canonicalType(requestedType).name());
         }
         if (create || update.contentKinds() != null) {
             entity.setContentKinds(serializeList(parseEnumNames(DlpContentKind.class, update.contentKinds(), "DLP content kind 无效")));
@@ -486,10 +757,14 @@ public class DlpConfigService implements DlpConfigPort {
             entity.setMaxEvidenceCount(maxEvidenceCount);
         }
         if (create || update.maskingStrategy() != null) {
+            DlpMaskingStrategy defaultMasking = switch (canonicalType(requestedType)) {
+                case EDM, FINGERPRINT -> DlpMaskingStrategy.HASH_ONLY;
+                default -> DlpMaskingStrategy.DEFAULT;
+            };
             entity.setMaskingStrategy(parseEnumOrDefault(
                     DlpMaskingStrategy.class,
                     update.maskingStrategy(),
-                    DlpMaskingStrategy.DEFAULT,
+                    defaultMasking,
                     "DLP masking strategy 无效").name());
         }
         if (create || update.action() != null) {
@@ -637,14 +912,39 @@ public class DlpConfigService implements DlpConfigPort {
         return entity;
     }
 
+    private DlpEdmDatasetEntity requireEdmDataset(String id) {
+        DlpEdmDatasetEntity entity = entityManager.find(DlpEdmDatasetEntity.class, id);
+        if (entity == null) {
+            throw new IllegalArgumentException("EDM dataset not found: " + id);
+        }
+        return entity;
+    }
+
+    private DlpFingerprintLibraryEntity requireFingerprintLibrary(String id) {
+        DlpFingerprintLibraryEntity entity = entityManager.find(DlpFingerprintLibraryEntity.class, id);
+        if (entity == null) {
+            throw new IllegalArgumentException("Fingerprint library not found: " + id);
+        }
+        return entity;
+    }
+
     private DlpPatternConfig toPatternConfig(DlpPatternEntity entity) {
+        DlpRuleType storedType = parseEnumOrDefault(DlpRuleType.class, entity.getRuleType(), DlpRuleType.PATTERN, "DLP rule type 无效");
+        String pattern = entity.getRegex();
+        String builtinCode = entity.getBuiltinCode();
+        DlpRuleType type = canonicalType(storedType);
+        if (storedType == DlpRuleType.KEYWORD) {
+            pattern = keywordRegex(pattern);
+        } else if (storedType == DlpRuleType.BUILTIN) {
+            pattern = builtinRegex(builtinCode);
+        }
         return new DlpPatternConfig(
                 entity.getId(),
                 entity.getName(),
                 entity.getDescription(),
-                entity.getRegex(),
-                parseEnumOrDefault(DlpRuleType.class, entity.getRuleType(), DlpRuleType.REGEX, "DLP rule type 无效"),
-                entity.getBuiltinCode(),
+                pattern,
+                type,
+                builtinCode,
                 parseContentKinds(entity.getContentKinds()),
                 entity.getMinMatchCount() > 0 ? entity.getMinMatchCount() : 1,
                 entity.getMaxEvidenceCount() > 0 ? entity.getMaxEvidenceCount() : 5,
@@ -878,6 +1178,31 @@ public class DlpConfigService implements DlpConfigPort {
         );
     }
 
+    private DlpEdmDatasetSettings toEdmDatasetSettings(DlpEdmDatasetEntity entity) {
+        return new DlpEdmDatasetSettings(
+                entity.getId(),
+                entity.getName(),
+                entity.getDescription(),
+                entity.isEnabled(),
+                entity.getValueCount(),
+                entity.getCreatedAt(),
+                entity.getUpdatedAt()
+        );
+    }
+
+    private DlpFingerprintLibrarySettings toFingerprintLibrarySettings(DlpFingerprintLibraryEntity entity) {
+        return new DlpFingerprintLibrarySettings(
+                entity.getId(),
+                entity.getName(),
+                entity.getDescription(),
+                entity.isEnabled(),
+                entity.getDocumentCount(),
+                entity.getChunkCount(),
+                entity.getCreatedAt(),
+                entity.getUpdatedAt()
+        );
+    }
+
     private List<String> ruleIdsForGroup(String groupId) {
         return entityManager.createQuery(
                         "SELECT i FROM DlpRuleGroupItemEntity i WHERE i.ruleGroupId = :groupId ORDER BY i.position ASC, i.createdAt ASC",
@@ -946,6 +1271,94 @@ public class DlpConfigService implements DlpConfigPort {
         entityManager.createQuery("DELETE FROM DlpPolicyRuleGroupEntity i WHERE i.policyId = :policyId")
                 .setParameter("policyId", policyId)
                 .executeUpdate();
+    }
+
+    private long countEdmValues(String datasetId) {
+        return entityManager.createQuery(
+                        "SELECT COUNT(v.id) FROM DlpEdmValueEntity v WHERE v.datasetId = :datasetId",
+                        Long.class)
+                .setParameter("datasetId", datasetId)
+                .getSingleResult();
+    }
+
+    private long countFingerprintChunks(String libraryId) {
+        return entityManager.createQuery(
+                        "SELECT COUNT(c.id) FROM DlpFingerprintChunkEntity c WHERE c.libraryId = :libraryId",
+                        Long.class)
+                .setParameter("libraryId", libraryId)
+                .getSingleResult();
+    }
+
+    private List<String> importValues(DlpImportValues update) {
+        List<String> values = new ArrayList<>();
+        if (update != null) {
+            values.addAll(update.values());
+            if (update.text() != null) {
+                for (String line : update.text().split("\\R|,")) {
+                    if (!line.isBlank()) {
+                        values.add(line.trim());
+                    }
+                }
+            }
+        }
+        return values;
+    }
+
+    private List<String> fingerprintChunks(String text) {
+        String normalized = Optional.ofNullable(text)
+                .orElse("")
+                .toLowerCase(Locale.ROOT)
+                .replaceAll("[^\\p{L}\\p{N}]+", " ")
+                .trim();
+        if (normalized.isBlank()) {
+            return List.of();
+        }
+        String[] tokens = normalized.split("\\s+");
+        List<String> hashes = new ArrayList<>();
+        if (tokens.length >= 5) {
+            for (int i = 0; i <= tokens.length - 5; i++) {
+                hashes.add(DlpHashSupport.sha256(String.join(" ", java.util.Arrays.copyOfRange(tokens, i, i + 5))));
+            }
+            return hashes;
+        }
+        String compact = normalized.replace(" ", "");
+        int window = Math.min(32, compact.length());
+        if (window < 8) {
+            return List.of();
+        }
+        for (int i = 0; i <= compact.length() - window; i++) {
+            hashes.add(DlpHashSupport.sha256(compact.substring(i, i + window)));
+        }
+        return hashes;
+    }
+
+    private DlpRuleType canonicalType(DlpRuleType type) {
+        if (type == DlpRuleType.REGEX || type == DlpRuleType.KEYWORD || type == DlpRuleType.BUILTIN) {
+            return DlpRuleType.PATTERN;
+        }
+        return type != null ? type : DlpRuleType.PATTERN;
+    }
+
+    private String keywordRegex(String keywords) {
+        List<String> values = normalizeTextList(keywords == null ? List.of() : java.util.Arrays.asList(keywords.split("[,\\n]")));
+        if (values.isEmpty()) {
+            throw new IllegalArgumentException("关键词不能为空");
+        }
+        return values.stream()
+                .map(Pattern::quote)
+                .collect(java.util.stream.Collectors.joining("|", "(?:", ")"));
+    }
+
+    private String builtinRegex(String builtinCode) {
+        String code = requireText(builtinCode, "内置规则编码不能为空").toUpperCase(Locale.ROOT);
+        return switch (code) {
+            case "CN_ID_CARD" -> "\\b[1-9]\\d{5}(19|20)\\d{2}(0[1-9]|1[0-2])(0[1-9]|[12]\\d|3[01])\\d{3}[\\dXx]\\b";
+            case "BANK_CARD" -> "\\b\\d{16,19}\\b";
+            case "API_KEY" -> "(?i)\\b(?:api[_-]?key|secret[_-]?key|access[_-]?token)\\s*[:=]\\s*['\\\"]?[A-Za-z0-9_\\-]{16,}";
+            case "PRIVATE_KEY" -> "-----BEGIN [A-Z ]*PRIVATE KEY-----";
+            case "PHONE_CN" -> "\\b1[3-9]\\d{9}\\b";
+            default -> throw new IllegalArgumentException("未知内置规则编码: " + builtinCode);
+        };
     }
 
     private void validateRegex(String regex) {

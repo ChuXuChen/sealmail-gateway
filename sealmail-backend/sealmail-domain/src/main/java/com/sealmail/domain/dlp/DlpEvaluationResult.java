@@ -15,7 +15,10 @@ public record DlpEvaluationResult(
         List<String> policyIds,
         List<String> ruleGroupIds,
         boolean monitorMode,
-        long scanDurationMs
+        long scanDurationMs,
+        DlpUbaRiskLevel ubaRiskLevel,
+        List<String> ubaRiskReasons,
+        boolean ubaActionUpgraded
 ) {
     public DlpEvaluationResult {
         action = action != null ? action : DispositionAction.WARN;
@@ -25,6 +28,8 @@ public record DlpEvaluationResult(
         warnings = warnings == null ? List.of() : List.copyOf(warnings);
         policyIds = policyIds == null ? List.of() : List.copyOf(policyIds);
         ruleGroupIds = ruleGroupIds == null ? List.of() : List.copyOf(ruleGroupIds);
+        ubaRiskLevel = ubaRiskLevel != null ? ubaRiskLevel : DlpUbaRiskLevel.LOW;
+        ubaRiskReasons = ubaRiskReasons == null ? List.of() : List.copyOf(ubaRiskReasons);
         maxSeverity = Math.max(0, maxSeverity);
     }
 

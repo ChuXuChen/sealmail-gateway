@@ -87,7 +87,7 @@ public class ManageRuntimePolicyUseCase {
 
     private RelayPolicyPort.RelayPolicySettingsUpdate toRelayUpdate(RelayPolicyRequest request) {
         if (request == null) {
-            return new RelayPolicyPort.RelayPolicySettingsUpdate(null, null, null, null, null, null, null, null);
+            return new RelayPolicyPort.RelayPolicySettingsUpdate(null, null, null, null, null, null, null, null, null);
         }
         return new RelayPolicyPort.RelayPolicySettingsUpdate(
                 request.enabled(),
@@ -97,7 +97,8 @@ public class ManageRuntimePolicyUseCase {
                 request.passwordSecretRef(),
                 request.clearPasswordSecretRef(),
                 request.timeoutMs(),
-                request.envelopeFrom());
+                request.envelopeFrom(),
+                request.allowUnconfiguredExternalRecipientDomains());
     }
 
     private QuarantinePolicyPort.QuarantinePolicySettingsUpdate toQuarantineUpdate(QuarantinePolicyRequest request) {
@@ -179,6 +180,7 @@ public class ManageRuntimePolicyUseCase {
                 settings.passwordSecretRef(),
                 settings.timeoutMs(),
                 settings.envelopeFrom(),
+                settings.allowUnconfiguredExternalRecipientDomains(),
                 settings.updatedAt());
     }
 
