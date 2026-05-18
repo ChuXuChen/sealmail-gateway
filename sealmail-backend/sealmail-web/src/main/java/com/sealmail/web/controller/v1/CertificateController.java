@@ -25,6 +25,9 @@ import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
@@ -55,6 +58,19 @@ public class CertificateController {
             @Parameter(description = "证书指纹ID") @PathVariable String id,
             @AuthenticationPrincipal UserContext user) {
         return ApiResponse.ok(queryCertificateUseCase.findById(id, user));
+    }
+
+    @GetMapping("/{id}/pem")
+    @Operation(summary = "导出公开证书 PEM", description = "只返回证书公钥材料；托管私钥不可导出")
+    public ResponseEntity<String> exportPem(
+            @Parameter(description = "证书指纹ID") @PathVariable String id,
+            @AuthenticationPrincipal UserContext user) {
+        String pem = queryCertificateUseCase.exportCertificatePem(id, user);
+        return ResponseEntity.ok()
+                .contentType(MediaType.TEXT_PLAIN)
+                .header(HttpHeaders.CONTENT_DISPOSITION,
+                        "attachment; filename=\"" + safeFilename(id) + ".pem\"")
+                .body(pem);
     }
 
     @GetMapping
@@ -151,5 +167,9 @@ public class CertificateController {
             @AuthenticationPrincipal UserContext user) {
         deleteCertificateUseCase.execute(id, user);
         return ApiResponse.noContent();
+    }
+
+    private String safeFilename(String value) {
+        return value == null ? "certificate" : value.replaceAll("[^A-Za-z0-9._-]", "_");
     }
 }

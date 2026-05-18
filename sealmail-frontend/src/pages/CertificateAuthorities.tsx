@@ -36,7 +36,9 @@ const CertificateAuthorities: React.FC = () => {
     algorithmOptions,
     createIntermediate,
     createRoot,
+    copyPem,
     deleteCa,
+    downloadPem,
     expandedRowKeys,
     filters,
     issuing,
@@ -243,6 +245,8 @@ const CertificateAuthorities: React.FC = () => {
         rootById={rootById}
         onClose={() => setDetail(null)}
         onConfirmAction={openConfirm}
+        onCopyPem={copyPem}
+        onDownloadPem={downloadPem}
         onTrust={trust}
       />
 

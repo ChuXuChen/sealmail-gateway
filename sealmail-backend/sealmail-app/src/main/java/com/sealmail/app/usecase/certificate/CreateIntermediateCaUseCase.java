@@ -10,7 +10,9 @@ import com.sealmail.app.security.UserContext;
 import com.sealmail.domain.certificate.Certificate;
 import com.sealmail.domain.certificate.CertificateId;
 import com.sealmail.domain.certificate.CertificateRepository;
-import com.sealmail.domain.certificate.spi.CertificateCryptoPort;
+import com.sealmail.domain.key.KeyManagementPort;
+import com.sealmail.domain.key.KeyProvider;
+import com.sealmail.domain.key.KeyPurpose;
 import com.sealmail.domain.shared.model.EmailAddress;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -26,9 +28,9 @@ public class CreateIntermediateCaUseCase {
 
     private final CertificateRepository certificateRepository;
     private final CertificateDtoMapper mapper;
-    private final CertificateCryptoPort certificateCryptoPort;
     private final CertificateMaterialAssembler certificateMaterialAssembler;
     private final CertificatePrivateKeyMaterialService privateKeyMaterialService;
+    private final KeyManagementPort keyManagementPort;
     private final PermissionChecker permissionChecker;
     private final CertificateChainService certificateChainService;
     private final CertificateAlgorithmPolicy certificateAlgorithmPolicy;
@@ -36,9 +38,9 @@ public class CreateIntermediateCaUseCase {
 
     public CreateIntermediateCaUseCase(CertificateRepository certificateRepository,
                                        CertificateDtoMapper mapper,
-                                       CertificateCryptoPort certificateCryptoPort,
                                        CertificateMaterialAssembler certificateMaterialAssembler,
                                        CertificatePrivateKeyMaterialService privateKeyMaterialService,
+                                       KeyManagementPort keyManagementPort,
                                        PermissionChecker permissionChecker,
                                        CertificateChainService certificateChainService,
                                        CertificateAlgorithmPolicy certificateAlgorithmPolicy,
@@ -46,9 +48,9 @@ public class CreateIntermediateCaUseCase {
                                        int defaultIntermediateValidityDays) {
         this.certificateRepository = certificateRepository;
         this.mapper = mapper;
-        this.certificateCryptoPort = certificateCryptoPort;
         this.certificateMaterialAssembler = certificateMaterialAssembler;
         this.privateKeyMaterialService = privateKeyMaterialService;
+        this.keyManagementPort = keyManagementPort;
         this.permissionChecker = permissionChecker;
         this.certificateChainService = certificateChainService;
         this.certificateAlgorithmPolicy = certificateAlgorithmPolicy;
@@ -90,17 +92,20 @@ public class CreateIntermediateCaUseCase {
             int validity = request.getValidityDays() != null
                     ? request.getValidityDays() : defaultIntermediateValidityDays;
 
-            CertificateCryptoPort.CertificateMaterial material =
-                    certificateCryptoPort.issueWithIssuer(new CertificateCryptoPort.IssueWithIssuerCommand(
+            EmailAddress owner = new EmailAddress("ica-" + request.getAlgorithm().toLowerCase() + "@sealmail.local");
+            KeyManagementPort.ManagedCertificateMaterial material = keyManagementPort.issueWithIssuer(
+                    new KeyProvider.IssueWithManagedIssuerCommand(
+                            owner.getValue(),
                             subjectDn,
                             request.getAlgorithm(),
                             rootCa.getPemContent(),
-                            privateKeyMaterialService.resolve(rootCa, "Root CA 没有关联私钥，无法签发"),
                             validity,
                             true,
                             0,
                             java.util.Set.of(),
-                            null));
+                            null,
+                            KeyPurpose.CA_SIGNING),
+                    privateKeyMaterialService.requireManagedKey(rootCa, "Root CA 没有关联私钥，无法签发").getKeyId());
 
             String thumbprint = material.certificate().thumbprint();
             CertificateId certId = new CertificateId(thumbprint);
@@ -108,9 +113,8 @@ public class CreateIntermediateCaUseCase {
                 throw BusinessException.conflict("证书已存在: " + thumbprint);
             }
 
-            EmailAddress owner = new EmailAddress("ica-" + request.getAlgorithm().toLowerCase() + "@sealmail.local");
             Certificate cert = certificateMaterialAssembler.issued(material.certificate(), owner);
-            privateKeyMaterialService.store(cert, material.privateKeyPem());
+            cert.setPrivateKeySecretRef(material.keyRecord().managedRef());
             cert.markAsCA(0);
             cert.setIssuerCertId(rootCa.getId().getThumbprint());
             if (request.getAlias() != null && !request.getAlias().isBlank()) {

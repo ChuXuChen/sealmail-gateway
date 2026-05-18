@@ -1,10 +1,9 @@
 package com.sealmail.infra.mail.pipeline.step;
 
 import com.sealmail.domain.audit.AuditLogType;
-import com.sealmail.domain.certificate.CertificateId;
-import com.sealmail.domain.certificate.CertificateRepository;
-import com.sealmail.domain.certificate.spi.CertificatePrivateKeyStore;
 import com.sealmail.domain.certificate.spi.SMIMEOperations;
+import com.sealmail.domain.key.KeyManagementPort;
+import com.sealmail.domain.key.KeyOperationResult;
 import com.sealmail.domain.mailsecurity.MailEnvelope;
 import com.sealmail.domain.mailsecurity.MailProcessingContext;
 import com.sealmail.domain.mailsecurity.MailProcessingErrorType;
@@ -15,7 +14,6 @@ import com.sealmail.infra.events.DomainEventPublisher;
 import com.sealmail.infra.mail.pipeline.MailProcessingHeaders;
 import com.sealmail.infra.mail.pipeline.MailProcessingAuditEvents;
 import com.sealmail.infra.mail.pipeline.MailProcessingMessages;
-import com.sealmail.infra.crypto.KeyStoreService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.messaging.Message;
@@ -30,20 +28,14 @@ public class DecryptStep {
     private static final Logger log = LoggerFactory.getLogger(DecryptStep.class);
 
     private final SMIMEOperations smimeOperations;
-    private final KeyStoreService keyStoreService;
-    private final CertificateRepository certificateRepository;
-    private final CertificatePrivateKeyStore privateKeyStore;
+    private final KeyManagementPort keyManagementPort;
     private final DomainEventPublisher domainEventPublisher;
 
     public DecryptStep(SMIMEOperations smimeOperations,
-                       KeyStoreService keyStoreService,
-                       CertificateRepository certificateRepository,
-                       CertificatePrivateKeyStore privateKeyStore,
+                       KeyManagementPort keyManagementPort,
                        DomainEventPublisher domainEventPublisher) {
         this.smimeOperations = smimeOperations;
-        this.keyStoreService = keyStoreService;
-        this.certificateRepository = certificateRepository;
-        this.privateKeyStore = privateKeyStore;
+        this.keyManagementPort = keyManagementPort;
         this.domainEventPublisher = domainEventPublisher;
     }
 
@@ -63,40 +55,28 @@ public class DecryptStep {
             }
 
             String recipientCert = context.certificateSelection().recipientCertificatePem();
-            String privateKey = null;
-
             String thumbprint = context.certificateSelection().recipientCertificateThumbprint();
-            if (thumbprint != null && !thumbprint.isBlank()) {
-                var certOpt = certificateRepository.findById(new CertificateId(thumbprint));
-                if (certOpt.isPresent() && certOpt.get().hasPrivateKey()) {
-                    privateKey = privateKeyStore.resolve(certOpt.get().getPrivateKeySecretRef()).orElse(null);
-                    log.info("使用证书关联私钥进行解密: thumbprint={}", thumbprint);
-                }
-            }
 
-            if (privateKey == null) {
-                for (var recipient : envelope.getRecipients()) {
-                    privateKey = keyStoreService.getPrivateKeyPem(recipient);
-                    if (privateKey != null) {
-                        log.info("从 KeyStore 加载私钥进行解密: recipient={}", recipient);
-                        break;
-                    }
-                }
-            }
-
-            if (recipientCert == null || privateKey == null) {
+            if (recipientCert == null || thumbprint == null || thumbprint.isBlank()
+                    || keyManagementPort.findActiveKeyForCertificate(thumbprint).isEmpty()) {
                 throw new MailProcessingException(
                         MailProcessingErrorType.DECRYPTION,
-                        "Encrypted S/MIME mail cannot be decrypted: missing recipient certificate/private key",
+                        missingKeyMessage(envelope),
                         context);
             }
 
-            byte[] decrypted = smimeOperations.decrypt(message.getPayload(), privateKey, recipientCert);
+            KeyOperationResult decryptResult =
+                    keyManagementPort.decryptSmimeForCertificate(thumbprint, message.getPayload(), recipientCert);
+            byte[] decrypted = decryptResult.payload();
             EmailAddress recipient = envelope.getRecipients().isEmpty() ? null : envelope.getRecipients().getFirst();
             if (recipient != null) {
                 domainEventPublisher.publishEvent(new MailDecrypted(envelope.getMessageId(), recipient));
             }
-            recordAudit(context, "SMIME_DECRYPT", "recipientCertificateThumbprint=" + thumbprint, true);
+            recordAudit(context, "SMIME_DECRYPT",
+                    "recipientCertificateThumbprint=" + thumbprint
+                            + ", keyId=" + decryptResult.keyRecord().getKeyId()
+                            + ", ownerEmail=" + decryptResult.keyRecord().getOwner().getValue(),
+                    true);
             return MailProcessingMessages.withPayload(message, decrypted);
 
         } catch (Exception e) {
@@ -137,5 +117,12 @@ public class DecryptStep {
     private MailProcessingContext context(Message<?> message) {
         Object value = message.getHeaders().get(MailProcessingHeaders.CONTEXT);
         return value instanceof MailProcessingContext context ? context : null;
+    }
+
+    private String missingKeyMessage(MailEnvelope envelope) {
+        String recipients = envelope.getRecipients().stream()
+                .map(EmailAddress::getValue)
+                .collect(java.util.stream.Collectors.joining(", "));
+        return "Encrypted S/MIME mail cannot be decrypted: missing managed key for recipient(s): " + recipients;
     }
 }

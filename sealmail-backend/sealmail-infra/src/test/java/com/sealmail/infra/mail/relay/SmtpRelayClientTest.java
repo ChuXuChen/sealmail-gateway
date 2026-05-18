@@ -17,12 +17,13 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class SmtpRelayClientTest {
 
     @Test
-    void sendsMessageThroughPlainSmtpWithAuthLogin() throws Exception {
+    void sendsMessageThroughPlainSmtpWithoutAuthentication() throws Exception {
         try (FakeSmtpServer fakeServer = new FakeSmtpServer()) {
             fakeServer.start();
 
@@ -31,7 +32,7 @@ class SmtpRelayClientTest {
 
             smtpRelayClient.send(new SmtpRelayRequest(
                     new SmtpRelayConnectionSettings("127.0.0.1", fakeServer.port(),
-                            "relay@example.com", "secret", 5000),
+                            "", "", 5000),
                     "relay@example.com",
                     List.of("alice@example.com", "bob@example.com"),
                     message
@@ -40,13 +41,29 @@ class SmtpRelayClientTest {
             fakeServer.awaitCompletion();
 
             assertTrue(fakeServer.commands().get(0).startsWith("EHLO "));
-            assertTrue(fakeServer.commands().contains("AUTH LOGIN"));
-            assertTrue(fakeServer.commands().contains("cmVsYXlAZXhhbXBsZS5jb20="));
-            assertTrue(fakeServer.commands().contains("c2VjcmV0"));
             assertTrue(fakeServer.commands().contains("MAIL FROM:<relay@example.com>"));
             assertTrue(fakeServer.commands().contains("RCPT TO:<alice@example.com>"));
             assertTrue(fakeServer.commands().contains("RCPT TO:<bob@example.com>"));
             assertEquals("..leading line", fakeServer.dataLines().get(2));
+        }
+    }
+
+    @Test
+    void rejectsAuthenticationBeforeTls() throws Exception {
+        try (FakeSmtpServer fakeServer = new FakeSmtpServer()) {
+            fakeServer.start();
+
+            SmtpRelayClient smtpRelayClient = new SmtpRelayClient();
+            SmtpRelayException error = assertThrows(SmtpRelayException.class, () -> smtpRelayClient.send(new SmtpRelayRequest(
+                    new SmtpRelayConnectionSettings("127.0.0.1", fakeServer.port(),
+                            "relay@example.com", "secret", 5000),
+                    "relay@example.com",
+                    List.of("alice@example.com"),
+                    "Subject: Test\n\nbody".getBytes(StandardCharsets.UTF_8)
+            )));
+
+            assertEquals("SMTP AUTH requires an established TLS/TLCP channel", error.getMessage());
+            assertTrue(fakeServer.commands().stream().noneMatch(command -> command.startsWith("AUTH")));
         }
     }
 

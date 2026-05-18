@@ -3,6 +3,7 @@ package com.sealmail.infra.config;
 import com.sealmail.domain.config.RelayPolicyPort;
 import com.sealmail.domain.config.SecretReferenceResolver;
 import com.sealmail.domain.mailsecurity.RelayProfile;
+import com.sealmail.domain.policy.DeliveryTransportProfile;
 import com.sealmail.domain.policy.event.RelayPolicyChanged;
 import com.sealmail.infra.events.DomainEventPublisher;
 import com.sealmail.infra.persistence.entity.RelayPolicyEntity;
@@ -86,7 +87,8 @@ public class RelayPolicyService implements RelayPolicyPort {
                 emptyToBlank(entity.getUsername()),
                 emptyToBlank(password),
                 entity.getTimeoutMs(),
-                entity.getEnvelopeFrom());
+                entity.getEnvelopeFrom(),
+                DeliveryTransportProfile.fromLegacyPort(entity.getPort()));
     }
 
     private RelayPolicyEntity entity() {

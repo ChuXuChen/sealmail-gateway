@@ -11,6 +11,9 @@ import com.sealmail.domain.certificate.Certificate;
 import com.sealmail.domain.certificate.CertificateId;
 import com.sealmail.domain.certificate.CertificateRepository;
 import com.sealmail.domain.certificate.spi.CertificateCryptoPort;
+import com.sealmail.domain.key.KeyManagementPort;
+import com.sealmail.domain.key.KeyProvider;
+import com.sealmail.domain.key.KeyPurpose;
 import com.sealmail.domain.shared.model.EmailAddress;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -38,9 +41,9 @@ public class IssueEndEntityUseCase {
     private final CertificateRepository certificateRepository;
     private final CertificateDtoMapper mapper;
     private final PermissionChecker permissionChecker;
-    private final CertificateCryptoPort certificateCryptoPort;
     private final CertificateMaterialAssembler certificateMaterialAssembler;
     private final CertificatePrivateKeyMaterialService privateKeyMaterialService;
+    private final KeyManagementPort keyManagementPort;
     private final CertificateChainService certificateChainService;
     private final CertificateAlgorithmPolicy certificateAlgorithmPolicy;
     private final String crlBaseUrl;
@@ -49,9 +52,9 @@ public class IssueEndEntityUseCase {
     public IssueEndEntityUseCase(CertificateRepository certificateRepository,
                                  CertificateDtoMapper mapper,
                                  PermissionChecker permissionChecker,
-                                 CertificateCryptoPort certificateCryptoPort,
                                  CertificateMaterialAssembler certificateMaterialAssembler,
                                  CertificatePrivateKeyMaterialService privateKeyMaterialService,
+                                 KeyManagementPort keyManagementPort,
                                  CertificateChainService certificateChainService,
                                  CertificateAlgorithmPolicy certificateAlgorithmPolicy,
                                  @Value("${sealmail.ca.crl-base-url:http://localhost:8080/api/v1/crl/}")
@@ -61,9 +64,9 @@ public class IssueEndEntityUseCase {
         this.certificateRepository = certificateRepository;
         this.mapper = mapper;
         this.permissionChecker = permissionChecker;
-        this.certificateCryptoPort = certificateCryptoPort;
         this.certificateMaterialAssembler = certificateMaterialAssembler;
         this.privateKeyMaterialService = privateKeyMaterialService;
+        this.keyManagementPort = keyManagementPort;
         this.certificateChainService = certificateChainService;
         this.certificateAlgorithmPolicy = certificateAlgorithmPolicy;
         this.crlBaseUrl = crlBaseUrl;
@@ -92,17 +95,20 @@ public class IssueEndEntityUseCase {
                     ? request.getValidityDays() : defaultEndEntityValidityDays;
             String crlUrl = buildCrlUrl(intermediateCa.getId().getThumbprint());
 
-            CertificateCryptoPort.CertificateMaterial material =
-                    certificateCryptoPort.issueWithIssuer(new CertificateCryptoPort.IssueWithIssuerCommand(
+            KeyManagementPort.ManagedCertificateMaterial material = keyManagementPort.issueWithIssuer(
+                    new KeyProvider.IssueWithManagedIssuerCommand(
+                            owner.getValue(),
                             subjectDn,
                             request.getAlgorithm(),
                             intermediateCa.getPemContent(),
-                            privateKeyMaterialService.resolve(intermediateCa, "Intermediate CA 没有关联私钥，无法签发"),
                             validity,
                             false,
                             0,
                             Set.of(CertificateCryptoPort.EKU_EMAIL_PROTECTION),
-                            crlUrl));
+                            crlUrl,
+                            KeyPurpose.SMIME),
+                    privateKeyMaterialService.requireManagedKey(intermediateCa, "Intermediate CA 没有关联私钥，无法签发")
+                            .getKeyId());
 
             String thumbprint = material.certificate().thumbprint();
             CertificateId certId = new CertificateId(thumbprint);
@@ -111,7 +117,7 @@ public class IssueEndEntityUseCase {
             }
 
             Certificate cert = certificateMaterialAssembler.issued(material.certificate(), owner);
-            privateKeyMaterialService.store(cert, material.privateKeyPem());
+            cert.setPrivateKeySecretRef(material.keyRecord().managedRef());
             cert.setIssuerCertId(intermediateCa.getId().getThumbprint());
             cert.setCrlDistributionPointUrl(crlUrl);
             if (request.getAlias() != null && !request.getAlias().isBlank()) {

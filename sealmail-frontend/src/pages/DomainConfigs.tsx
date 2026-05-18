@@ -38,7 +38,8 @@ const DomainConfigs: React.FC = () => {
       signingEnabled: false,
       dkimEnabled: false,
       deliveryHost: undefined,
-      deliveryPort: 25,
+      deliveryTransportProfile: 'SMTP_CLEAR',
+      decryptionMode: 'GATEWAY_TERMINATED',
       active: true,
     });
     setCreateModalVisible(true);
@@ -53,7 +54,8 @@ const DomainConfigs: React.FC = () => {
       dkimEnabled: domain.dkimEnabled,
       localDomain: domain.localDomain,
       deliveryHost: domain.deliveryHost,
-      deliveryPort: domain.deliveryPort || 25,
+      deliveryTransportProfile: domain.deliveryTransportProfile || 'SMTP_CLEAR',
+      decryptionMode: domain.decryptionMode || 'GATEWAY_TERMINATED',
       active: domain.active,
     });
     setEditModalVisible(true);

@@ -3,6 +3,7 @@ import { message } from 'antd';
 import { caApi, certificateApi, certificateBindingApi } from '../../api/client';
 import { getApiErrorMessage } from '../../api/errors';
 import type { Certificate, CertificateBinding, CertificateBindingPurpose } from '../../types';
+import { copyTextToClipboard, downloadTextFile, safePemFilename } from '../../utils/pemExport';
 import type {
   CertificatePagination,
   ImportCertificateValues,
@@ -159,6 +160,35 @@ export const useCertificates = () => {
     }
   }, [loadData]);
 
+  const fetchPem = useCallback(async (id: string) => {
+    const response = await certificateApi.pem(id);
+    return response.data;
+  }, []);
+
+  const copyPem = useCallback(async (record: Certificate) => {
+    try {
+      const pem = await fetchPem(record.id);
+      await copyTextToClipboard(pem);
+      message.success('公开 PEM 已复制');
+      return true;
+    } catch (error) {
+      message.error(getApiErrorMessage(error, '复制 PEM 失败'));
+      return false;
+    }
+  }, [fetchPem]);
+
+  const downloadPem = useCallback(async (record: Certificate) => {
+    try {
+      const pem = await fetchPem(record.id);
+      downloadTextFile(safePemFilename(record.alias || record.ownerEmail || record.id), pem);
+      message.success('公开 PEM 已下载');
+      return true;
+    } catch (error) {
+      message.error(getApiErrorMessage(error, '下载 PEM 失败'));
+      return false;
+    }
+  }, [fetchPem]);
+
   const deleteBinding = useCallback(async (id: string) => {
     try {
       await certificateBindingApi.delete(id);
@@ -175,9 +205,11 @@ export const useCertificates = () => {
     bindCertificate,
     bindings,
     caCandidates,
+    copyPem,
     data,
     deleteBinding,
     deleteCertificate,
+    downloadPem,
     generateSelfSigned,
     importCertificate,
     issueByCa,

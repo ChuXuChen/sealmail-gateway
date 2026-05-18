@@ -24,6 +24,10 @@ public class DomainConfigResponse {
     private boolean signingEnabled;
     private boolean dkimEnabled;
     private String deliveryHost;
+    private String deliveryTransportProfile;
+    private String deliveryTransportProfileDisplayName;
     private Integer deliveryPort;
+    private String decryptionMode;
+    private String decryptionModeDisplayName;
     private boolean active;
 }

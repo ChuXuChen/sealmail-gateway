@@ -1,12 +1,10 @@
 package com.sealmail.infra.crypto;
 
-import com.sealmail.domain.certificate.spi.CertificatePrivateKeyStore;
+import com.sealmail.domain.certificate.spi.CertificatePrivateKeySink;
 import org.springframework.stereotype.Component;
 
-import java.util.Optional;
-
 @Component
-public class KeyStoreCertificatePrivateKeyStore implements CertificatePrivateKeyStore {
+public class KeyStoreCertificatePrivateKeyStore implements CertificatePrivateKeySink {
 
     private static final String PREFIX = "keystore:certificate:";
 
@@ -21,19 +19,6 @@ public class KeyStoreCertificatePrivateKeyStore implements CertificatePrivateKey
         String alias = alias(certificateThumbprint);
         keyStoreService.storePemKeyPair(alias, privateKeyPem, certificatePem);
         return PREFIX + certificateThumbprint;
-    }
-
-    @Override
-    public Optional<String> resolve(String privateKeyRef) {
-        if (privateKeyRef == null || privateKeyRef.isBlank()) {
-            return Optional.empty();
-        }
-        String value = privateKeyRef.trim();
-        if (!value.startsWith(PREFIX)) {
-            return Optional.empty();
-        }
-        return Optional.ofNullable(keyStoreService.getPrivateKeyPemByAlias(alias(value.substring(PREFIX.length()))))
-                .filter(pem -> !pem.isBlank());
     }
 
     private String alias(String thumbprint) {

@@ -16,7 +16,6 @@ import org.springframework.messaging.support.MessageBuilder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
@@ -33,15 +32,17 @@ public class RoutingService {
     private final MailAuthPolicyRepository mailAuthPolicyRepository;
     private final DomainEventPublisher domainEventPublisher;
     private final RelayPolicyPort relayPolicyPort;
+    private final DeliveryRouteResolver deliveryRouteResolver;
 
     public RoutingService(MailRouter mailRouter,
-                           DomainConfigRepository domainConfigRepository,
-                           MailCryptoSelectionService cryptoSelectionService,
-                           MailProcessingRepository mailProcessingRepository,
-                           PostfixProperties postfixProperties,
-                           MailAuthPolicyRepository mailAuthPolicyRepository,
-                           DomainEventPublisher domainEventPublisher,
-                           RelayPolicyPort relayPolicyPort) {
+	                           DomainConfigRepository domainConfigRepository,
+	                           MailCryptoSelectionService cryptoSelectionService,
+	                           MailProcessingRepository mailProcessingRepository,
+	                           PostfixProperties postfixProperties,
+	                           MailAuthPolicyRepository mailAuthPolicyRepository,
+	                           DomainEventPublisher domainEventPublisher,
+	                           RelayPolicyPort relayPolicyPort,
+	                           DeliveryRouteResolver deliveryRouteResolver) {
         this.mailRouter = mailRouter;
         this.domainConfigRepository = domainConfigRepository;
         this.cryptoSelectionService = cryptoSelectionService;
@@ -50,6 +51,9 @@ public class RoutingService {
         this.mailAuthPolicyRepository = mailAuthPolicyRepository;
         this.domainEventPublisher = domainEventPublisher;
         this.relayPolicyPort = relayPolicyPort;
+        this.deliveryRouteResolver = deliveryRouteResolver != null
+                ? deliveryRouteResolver
+                : new DomainDeliveryRouteResolver(domainConfigRepository);
     }
 
     @Transactional
@@ -448,42 +452,15 @@ public class RoutingService {
             return Optional.empty();
         }
 
-        List<String> recipientDomains = envelope.getRecipients().stream()
-                .map(EmailAddress::getDomain)
-                .distinct()
-                .toList();
-        List<DomainDeliveryRoute> routes = new ArrayList<>();
-        for (String recipientDomain : recipientDomains) {
-            Optional<DomainDeliveryRoute> route = findActiveDomainConfig(recipientDomain)
-                    .filter(config -> !config.isLocalDomain())
-                    .filter(DomainConfig::hasDeliveryRoute)
-                    .map(config -> new DomainDeliveryRoute(config.getDeliveryHost(), config.getDeliveryPort()));
-            if (route.isEmpty()) {
-                return Optional.empty();
-            }
-            routes.add(route.get());
-        }
-
-        DomainDeliveryRoute first = routes.get(0);
-        boolean sameTarget = routes.stream().allMatch(first::sameTarget);
-        if (!sameTarget) {
-            log.warn("Skip domain delivery route because recipients target multiple delivery routes: {}", recipientDomains);
-            return Optional.empty();
-        }
-        return Optional.of(new RelayProfile(
-                first.host(),
-                first.port(),
+        return deliveryRouteResolver.resolve(envelope.getRecipients())
+                .map(route -> new RelayProfile(
+                route.host(),
+                route.port(),
                 "",
                 "",
                 postfixProperties.getTimeout(),
-                postfixProperties.getEnvelopeFrom()));
-    }
-
-    private record DomainDeliveryRoute(String host, int port) {
-
-        private boolean sameTarget(DomainDeliveryRoute other) {
-            return port == other.port && host.equalsIgnoreCase(other.host);
-        }
+                postfixProperties.getEnvelopeFrom(),
+                route.transportProfile()));
     }
 
 }

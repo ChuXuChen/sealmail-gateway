@@ -64,11 +64,11 @@ const CertificateTable: React.FC<CertificateTableProps> = ({
       render: (algorithm: string) => <CertificateAlgorithmTag algorithm={algorithm} />,
     },
     {
-      title: '私钥',
+      title: '托管私钥',
       key: 'hasPrivateKey',
       render: (_, record) =>
         record.hasPrivateKey ? (
-          <Tag color="success" icon={<KeyOutlined />}>私钥</Tag>
+          <Tag color="success" icon={<KeyOutlined />}>托管</Tag>
         ) : (
           <Tag>无钥</Tag>
         ),

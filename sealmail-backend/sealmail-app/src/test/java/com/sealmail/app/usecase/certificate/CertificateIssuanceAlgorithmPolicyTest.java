@@ -13,7 +13,7 @@ import com.sealmail.domain.certificate.CertificateRepository;
 import com.sealmail.domain.certificate.KeyUsage;
 import com.sealmail.domain.certificate.ValidityPeriod;
 import com.sealmail.domain.certificate.spi.CertificateCryptoPort;
-import com.sealmail.domain.certificate.spi.CertificatePrivateKeyStore;
+import com.sealmail.domain.key.KeyPurpose;
 import com.sealmail.domain.shared.model.EmailAddress;
 import org.junit.jupiter.api.Test;
 
@@ -34,8 +34,9 @@ class CertificateIssuanceAlgorithmPolicyTest {
     private final CertificateChainService chainService = new CertificateChainService(repository);
     private final CertificateDtoMapper mapper = new CertificateDtoMapper(chainService);
     private final FakeCertificateCryptoPort cryptoPort = new FakeCertificateCryptoPort();
+    private final FakeKeyManagementPort keyManagementPort = new FakeKeyManagementPort();
     private final CertificatePrivateKeyMaterialService privateKeyMaterialService =
-            new CertificatePrivateKeyMaterialService(new FakeCertificatePrivateKeyStore());
+            new CertificatePrivateKeyMaterialService(keyManagementPort);
     private final CertificateAlgorithmPolicy algorithmPolicy = new CertificateAlgorithmPolicy();
     private final PermissionChecker permissionChecker = new PermissionChecker();
     private final CertificateMaterialAssembler materialAssembler = new CertificateMaterialAssembler();
@@ -44,12 +45,14 @@ class CertificateIssuanceAlgorithmPolicyTest {
     void createIntermediateRejectsAlgorithmDifferentFromRootCa() {
         Certificate root = ca("sm2-root", "SM2", 1);
         repository.save(root);
+        keyManagementPort.importCertificateKey(root.getOwner(), root.getAlgorithm(), KeyPurpose.CA_SIGNING,
+                root.getId().getThumbprint(), root.getPemContent(), "test-private-key");
         CreateIntermediateCaUseCase useCase = new CreateIntermediateCaUseCase(
                 repository,
                 mapper,
-                cryptoPort,
                 materialAssembler,
                 privateKeyMaterialService,
+                keyManagementPort,
                 permissionChecker,
                 chainService,
                 algorithmPolicy,
@@ -72,13 +75,15 @@ class CertificateIssuanceAlgorithmPolicyTest {
     void issueEndEntityRejectsAlgorithmDifferentFromIntermediateCa() {
         Certificate intermediate = ca("sm2-intermediate", "SM2", 0);
         repository.save(intermediate);
+        keyManagementPort.importCertificateKey(intermediate.getOwner(), intermediate.getAlgorithm(), KeyPurpose.CA_SIGNING,
+                intermediate.getId().getThumbprint(), intermediate.getPemContent(), "test-private-key");
         IssueEndEntityUseCase useCase = new IssueEndEntityUseCase(
                 repository,
                 mapper,
                 permissionChecker,
-                cryptoPort,
                 materialAssembler,
                 privateKeyMaterialService,
+                keyManagementPort,
                 chainService,
                 algorithmPolicy,
                 "http://localhost:8080/api/v1/crl/",
@@ -101,6 +106,8 @@ class CertificateIssuanceAlgorithmPolicyTest {
     void signCsrRejectsAlgorithmDifferentFromIntermediateCa() {
         Certificate intermediate = ca("sm2-intermediate", "SM2", 0);
         repository.save(intermediate);
+        keyManagementPort.importCertificateKey(intermediate.getOwner(), intermediate.getAlgorithm(), KeyPurpose.CA_SIGNING,
+                intermediate.getId().getThumbprint(), intermediate.getPemContent(), "test-private-key");
         cryptoPort.csrAlgorithm = "RSA";
         SignCsrUseCase useCase = new SignCsrUseCase(
                 repository,
@@ -109,6 +116,7 @@ class CertificateIssuanceAlgorithmPolicyTest {
                 cryptoPort,
                 materialAssembler,
                 privateKeyMaterialService,
+                keyManagementPort,
                 chainService,
                 algorithmPolicy,
                 "http://localhost:8080/api/v1/crl/");
@@ -212,18 +220,6 @@ class CertificateIssuanceAlgorithmPolicyTest {
         @Override
         public CrlContent generateCrl(GenerateCrlCommand command) {
             throw new UnsupportedOperationException();
-        }
-    }
-
-    private static final class FakeCertificatePrivateKeyStore implements CertificatePrivateKeyStore {
-        @Override
-        public String store(String ownerEmail, String certificateThumbprint, String certificatePem, String privateKeyPem) {
-            return "test-secret:" + certificateThumbprint;
-        }
-
-        @Override
-        public Optional<String> resolve(String privateKeyRef) {
-            return Optional.of("resolved-private-key");
         }
     }
 

@@ -7,6 +7,8 @@ import com.sealmail.domain.certificate.Certificate;
 import com.sealmail.domain.certificate.CertificateId;
 import com.sealmail.domain.certificate.CertificateRepository;
 import com.sealmail.domain.certificate.spi.CertificateCryptoPort;
+import com.sealmail.domain.key.KeyManagementPort;
+import com.sealmail.domain.key.KeyProvider;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -36,6 +38,7 @@ public class GenerateCrlUseCase {
     private final CertificateRepository certificateRepository;
     private final CertificateCryptoPort certificateCryptoPort;
     private final CertificatePrivateKeyMaterialService privateKeyMaterialService;
+    private final KeyManagementPort keyManagementPort;
 
     public CrlContentResponse execute(String caCertId) {
         CertificateCryptoPort.CrlContent crl = generate(caCertId);
@@ -63,17 +66,17 @@ public class GenerateCrlUseCase {
         try {
             List<Certificate> children = certificateRepository.findByIssuerCertId(caCertId);
             Instant now = Instant.now();
-            CertificateCryptoPort.CrlContent crl = certificateCryptoPort.generateCrl(
-                    new CertificateCryptoPort.GenerateCrlCommand(
+            CertificateCryptoPort.CrlContent crl = keyManagementPort.generateCrl(
+                    new KeyProvider.GenerateManagedCrlCommand(
                             caCert.getPemContent(),
-                            privateKeyMaterialService.resolve(caCert, "CA 没有关联私钥，无法签发 CRL"),
                             now,
                             now.plusSeconds(24L * 60 * 60),
                             children.stream()
                                     .filter(Certificate::isRevoked)
                                     .map(this::toCrlEntry)
                                     .filter(java.util.Objects::nonNull)
-                                    .toList()));
+                                    .toList()),
+                    privateKeyMaterialService.requireManagedKey(caCert, "CA 没有关联私钥，无法签发 CRL").getKeyId());
 
             log.info("Generated CRL for CA {} ({} revoked entries)",
                     caCertId, children.stream().filter(Certificate::isRevoked).count());

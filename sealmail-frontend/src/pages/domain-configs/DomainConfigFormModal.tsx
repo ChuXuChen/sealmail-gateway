@@ -1,8 +1,8 @@
 import React from 'react';
-import { Button, Form, Input, InputNumber, Modal, Select, Space, Switch } from 'antd';
+import { Button, Form, Input, Modal, Select, Space, Switch, Tag } from 'antd';
 import type { FormInstance } from 'antd';
 import type { DomainConfigFormValues } from './domainConfigUtils';
-import { domainPattern } from './domainConfigUtils';
+import { deliveryProfilePort, deliveryTransportProfiles, domainPattern } from './domainConfigUtils';
 
 interface DomainConfigFormModalProps {
   form: FormInstance<DomainConfigFormValues>;
@@ -20,8 +20,13 @@ const encryptionPolicyOptions = [
 
 const algorithmOptions = [
   { value: 'AUTO', label: '自动选择' },
-  { value: 'GM_ONLY', label: '国密优先' },
-  { value: 'STANDARD_ONLY', label: '国际优先' },
+  { value: 'GM_ONLY', label: '仅国密' },
+  { value: 'STANDARD_ONLY', label: '仅国际' },
+];
+
+const decryptionModeOptions = [
+  { value: 'GATEWAY_TERMINATED', label: '网关代理解密' },
+  { value: 'END_TO_END_PASSTHROUGH', label: '端到端透传' },
 ];
 
 const DomainConfigFormModal: React.FC<DomainConfigFormModalProps> = ({
@@ -33,7 +38,9 @@ const DomainConfigFormModal: React.FC<DomainConfigFormModalProps> = ({
 }) => {
   const isCreate = mode === 'create';
   const localDomain = Form.useWatch('localDomain', form);
+  const deliveryTransportProfile = Form.useWatch('deliveryTransportProfile', form);
   const deliveryRouteDisabled = Boolean(localDomain);
+  const resolvedPort = deliveryProfilePort(deliveryTransportProfile);
 
   return (
     <Modal
@@ -61,7 +68,7 @@ const DomainConfigFormModal: React.FC<DomainConfigFormModalProps> = ({
                 onChange={(checked) => {
                   form.setFieldValue('encryptionPolicy', checked ? 'MANDATORY' : 'ALLOW');
                   if (checked) {
-                    form.setFieldsValue({ deliveryHost: undefined, deliveryPort: undefined });
+                    form.setFieldsValue({ deliveryHost: undefined });
                   }
                 }}
               />
@@ -89,6 +96,13 @@ const DomainConfigFormModal: React.FC<DomainConfigFormModalProps> = ({
         <Form.Item name="dkimEnabled" label="启用DKIM签名" valuePropName="checked">
           <Switch />
         </Form.Item>
+        <Form.Item
+          name="decryptionMode"
+          label="入站解密模式"
+          rules={[{ required: true, message: '请选择入站解密模式' }]}
+        >
+          <Select placeholder="请选择入站解密模式" options={decryptionModeOptions} />
+        </Form.Item>
         <Space size={12} align="start" className="full-width">
           <Form.Item
             name="deliveryHost"
@@ -103,8 +117,8 @@ const DomainConfigFormModal: React.FC<DomainConfigFormModalProps> = ({
             <Input disabled={deliveryRouteDisabled} placeholder="例如: 10.0.0.12 或 smtp.example.com" />
           </Form.Item>
           <Form.Item
-            name="deliveryPort"
-            label="端口"
+            name="deliveryTransportProfile"
+            label="传输配置"
             rules={[
               ({ getFieldValue }) => ({
                 validator: (_, value) => {
@@ -112,19 +126,23 @@ const DomainConfigFormModal: React.FC<DomainConfigFormModalProps> = ({
                   if (!host) {
                     return Promise.resolve();
                   }
-                  return value ? Promise.resolve() : Promise.reject(new Error('请输入外部发送端口'));
+                  return value ? Promise.resolve() : Promise.reject(new Error('请选择传输配置'));
                 },
               }),
             ]}
           >
-            <InputNumber
+            <Select
               disabled={deliveryRouteDisabled}
-              min={1}
-              max={65535}
-              precision={0}
-              placeholder="25"
-              style={{ width: 128 }}
+              placeholder="请选择传输配置"
+              style={{ width: 240 }}
+              options={deliveryTransportProfiles.map((profile) => ({
+                value: profile.value,
+                label: `${profile.label} (${profile.port})`,
+              }))}
             />
+          </Form.Item>
+          <Form.Item label="解析端口">
+            <Tag color={deliveryRouteDisabled ? 'default' : 'processing'}>{deliveryRouteDisabled ? '-' : resolvedPort}</Tag>
           </Form.Item>
         </Space>
         <Form.Item name="active" label="启用配置" valuePropName="checked">

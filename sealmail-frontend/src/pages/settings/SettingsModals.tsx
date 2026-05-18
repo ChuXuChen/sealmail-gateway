@@ -63,7 +63,7 @@ export const TestMailModal: React.FC<TestMailModalProps> = ({
   onFinish,
 }) => (
   <Modal
-    title="发送受保护测试邮件"
+    title="按当前配置发送测试邮件"
     open={open}
     onCancel={onCancel}
     onOk={() => form.submit()}
@@ -77,8 +77,8 @@ export const TestMailModal: React.FC<TestMailModalProps> = ({
       onFinish={onFinish}
       initialValues={{
         from: 'test@sealmail.local',
-        subject: 'SealMail 加密测试',
-        content: '这是一封用于验证当前域名策略、证书绑定和投递链路的测试邮件。',
+        subject: 'SealMail 测试邮件',
+        content: '这是一封用于验证当前域名策略和投递链路的测试邮件。',
       }}
     >
       <Row gutter={12}>

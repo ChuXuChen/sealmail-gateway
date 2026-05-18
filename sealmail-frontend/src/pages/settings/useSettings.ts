@@ -170,7 +170,7 @@ export const useSettings = ({ gmEdgeForm, quarantineForm, relayForm, smimeSuiteF
 
     setTestLoading(true);
     try {
-      const response = await mailTestApi.sendEncrypted({
+      const response = await mailTestApi.send({
         from: values.from,
         to: recipients,
         subject: values.subject,
@@ -179,7 +179,7 @@ export const useSettings = ({ gmEdgeForm, quarantineForm, relayForm, smimeSuiteF
       if (!response.data.success) {
         throw new Error(response.data.message || response.data.data);
       }
-      message.success(response.data.data || '加密测试邮件已提交');
+      message.success(response.data.data || '测试邮件已提交');
       testForm.resetFields();
       return true;
     } catch (error) {

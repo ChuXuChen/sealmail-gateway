@@ -11,6 +11,8 @@ import com.sealmail.domain.certificate.Certificate;
 import com.sealmail.domain.certificate.CertificateId;
 import com.sealmail.domain.certificate.CertificateRepository;
 import com.sealmail.domain.certificate.spi.CertificateCryptoPort;
+import com.sealmail.domain.key.KeyManagementPort;
+import com.sealmail.domain.key.KeyProvider;
 import com.sealmail.domain.shared.model.EmailAddress;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -30,6 +32,7 @@ public class SignCsrUseCase {
     private final CertificateCryptoPort certificateCryptoPort;
     private final CertificateMaterialAssembler certificateMaterialAssembler;
     private final CertificatePrivateKeyMaterialService privateKeyMaterialService;
+    private final KeyManagementPort keyManagementPort;
     private final CertificateChainService certificateChainService;
     private final CertificateAlgorithmPolicy certificateAlgorithmPolicy;
     private final String crlBaseUrl;
@@ -40,6 +43,7 @@ public class SignCsrUseCase {
                           CertificateCryptoPort certificateCryptoPort,
                           CertificateMaterialAssembler certificateMaterialAssembler,
                           CertificatePrivateKeyMaterialService privateKeyMaterialService,
+                          KeyManagementPort keyManagementPort,
                           CertificateChainService certificateChainService,
                           CertificateAlgorithmPolicy certificateAlgorithmPolicy,
                           @Value("${sealmail.ca.crl-base-url:http://localhost:8080/api/v1/crl/}")
@@ -50,6 +54,7 @@ public class SignCsrUseCase {
         this.certificateCryptoPort = certificateCryptoPort;
         this.certificateMaterialAssembler = certificateMaterialAssembler;
         this.privateKeyMaterialService = privateKeyMaterialService;
+        this.keyManagementPort = keyManagementPort;
         this.certificateChainService = certificateChainService;
         this.certificateAlgorithmPolicy = certificateAlgorithmPolicy;
         this.crlBaseUrl = crlBaseUrl;
@@ -86,13 +91,14 @@ public class SignCsrUseCase {
 
             int validity = request.getValidityDays() != null ? request.getValidityDays() : 365;
             String crlUrl = buildCrlUrl(caCert.getId().getThumbprint());
-            CertificateCryptoPort.CertificateDescriptor signed = certificateCryptoPort.signCsr(
-                    new CertificateCryptoPort.SignCsrCommand(
+            CertificateCryptoPort.CertificateDescriptor signed = keyManagementPort.signCsr(
+                    new KeyProvider.SignCsrManagedCommand(
                             request.getCsrPem(),
                             caCert.getPemContent(),
-                            privateKeyMaterialService.resolve(caCert, "所选 CA 证书没有关联私钥，无法签发"),
                             validity,
-                            crlUrl));
+                            crlUrl),
+                    privateKeyMaterialService.requireManagedKey(caCert, "所选 CA 证书没有关联私钥，无法签发")
+                            .getKeyId());
 
             String thumbprint = signed.thumbprint();
             CertificateId certId = new CertificateId(thumbprint);

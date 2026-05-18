@@ -65,7 +65,7 @@ export const roleOf = (cert: Certificate): string => {
 
 export const getUnavailableSigningReason = (cert: Certificate): string | null => {
   if (cert.pathLenConstraint !== 0) return '不是 Intermediate CA';
-  if (!cert.hasPrivateKey) return '未关联私钥';
+  if (!cert.hasPrivateKey) return '未关联托管私钥';
   if (cert.revoked) return '已吊销';
   if (!cert.trusted) return '未信任';
   if (cert.chainUsable === false) return '链路失效';

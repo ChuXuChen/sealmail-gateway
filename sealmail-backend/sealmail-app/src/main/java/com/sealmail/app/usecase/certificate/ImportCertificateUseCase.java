@@ -11,6 +11,7 @@ import com.sealmail.domain.certificate.CertificateId;
 import com.sealmail.domain.certificate.CertificateRepository;
 import com.sealmail.domain.certificate.spi.CertificateCryptoPort;
 import com.sealmail.domain.certificate.spi.CertificateValidator;
+import com.sealmail.domain.key.KeyRecord;
 import com.sealmail.domain.shared.model.EmailAddress;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
@@ -75,7 +76,10 @@ public class ImportCertificateUseCase {
             }
             if (request.getPrivateKeyData() != null && !request.getPrivateKeyData().isBlank()) {
                 certificateCryptoPort.validateCertificateMatchesPrivateKey(request.getPemData(), request.getPrivateKeyData());
-                privateKeyMaterialService.store(cert, request.getPrivateKeyData());
+                KeyRecord keyRecord = privateKeyMaterialService.store(cert, request.getPrivateKeyData());
+                if (keyRecord != null) {
+                    cert.setPrivateKeySecretRef(keyRecord.managedRef());
+                }
             }
 
             certificateRepository.save(cert);

@@ -9,6 +9,9 @@ import com.sealmail.domain.certificate.Certificate;
 import com.sealmail.domain.certificate.CertificateId;
 import com.sealmail.domain.certificate.CertificateRepository;
 import com.sealmail.domain.certificate.spi.CertificateCryptoPort;
+import com.sealmail.domain.key.KeyManagementPort;
+import com.sealmail.domain.key.KeyProvider;
+import com.sealmail.domain.key.KeyPurpose;
 import com.sealmail.domain.shared.model.EmailAddress;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
@@ -33,9 +36,8 @@ public class GenerateSelfSignedCertificateUseCase {
     private final CertificateRepository certificateRepository;
     private final CertificateDtoMapper mapper;
     private final PermissionChecker permissionChecker;
-    private final CertificateCryptoPort certificateCryptoPort;
     private final CertificateMaterialAssembler certificateMaterialAssembler;
-    private final CertificatePrivateKeyMaterialService privateKeyMaterialService;
+    private final KeyManagementPort keyManagementPort;
 
     public CertificateResponse execute(GenerateCertificateRequest request, UserContext user) {
         EmailAddress owner = new EmailAddress(request.getOwnerEmail());
@@ -49,15 +51,17 @@ public class GenerateSelfSignedCertificateUseCase {
 
             int validity = request.getValidityDays() != null ? request.getValidityDays() : 365;
 
-            CertificateCryptoPort.CertificateMaterial material =
-                    certificateCryptoPort.issueSelfSigned(new CertificateCryptoPort.IssueSelfSignedCommand(
+            KeyManagementPort.ManagedCertificateMaterial material = keyManagementPort.issueSelfSigned(
+                    new KeyProvider.IssueSelfSignedManagedCommand(
+                            owner.getValue(),
                             subjectDn,
                             request.getAlgorithm(),
                             validity,
                             false,
                             0,
                             Set.of(CertificateCryptoPort.EKU_EMAIL_PROTECTION),
-                            null));
+                            null,
+                            KeyPurpose.SMIME));
 
             String thumbprint = material.certificate().thumbprint();
             CertificateId certId = new CertificateId(thumbprint);
@@ -66,7 +70,7 @@ public class GenerateSelfSignedCertificateUseCase {
             }
 
             Certificate cert = certificateMaterialAssembler.issued(material.certificate(), owner);
-            privateKeyMaterialService.store(cert, material.privateKeyPem());
+            cert.setPrivateKeySecretRef(material.keyRecord().managedRef());
             if (request.getAlias() != null && !request.getAlias().isBlank()) {
                 cert.assignAlias(request.getAlias());
             }

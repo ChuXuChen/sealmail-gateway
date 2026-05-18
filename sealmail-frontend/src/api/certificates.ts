@@ -27,6 +27,11 @@ export const certificateApi = {
   getById: (id: string) =>
     apiClient.get<ApiResponse<Certificate>>(`/api/v1/certificates/${id}`),
 
+  pem: (id: string) =>
+    apiClient.get<string>(`/api/v1/certificates/${encodeURIComponent(id)}/pem`, {
+      responseType: 'text',
+    }),
+
   import: (data: CertificateImportRequest) =>
     apiClient.post<ApiResponse<Certificate>>('/api/v1/certificates/import', data),
 
@@ -71,6 +76,10 @@ export const certificateBindingApi = {
 export const caApi = {
   list: () => apiClient.get<ApiResponse<Certificate[]>>('/api/v1/cas'),
   getById: (id: string) => apiClient.get<ApiResponse<Certificate>>(`/api/v1/cas/${id}`),
+  pem: (id: string) =>
+    apiClient.get<string>(`/api/v1/cas/${encodeURIComponent(id)}/pem`, {
+      responseType: 'text',
+    }),
   createRoot: (data: CreateRootCaRequest) =>
     apiClient.post<ApiResponse<Certificate>>('/api/v1/cas/root', data),
   createIntermediate: (data: CreateIntermediateCaRequest) =>

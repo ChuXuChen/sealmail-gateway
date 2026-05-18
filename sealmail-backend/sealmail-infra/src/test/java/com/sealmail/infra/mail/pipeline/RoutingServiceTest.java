@@ -71,7 +71,8 @@ class RoutingServiceTest {
                 postfixProperties,
                 null,
                 null,
-                relayPolicy(true)
+                relayPolicy(true),
+                null
         );
 
         EmailAddress sender = new EmailAddress("alice@example.com");
@@ -130,7 +131,8 @@ class RoutingServiceTest {
                 postfixProperties,
                 null,
                 null,
-                relayPolicy(true)
+                relayPolicy(true),
+                null
         );
 
         EmailAddress sender = new EmailAddress("sender@example.com");
@@ -179,7 +181,8 @@ class RoutingServiceTest {
                 postfixProperties(),
                 null,
                 null,
-                relayPolicy(true)
+                relayPolicy(true),
+                null
         );
 
         EmailAddress sender = new EmailAddress("alice@example.com");
@@ -215,7 +218,8 @@ class RoutingServiceTest {
                 postfixProperties(),
                 null,
                 null,
-                relayPolicy(true)
+                relayPolicy(true),
+                null
         );
 
         EmailAddress sender = new EmailAddress("alice@example.com");
@@ -255,7 +259,8 @@ class RoutingServiceTest {
                 postfixProperties(),
                 mailAuthPolicies(Optional.of(dkimReadyPolicy())),
                 null,
-                relayPolicy(true)
+                relayPolicy(true),
+                null
         );
 
         EmailAddress sender = new EmailAddress("alice@example.com");
@@ -290,7 +295,8 @@ class RoutingServiceTest {
                 postfixProperties(),
                 null,
                 null,
-                relayPolicy(true)
+                relayPolicy(true),
+                null
         );
 
         EmailAddress sender = new EmailAddress("alice@example.com");
@@ -333,7 +339,8 @@ class RoutingServiceTest {
                 postfixProperties(),
                 null,
                 null,
-                relayPolicy(true)
+                relayPolicy(true),
+                null
         );
 
         EmailAddress sender = new EmailAddress("alice@example.com");
@@ -379,7 +386,8 @@ class RoutingServiceTest {
                 postfixProperties(),
                 null,
                 null,
-                relayPolicy(true)
+                relayPolicy(true),
+                null
         );
 
         EmailAddress sender = new EmailAddress("alice@example.com");
@@ -417,7 +425,8 @@ class RoutingServiceTest {
                 postfixProperties(),
                 null,
                 null,
-                relayPolicy(false)
+                relayPolicy(false),
+                null
         );
 
         EmailAddress sender = new EmailAddress("alice@example.com");
@@ -455,7 +464,8 @@ class RoutingServiceTest {
                 postfixProperties(),
                 null,
                 null,
-                relayPolicy(true)
+                relayPolicy(true),
+                null
         );
 
         EmailAddress sender = new EmailAddress("alice@example.com");
@@ -495,7 +505,8 @@ class RoutingServiceTest {
                 postfixProperties(),
                 null,
                 null,
-                relayPolicy(true)
+                relayPolicy(true),
+                null
         );
 
         EmailAddress sender = new EmailAddress("alice@example.com");
@@ -535,7 +546,8 @@ class RoutingServiceTest {
                 postfixProperties(),
                 null,
                 null,
-                relayPolicy(true)
+                relayPolicy(true),
+                null
         );
 
         EmailAddress sender = new EmailAddress("alice@example.com");
@@ -581,7 +593,8 @@ class RoutingServiceTest {
                 postfixProperties(),
                 null,
                 null,
-                relayPolicy(true)
+                relayPolicy(true),
+                null
         );
 
         EmailAddress sender = new EmailAddress("sender@remote.test");
@@ -656,7 +669,7 @@ class RoutingServiceTest {
     }
 
     private static MailCryptoSelectionService cryptoSelectionService(CertificateRepository certificateRepository) {
-        return new MailCryptoSelectionService(certificateRepository, new CryptoProfileSelector());
+        return new MailCryptoSelectionService(certificateRepository, new CryptoProfileSelector(), null);
     }
 
     private static RelayPolicyPort relayPolicy(boolean allowUnconfiguredExternalRecipientDomains) {

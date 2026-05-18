@@ -5,6 +5,7 @@ import {
   DownOutlined,
   FileAddOutlined,
   ImportOutlined,
+  KeyOutlined,
   PlusOutlined,
 } from '@ant-design/icons';
 import type { Certificate } from '../types';
@@ -18,6 +19,7 @@ import {
 import CertificateTable from './certificates/CertificateTable';
 import type {
   ImportCertificateValues,
+  ImportCertificateMode,
   IssueByCaValues,
   SelfSignedCertificateValues,
 } from './certificates/certificateUtils';
@@ -25,6 +27,7 @@ import { useCertificates } from './certificates/useCertificates';
 
 const Certificates: React.FC = () => {
   const [importModalVisible, setImportModalVisible] = useState(false);
+  const [importMode, setImportMode] = useState<ImportCertificateMode>('PUBLIC_CERTIFICATE');
   const [selfSignedModalVisible, setSelfSignedModalVisible] = useState(false);
   const [issueByCaModalVisible, setIssueByCaModalVisible] = useState(false);
   const [selectedCert, setSelectedCert] = useState<Certificate | null>(null);
@@ -35,9 +38,11 @@ const Certificates: React.FC = () => {
     bindCertificate,
     bindings,
     caCandidates,
+    copyPem,
     data,
     deleteBinding,
     deleteCertificate,
+    downloadPem,
     generateSelfSigned,
     importCertificate,
     issueByCa,
@@ -85,7 +90,10 @@ const Certificates: React.FC = () => {
   };
 
   const handleImport = async (values: ImportCertificateValues) => {
-    const ok = await importCertificate(values);
+    const ok = await importCertificate({
+      ...values,
+      privateKeyData: importMode === 'GATEWAY_MANAGED_PRIVATE_KEY' ? values.privateKeyData : undefined,
+    });
     if (ok) {
       setImportModalVisible(false);
       importForm.resetFields();
@@ -121,19 +129,33 @@ const Certificates: React.FC = () => {
                 {
                   key: 'import',
                   icon: <ImportOutlined />,
-                  label: '导入已有证书',
-                  onClick: () => setImportModalVisible(true),
+                  label: '导入公开证书',
+                  onClick: () => {
+                    setImportMode('PUBLIC_CERTIFICATE');
+                    importForm.resetFields();
+                    setImportModalVisible(true);
+                  },
+                },
+                {
+                  key: 'import-managed',
+                  icon: <KeyOutlined />,
+                  label: '导入网关托管私钥证书',
+                  onClick: () => {
+                    setImportMode('GATEWAY_MANAGED_PRIVATE_KEY');
+                    importForm.resetFields();
+                    setImportModalVisible(true);
+                  },
                 },
                 {
                   key: 'self-signed',
                   icon: <FileAddOutlined />,
-                  label: '生成自签名证书',
+                  label: '生成本地域托管证书',
                   onClick: openSelfSignedModal,
                 },
                 {
                   key: 'issue-by-ca',
                   icon: <AuditOutlined />,
-                  label: '通过 Intermediate CA 签发',
+                  label: '通过 CA 签发本地域托管证书',
                   disabled: caCandidates.length === 0,
                   onClick: openIssueByCaModal,
                 },
@@ -164,6 +186,7 @@ const Certificates: React.FC = () => {
 
       <ImportCertificateModal
         form={importForm}
+        mode={importMode}
         open={importModalVisible}
         onCancel={() => setImportModalVisible(false)}
         onFinish={handleImport}
@@ -188,6 +211,8 @@ const Certificates: React.FC = () => {
         certificate={selectedCert}
         open={!!selectedCert}
         onClose={() => setSelectedCert(null)}
+        onCopyPem={copyPem}
+        onDownloadPem={downloadPem}
         onTrust={trust}
         onUntrust={untrust}
       />

@@ -80,12 +80,33 @@ public class QueryCertificateUseCase {
     public CertificateResponse findById(String id, UserContext user) {
         permissionChecker.checkAuthenticated(user);
 
+        Certificate cert = findCertificateForUser(id, user);
+        return mapper.toResponse(cert);
+    }
+
+    public String exportCertificatePem(String id, UserContext user) {
+        Certificate cert = findCertificateForUser(id, user);
+        if (cert.isCA()) {
+            throw new ResourceNotFoundException("Certificate", id);
+        }
+        return cert.getPemContent();
+    }
+
+    public String exportCaPem(String id, UserContext user) {
+        Certificate cert = findCertificateForUser(id, user);
+        if (!cert.isCA()) {
+            throw new ResourceNotFoundException("CA", id);
+        }
+        return cert.getPemContent();
+    }
+
+    private Certificate findCertificateForUser(String id, UserContext user) {
+        permissionChecker.checkAuthenticated(user);
         CertificateId certId = new CertificateId(id);
         Certificate cert = certificateRepository.findById(certId)
                 .orElseThrow(() -> new ResourceNotFoundException("Certificate", id));
         permissionChecker.checkCanViewCertificates(user, cert.getOwner().getDomain());
-
-        return mapper.toResponse(cert);
+        return cert;
     }
 
     public boolean isChainUsable(Certificate certificate) {

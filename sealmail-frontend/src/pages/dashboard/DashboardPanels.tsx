@@ -203,7 +203,7 @@ const DashboardPanels: React.FC<DashboardPanelsProps> = ({ cryptoCapabilities, v
             </Link>
             <Link to={ROUTES.opsProtectedTestMail} className="dashboard-shortcut">
               <SafetyCertificateOutlined />
-              <span>加密测试邮件</span>
+              <span>测试邮件</span>
             </Link>
           </div>
         </section>

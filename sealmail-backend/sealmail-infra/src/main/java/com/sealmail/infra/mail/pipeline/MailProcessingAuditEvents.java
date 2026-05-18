@@ -101,6 +101,7 @@ public final class MailProcessingAuditEvents {
         return "relayConfigured=true"
                 + ", host=" + safe(relayProfile.host())
                 + ", port=" + relayProfile.port()
+                + ", transportProfile=" + relayProfile.transportProfile()
                 + ", usernameConfigured=" + hasText(relayProfile.username());
     }
 

@@ -9,7 +9,9 @@ import com.sealmail.app.security.UserContext;
 import com.sealmail.domain.certificate.Certificate;
 import com.sealmail.domain.certificate.CertificateId;
 import com.sealmail.domain.certificate.CertificateRepository;
-import com.sealmail.domain.certificate.spi.CertificateCryptoPort;
+import com.sealmail.domain.key.KeyManagementPort;
+import com.sealmail.domain.key.KeyProvider;
+import com.sealmail.domain.key.KeyPurpose;
 import com.sealmail.domain.shared.model.EmailAddress;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -25,24 +27,21 @@ public class CreateRootCaUseCase {
 
     private final CertificateRepository certificateRepository;
     private final CertificateDtoMapper mapper;
-    private final CertificateCryptoPort certificateCryptoPort;
     private final CertificateMaterialAssembler certificateMaterialAssembler;
-    private final CertificatePrivateKeyMaterialService privateKeyMaterialService;
+    private final KeyManagementPort keyManagementPort;
     private final PermissionChecker permissionChecker;
     private final int defaultRootValidityDays;
 
     public CreateRootCaUseCase(CertificateRepository certificateRepository,
                                CertificateDtoMapper mapper,
-                               CertificateCryptoPort certificateCryptoPort,
                                CertificateMaterialAssembler certificateMaterialAssembler,
-                               CertificatePrivateKeyMaterialService privateKeyMaterialService,
+                               KeyManagementPort keyManagementPort,
                                PermissionChecker permissionChecker,
                                @Value("${sealmail.ca.default-root-validity-days:3650}") int defaultRootValidityDays) {
         this.certificateRepository = certificateRepository;
         this.mapper = mapper;
-        this.certificateCryptoPort = certificateCryptoPort;
         this.certificateMaterialAssembler = certificateMaterialAssembler;
-        this.privateKeyMaterialService = privateKeyMaterialService;
+        this.keyManagementPort = keyManagementPort;
         this.permissionChecker = permissionChecker;
         this.defaultRootValidityDays = defaultRootValidityDays;
     }
@@ -56,15 +55,18 @@ public class CreateRootCaUseCase {
             }
             int validity = request.getValidityDays() != null ? request.getValidityDays() : defaultRootValidityDays;
 
-            CertificateCryptoPort.CertificateMaterial material =
-                    certificateCryptoPort.issueSelfSigned(new CertificateCryptoPort.IssueSelfSignedCommand(
+            EmailAddress owner = new EmailAddress("ca-" + request.getAlgorithm().toLowerCase() + "@sealmail.local");
+            KeyManagementPort.ManagedCertificateMaterial material = keyManagementPort.issueSelfSigned(
+                    new KeyProvider.IssueSelfSignedManagedCommand(
+                            owner.getValue(),
                             subjectDn,
                             request.getAlgorithm(),
                             validity,
                             true,
                             1,
                             java.util.Set.of(),
-                            null));
+                            null,
+                            KeyPurpose.CA_SIGNING));
 
             String thumbprint = material.certificate().thumbprint();
             CertificateId certId = new CertificateId(thumbprint);
@@ -72,9 +74,8 @@ public class CreateRootCaUseCase {
                 throw BusinessException.conflict("Root CA already exists with thumbprint: " + thumbprint);
             }
 
-            EmailAddress owner = new EmailAddress("ca-" + request.getAlgorithm().toLowerCase() + "@sealmail.local");
             Certificate cert = certificateMaterialAssembler.issued(material.certificate(), owner);
-            privateKeyMaterialService.store(cert, material.privateKeyPem());
+            cert.setPrivateKeySecretRef(material.keyRecord().managedRef());
             cert.markAsCA(1);
             cert.setIssuerCertId(null); // self-signed root
             if (request.getAlias() != null && !request.getAlias().isBlank()) {

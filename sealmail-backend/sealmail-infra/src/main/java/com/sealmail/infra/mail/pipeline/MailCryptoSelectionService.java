@@ -2,6 +2,7 @@ package com.sealmail.infra.mail.pipeline;
 
 import com.sealmail.domain.certificate.Certificate;
 import com.sealmail.domain.certificate.CertificateRepository;
+import com.sealmail.domain.key.KeyManagementPort;
 import com.sealmail.domain.mailsecurity.CertificateSelection;
 import com.sealmail.domain.mailsecurity.CryptoProfile;
 import com.sealmail.domain.mailsecurity.CryptoProfileSelector;
@@ -21,11 +22,14 @@ public class MailCryptoSelectionService {
 
     private final CertificateRepository certificateRepository;
     private final CryptoProfileSelector cryptoProfileSelector;
+    private final KeyManagementPort keyManagementPort;
 
     public MailCryptoSelectionService(CertificateRepository certificateRepository,
-                                      CryptoProfileSelector cryptoProfileSelector) {
+                                      CryptoProfileSelector cryptoProfileSelector,
+                                      KeyManagementPort keyManagementPort) {
         this.certificateRepository = certificateRepository;
         this.cryptoProfileSelector = cryptoProfileSelector;
+        this.keyManagementPort = keyManagementPort;
     }
 
     public List<Certificate> inboundRoutingCertificates(MailEnvelope envelope) {
@@ -152,9 +156,10 @@ public class MailCryptoSelectionService {
     private Certificate selectInboundDecryptionCertificate(List<EmailAddress> recipients) {
         for (EmailAddress recipient : recipients) {
             Certificate selected = certificateRepository.findTrustedForEncryption(recipient).stream()
-                    .filter(Certificate::hasPrivateKey)
-                    .findFirst()
-                    .orElse(null);
+                .filter(Certificate::hasPrivateKey)
+                .filter(this::hasManagedKey)
+                .findFirst()
+                .orElse(null);
             if (selected != null) {
                 return selected;
             }
@@ -170,6 +175,11 @@ public class MailCryptoSelectionService {
 
     private static boolean hasText(String value) {
         return value != null && !value.isBlank();
+    }
+
+    private boolean hasManagedKey(Certificate certificate) {
+        return keyManagementPort == null
+                || keyManagementPort.findActiveKeyForCertificate(certificate.getId().getThumbprint()).isPresent();
     }
 
     public record InboundCryptoSelection(

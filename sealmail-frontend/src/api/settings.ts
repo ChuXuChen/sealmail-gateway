@@ -6,7 +6,7 @@ import type {
   QuarantinePolicyRequest,
   RelayPolicy,
   RelayPolicyRequest,
-  SendProtectedMailRequest,
+  SendTestMailRequest,
   SmimeSuitePolicy,
   SmimeSuitePolicyRequest,
   SystemSettings,
@@ -45,8 +45,14 @@ export const runtimePolicyApi = {
 };
 
 export const mailTestApi = {
-  sendEncrypted: (data: SendProtectedMailRequest) =>
+  send: (data: SendTestMailRequest) =>
+    apiClient.post<ApiResponse<string>>('/api/v1/mail-test/send', data),
+
+  sendEncrypted: (data: SendTestMailRequest) =>
     apiClient.post<ApiResponse<string>>('/api/v1/mail-test/send-encrypted', data),
+
+  probeRoute: (data: SendTestMailRequest) =>
+    apiClient.post<ApiResponse<string>>('/api/v1/mail-test/probe-route', data),
 
   testSmtpConfig: () =>
     apiClient.get<ApiResponse<string>>('/api/v1/mail-test/test-smtp-config'),

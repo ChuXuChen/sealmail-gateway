@@ -154,15 +154,15 @@ export const buildCaFilterHeaders = ({
         />,
       )}
       {filterSection(
-        '私钥',
-        '是否已关联私钥',
+        '托管私钥',
+        '是否已关联托管私钥',
         <Select
           value={filters.key}
           onChange={(value) => onUpdateFilter('key', value)}
           className="full-width"
           options={[
-            { value: 'ALL', label: '全部私钥' },
-            { value: 'WITH_KEY', label: '有私钥' },
+            { value: 'ALL', label: '全部密钥' },
+            { value: 'WITH_KEY', label: '有托管私钥' },
             { value: 'WITHOUT_KEY', label: '无私钥' },
           ]}
         />,

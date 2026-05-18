@@ -2,35 +2,40 @@ package com.sealmail.app.usecase.certificate;
 
 import com.sealmail.app.exception.BusinessException;
 import com.sealmail.domain.certificate.Certificate;
-import com.sealmail.domain.certificate.spi.CertificatePrivateKeyStore;
+import com.sealmail.domain.key.KeyManagementPort;
+import com.sealmail.domain.key.KeyPurpose;
+import com.sealmail.domain.key.KeyRecord;
 import org.springframework.stereotype.Component;
 
 @Component
 class CertificatePrivateKeyMaterialService {
 
-    private final CertificatePrivateKeyStore privateKeyStore;
+    private final KeyManagementPort keyManagementPort;
 
-    CertificatePrivateKeyMaterialService(CertificatePrivateKeyStore privateKeyStore) {
-        this.privateKeyStore = privateKeyStore;
+    CertificatePrivateKeyMaterialService(KeyManagementPort keyManagementPort) {
+        this.keyManagementPort = keyManagementPort;
     }
 
-    void store(Certificate certificate, String privateKeyPem) {
+    KeyRecord store(Certificate certificate, String privateKeyPem) {
         if (privateKeyPem == null || privateKeyPem.isBlank()) {
-            return;
+            return null;
         }
-        String ref = privateKeyStore.store(
-                certificate.getOwner().getValue(),
+        KeyRecord keyRecord = keyManagementPort.importCertificateKey(
+                certificate.getOwner(),
+                certificate.getAlgorithm(),
+                certificate.isCA() ? KeyPurpose.CA_SIGNING : KeyPurpose.SMIME,
                 certificate.getId().getThumbprint(),
                 certificate.getPemContent(),
                 privateKeyPem);
-        certificate.setPrivateKeySecretRef(ref);
+        certificate.setPrivateKeySecretRef(keyRecord.managedRef());
+        return keyRecord;
     }
 
-    String resolve(Certificate certificate, String missingMessage) {
+    KeyRecord requireManagedKey(Certificate certificate, String missingMessage) {
         if (certificate == null || !certificate.hasPrivateKey()) {
             throw BusinessException.badRequest(missingMessage);
         }
-        return privateKeyStore.resolve(certificate.getPrivateKeySecretRef())
+        return keyManagementPort.findActiveKeyForCertificate(certificate.getId().getThumbprint())
                 .orElseThrow(() -> BusinessException.badRequest(missingMessage));
     }
 }

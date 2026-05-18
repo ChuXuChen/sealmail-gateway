@@ -99,12 +99,14 @@ public class RelayStep {
                     port,
                     username,
                     password,
-                    timeout
+                    timeout,
+                    relayProfile.transportProfile()
             );
 
-            log.info("=== RELAYING TO: {}:{} mode=PLAIN userConfigured={} ===",
+            log.info("=== RELAYING TO: {}:{} profile={} userConfigured={} ===",
                     host,
                     port,
+                    relayProfile.transportProfile(),
                     hasText(username));
             smtpRelayClient.send(new SmtpRelayRequest(connection, envelopeFrom, recipients, mailContent));
 

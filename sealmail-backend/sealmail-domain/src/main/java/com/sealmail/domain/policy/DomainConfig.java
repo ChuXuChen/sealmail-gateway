@@ -18,7 +18,8 @@ public class DomainConfig extends AggregateRoot<String> {
     private boolean signingEnabled;
     private boolean dkimEnabled;
     private String deliveryHost;
-    private Integer deliveryPort;
+    private DeliveryTransportProfile deliveryTransportProfile;
+    private DecryptionMode decryptionMode;
     private boolean active;
 
     private DomainConfig(String id, String domain, boolean localDomain) {
@@ -29,6 +30,8 @@ public class DomainConfig extends AggregateRoot<String> {
         this.preferredAlgorithm = PreferredAlgorithm.AUTO;
         this.signingEnabled = false;
         this.dkimEnabled = false;
+        this.deliveryTransportProfile = DeliveryTransportProfile.SMTP_CLEAR;
+        this.decryptionMode = DecryptionMode.GATEWAY_TERMINATED;
         this.active = true;
     }
 
@@ -127,22 +130,32 @@ public class DomainConfig extends AggregateRoot<String> {
         registerEvent(new DkimSettingChanged(getId(), dkimEnabled));
     }
 
-    public void configureDeliveryRoute(String host, Integer port) {
+    public void configureDeliveryRoute(String host, DeliveryTransportProfile transportProfile) {
         String normalizedHost = normalizeDeliveryHost(host);
         if (normalizedHost == null) {
             this.deliveryHost = null;
-            this.deliveryPort = null;
+            this.deliveryTransportProfile = DeliveryTransportProfile.SMTP_CLEAR;
             return;
         }
-        if (port == null || port < 1 || port > 65535) {
-            throw new IllegalArgumentException("外部投递端口必须在 1-65535 之间");
-        }
         this.deliveryHost = normalizedHost;
-        this.deliveryPort = port;
+        this.deliveryTransportProfile = transportProfile != null
+                ? transportProfile
+                : DeliveryTransportProfile.SMTP_CLEAR;
+    }
+
+    public void configureDeliveryRoute(String host, Integer legacyPort) {
+        configureDeliveryRoute(host, DeliveryTransportProfile.fromLegacyPort(legacyPort));
+    }
+
+    public void changeDecryptionMode(DecryptionMode decryptionMode) {
+        if (decryptionMode == null) {
+            throw new IllegalArgumentException("Decryption mode cannot be null");
+        }
+        this.decryptionMode = decryptionMode;
     }
 
     public boolean hasDeliveryRoute() {
-        return deliveryHost != null && !deliveryHost.isBlank() && deliveryPort != null;
+        return deliveryHost != null && !deliveryHost.isBlank() && deliveryTransportProfile != null;
     }
 
     public String getDeliveryHost() {
@@ -150,7 +163,15 @@ public class DomainConfig extends AggregateRoot<String> {
     }
 
     public Integer getDeliveryPort() {
-        return deliveryPort;
+        return hasDeliveryRoute() ? deliveryTransportProfile.defaultPort() : null;
+    }
+
+    public DeliveryTransportProfile getDeliveryTransportProfile() {
+        return deliveryTransportProfile;
+    }
+
+    public DecryptionMode getDecryptionMode() {
+        return decryptionMode;
     }
 
     public boolean isActive() {

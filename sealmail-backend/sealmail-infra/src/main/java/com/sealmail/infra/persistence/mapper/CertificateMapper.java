@@ -7,6 +7,7 @@ import com.sealmail.domain.certificate.Certificate;
 import com.sealmail.domain.certificate.CertificateId;
 import com.sealmail.domain.certificate.KeyUsage;
 import com.sealmail.domain.certificate.ValidityPeriod;
+import com.sealmail.domain.key.KeyRecord;
 import com.sealmail.domain.shared.model.EmailAddress;
 import com.sealmail.infra.persistence.entity.CertificateEntity;
 import org.springframework.stereotype.Component;
@@ -128,9 +129,8 @@ public class CertificateMapper {
             } catch (JsonProcessingException ignored) {}
         }
 
-        // 恢复私钥引用；私钥材料本身由外部 secret/keystore 解析。
         if (entity.getPrivateKeySecretRef() != null && !entity.getPrivateKeySecretRef().isBlank()) {
-            cert.setPrivateKeySecretRef(entity.getPrivateKeySecretRef());
+            cert.setPrivateKeySecretRef(normalizePrivateKeyRef(entity.getPrivateKeySecretRef()));
         }
 
         // 恢复算法缓存
@@ -145,5 +145,17 @@ public class CertificateMapper {
 
         cert.clearDomainEvents();
         return cert;
+    }
+
+    private String normalizePrivateKeyRef(String ref) {
+        String value = ref.trim();
+        if (value.startsWith(KeyRecord.MANAGED_KEY_REF_PREFIX)) {
+            return value;
+        }
+        if (value.startsWith("keystore:certificate:")) {
+            return KeyRecord.MANAGED_KEY_REF_PREFIX
+                    + value.substring("keystore:certificate:".length());
+        }
+        return value;
     }
 }

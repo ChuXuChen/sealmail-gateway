@@ -2,6 +2,7 @@ import React from 'react';
 import { Descriptions, Tag } from 'antd';
 import type { DomainConfig } from '../../types';
 import { DetailDrawer } from '../../components/Page';
+import { algorithmPreferenceLabel, deliveryProfileLabel } from './domainConfigUtils';
 
 interface DomainConfigDetailDrawerProps {
   domain: DomainConfig | null;
@@ -32,7 +33,7 @@ const DomainConfigDetailDrawer: React.FC<DomainConfigDetailDrawerProps> = ({
         </Descriptions.Item>
         <Descriptions.Item label="算法偏好">
           <Tag color={domain.preferredAlgorithm === 'GM_ONLY' ? 'error' : domain.preferredAlgorithm === 'STANDARD_ONLY' ? 'processing' : 'blue'}>
-            {domain.preferredAlgorithmDisplayName || '自动选择'}
+            {algorithmPreferenceLabel(domain.preferredAlgorithm, domain.preferredAlgorithmDisplayName)}
           </Tag>
         </Descriptions.Item>
         <Descriptions.Item label="邮件签名">
@@ -41,11 +42,21 @@ const DomainConfigDetailDrawer: React.FC<DomainConfigDetailDrawerProps> = ({
         <Descriptions.Item label="DKIM签名">
           {domain.dkimEnabled ? <Tag color="success">已启用</Tag> : <Tag color="default">未启用</Tag>}
         </Descriptions.Item>
+        <Descriptions.Item label="入站解密模式">
+          <Tag color={domain.decryptionMode === 'END_TO_END_PASSTHROUGH' ? 'warning' : 'success'}>
+            {domain.decryptionModeDisplayName || '网关代理解密'}
+          </Tag>
+        </Descriptions.Item>
         <Descriptions.Item label="外部发送地址">
           {domain.localDomain ? (
             <Tag color="default">本地域名不使用</Tag>
           ) : domain.deliveryHost && domain.deliveryPort ? (
-            <Tag color="processing">{domain.deliveryHost}:{domain.deliveryPort}</Tag>
+            <Tag color="processing">
+              {domain.deliveryHost}:{domain.deliveryPort} / {deliveryProfileLabel(
+                domain.deliveryTransportProfile,
+                domain.deliveryTransportProfileDisplayName,
+              )}
+            </Tag>
           ) : (
             <Tag color="default">默认出站投递</Tag>
           )}

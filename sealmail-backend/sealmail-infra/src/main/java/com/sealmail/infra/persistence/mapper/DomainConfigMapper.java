@@ -1,6 +1,8 @@
 package com.sealmail.infra.persistence.mapper;
 
 import com.sealmail.domain.policy.DomainConfig;
+import com.sealmail.domain.policy.DeliveryTransportProfile;
+import com.sealmail.domain.policy.DecryptionMode;
 import com.sealmail.domain.policy.EncryptionPolicy;
 import com.sealmail.domain.policy.PreferredAlgorithm;
 import com.sealmail.infra.persistence.entity.DomainConfigEntity;
@@ -20,6 +22,8 @@ public class DomainConfigMapper {
         entity.setDkimEnabled(domainConfig.isDkimEnabled());
         entity.setDeliveryHost(domainConfig.getDeliveryHost());
         entity.setDeliveryPort(domainConfig.getDeliveryPort());
+        entity.setDeliveryTransportProfile(domainConfig.getDeliveryTransportProfile().name());
+        entity.setDecryptionMode(domainConfig.getDecryptionMode().name());
         entity.setActive(domainConfig.isActive());
         return entity;
     }
@@ -49,7 +53,13 @@ public class DomainConfigMapper {
             } catch (Exception ignored) {}
         }
         config.setDkimEnabled(entity.isDkimEnabled());
-        config.configureDeliveryRoute(entity.getDeliveryHost(), entity.getDeliveryPort());
+        DeliveryTransportProfile profile = entity.getDeliveryTransportProfile() != null
+                ? DeliveryTransportProfile.valueOf(entity.getDeliveryTransportProfile())
+                : DeliveryTransportProfile.fromLegacyPort(entity.getDeliveryPort());
+        config.configureDeliveryRoute(entity.getDeliveryHost(), profile);
+        if (entity.getDecryptionMode() != null) {
+            config.changeDecryptionMode(DecryptionMode.valueOf(entity.getDecryptionMode()));
+        }
 
         config.clearDomainEvents();
         return config;

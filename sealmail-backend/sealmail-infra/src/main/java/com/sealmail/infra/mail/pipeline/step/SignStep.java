@@ -1,16 +1,14 @@
 package com.sealmail.infra.mail.pipeline.step;
 
 import com.sealmail.domain.audit.AuditLogType;
-import com.sealmail.domain.certificate.CertificateRepository;
-import com.sealmail.domain.certificate.spi.CertificatePrivateKeyStore;
-import com.sealmail.domain.certificate.spi.SMIMEOperations;
+import com.sealmail.domain.key.KeyManagementPort;
+import com.sealmail.domain.key.KeyOperationResult;
 import com.sealmail.domain.mailsecurity.CryptoProfile;
 import com.sealmail.domain.mailsecurity.MailEnvelope;
 import com.sealmail.domain.mailsecurity.MailProcessingContext;
 import com.sealmail.domain.mailsecurity.MailProcessingErrorType;
 import com.sealmail.domain.mailsecurity.MailProcessingException;
 import com.sealmail.domain.mailsecurity.event.MailSigned;
-import com.sealmail.infra.crypto.KeyStoreService;
 import com.sealmail.infra.events.DomainEventPublisher;
 import com.sealmail.infra.mail.pipeline.MailProcessingHeaders;
 import com.sealmail.infra.mail.pipeline.MailProcessingAuditEvents;
@@ -28,21 +26,12 @@ public class SignStep {
 
     private static final Logger log = LoggerFactory.getLogger(SignStep.class);
 
-    private final SMIMEOperations smimeOperations;
-    private final KeyStoreService keyStoreService;
-    private final CertificateRepository certificateRepository;
-    private final CertificatePrivateKeyStore privateKeyStore;
+    private final KeyManagementPort keyManagementPort;
     private final DomainEventPublisher domainEventPublisher;
 
-    public SignStep(SMIMEOperations smimeOperations,
-                    KeyStoreService keyStoreService,
-                    CertificateRepository certificateRepository,
-                    CertificatePrivateKeyStore privateKeyStore,
+    public SignStep(KeyManagementPort keyManagementPort,
                     DomainEventPublisher domainEventPublisher) {
-        this.smimeOperations = smimeOperations;
-        this.keyStoreService = keyStoreService;
-        this.certificateRepository = certificateRepository;
-        this.privateKeyStore = privateKeyStore;
+        this.keyManagementPort = keyManagementPort;
         this.domainEventPublisher = domainEventPublisher;
     }
 
@@ -62,8 +51,6 @@ public class SignStep {
 
         try {
             String senderCert = context.certificateSelection().senderCertificatePem();
-            String privateKey = null;
-
             String thumbprint = context.certificateSelection().senderCertificateThumbprint();
             CryptoProfile profile = context.cryptoProfile();
 
@@ -74,26 +61,8 @@ public class SignStep {
                         context);
             }
 
-            // 根据证书算法加载对应私钥：优先证书关联私钥，其次 KeyStore。
-            if (privateKey == null) {
-                if (thumbprint != null && !thumbprint.isBlank()) {
-                    var certOpt = certificateRepository.findById(
-                            new com.sealmail.domain.certificate.CertificateId(thumbprint));
-                    if (certOpt.isPresent() && certOpt.get().hasPrivateKey()) {
-                        privateKey = privateKeyStore.resolve(certOpt.get().getPrivateKeySecretRef()).orElse(null);
-                        log.info("使用证书关联私钥进行签名: thumbprint={}", thumbprint);
-                    }
-                }
-            }
-
-            if (privateKey == null) {
-                privateKey = keyStoreService.getPrivateKeyPem(envelope.getSender());
-                if (privateKey != null) {
-                    log.info("从 KeyStore 加载私钥进行签名: sender={}", envelope.getSender());
-                }
-            }
-
-            if (privateKey == null) {
+            if (thumbprint == null || thumbprint.isBlank()
+                    || keyManagementPort.findActiveKeyForCertificate(thumbprint).isEmpty()) {
                 throw new MailProcessingException(
                         MailProcessingErrorType.SIGNING,
                         signingMaterialMissingMessage(profile, "已选择签名证书但未找到对应私钥"),
@@ -101,13 +70,17 @@ public class SignStep {
             }
 
             byte[] original = message.getPayload();
-            byte[] signed = smimeOperations.sign(original, privateKey, senderCert);
+            KeyOperationResult signResult =
+                    keyManagementPort.signSmimeForCertificate(thumbprint, original, senderCert);
+            byte[] signed = signResult.payload();
 
             log.info("=== S/MIME SIGNING COMPLETED ===");
             log.info("  Original size: {} bytes", original.length);
             log.info("  Signed size: {} bytes", signed.length);
             recordAudit(context, "SMIME_SIGN", "profile=" + profile
-                    + ", senderCertificateThumbprint=" + thumbprint, true);
+                    + ", senderCertificateThumbprint=" + thumbprint
+                    + ", keyId=" + signResult.keyRecord().getKeyId()
+                    + ", ownerEmail=" + signResult.keyRecord().getOwner().getValue(), true);
 
             if (thumbprint != null && !thumbprint.isBlank()) {
                 domainEventPublisher.publishEvent(new MailSigned(

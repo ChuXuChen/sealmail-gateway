@@ -1,14 +1,20 @@
 import React from 'react';
-import { Form, Input, InputNumber, Modal, Select, Switch, Typography } from 'antd';
+import { Alert, Form, Input, InputNumber, Modal, Select, Switch, Typography } from 'antd';
 import type { FormInstance } from 'antd';
 import type { Certificate } from '../../types';
-import type { ImportCertificateValues, IssueByCaValues, SelfSignedCertificateValues } from './certificateUtils';
+import type {
+  ImportCertificateMode,
+  ImportCertificateValues,
+  IssueByCaValues,
+  SelfSignedCertificateValues,
+} from './certificateUtils';
 import { certificateDisplayName } from './certificateUtils';
 
 const { TextArea } = Input;
 
 interface ImportCertificateModalProps {
   form: FormInstance<ImportCertificateValues>;
+  mode: ImportCertificateMode;
   open: boolean;
   onCancel: () => void;
   onFinish: (values: ImportCertificateValues) => void | Promise<void>;
@@ -44,12 +50,16 @@ const ownerEmailRules = [
 
 export const ImportCertificateModal: React.FC<ImportCertificateModalProps> = ({
   form,
+  mode,
   open,
   onCancel,
   onFinish,
-}) => (
+}) => {
+  const managedImport = mode === 'GATEWAY_MANAGED_PRIVATE_KEY';
+
+  return (
   <Modal
-    title="导入证书"
+    title={managedImport ? '导入网关托管私钥证书' : '导入公开证书'}
     open={open}
     onCancel={onCancel}
     onOk={() => form.submit()}
@@ -58,6 +68,14 @@ export const ImportCertificateModal: React.FC<ImportCertificateModalProps> = ({
     width={600}
   >
     <Form form={form} onFinish={onFinish} layout="vertical">
+      <Alert
+        type="info"
+        showIcon
+        className="form-note"
+        message={managedImport
+          ? '仅本地域收件人或本地签名证书应导入为网关托管；托管后私钥不可导出。'
+          : '对端网关只导入公开证书；不会上传或保存私钥。'}
+      />
       <Form.Item name="ownerEmail" label="所有者邮箱" rules={[{ required: true, message: '请输入所有者邮箱' }]}>
         <Input placeholder="email@example.com" />
       </Form.Item>
@@ -67,15 +85,23 @@ export const ImportCertificateModal: React.FC<ImportCertificateModalProps> = ({
       <Form.Item name="pemData" label="PEM 格式证书内容" rules={[{ required: true, message: '请输入 PEM 格式证书' }]}>
         <TextArea rows={8} placeholder="-----BEGIN CERTIFICATE-----&#10;...&#10;-----END CERTIFICATE-----" />
       </Form.Item>
-      <Form.Item name="privateKeyData" label="关联私钥（可选）">
-        <TextArea rows={6} placeholder="-----BEGIN PRIVATE KEY-----&#10;...&#10;-----END PRIVATE KEY-----" />
-      </Form.Item>
+      {managedImport ? (
+        <Form.Item
+          name="privateKeyData"
+          label="网关托管私钥"
+          rules={[{ required: true, message: '请输入私钥 PEM' }]}
+          extra="仅用于本地域收件人或本地签名证书；托管后私钥不可导出。"
+        >
+          <TextArea rows={6} placeholder="-----BEGIN PRIVATE KEY-----&#10;...&#10;-----END PRIVATE KEY-----" />
+        </Form.Item>
+      ) : null}
       <Form.Item name="trusted" label="标记为信任" valuePropName="checked">
         <Switch />
       </Form.Item>
     </Form>
   </Modal>
-);
+  );
+};
 
 export const SelfSignedCertificateModal: React.FC<SelfSignedCertificateModalProps> = ({
   form,
@@ -85,7 +111,7 @@ export const SelfSignedCertificateModal: React.FC<SelfSignedCertificateModalProp
   onFinish,
 }) => (
   <Modal
-    title="生成自签名证书"
+    title="生成本地域托管证书"
     open={open}
     onCancel={onCancel}
     onOk={() => form.submit()}
@@ -114,7 +140,7 @@ export const SelfSignedCertificateModal: React.FC<SelfSignedCertificateModalProp
         <Switch />
       </Form.Item>
       <Typography.Paragraph type="secondary" className="form-note">
-        后端将自动生成密钥对，与证书一并保存（私钥仅服务端保留）。
+        网关将自动生成并托管私钥；私钥不可导出，只能导出公开证书 PEM。
       </Typography.Paragraph>
     </Form>
   </Modal>
@@ -130,7 +156,7 @@ export const IssueByCaModal: React.FC<IssueByCaModalProps> = ({
   onFinish,
 }) => (
   <Modal
-    title="用 CA 证书签发新证书"
+    title="通过 CA 签发本地域托管证书"
     open={open}
     onCancel={onCancel}
     onOk={() => form.submit()}
@@ -144,7 +170,7 @@ export const IssueByCaModal: React.FC<IssueByCaModalProps> = ({
         name="intermediateCaId"
         label="Intermediate CA"
         rules={[{ required: true, message: '请选择 Intermediate CA' }]}
-        extra="只列出 pathLen=0、带私钥且未吊销的 Intermediate CA"
+        extra="只列出 pathLen=0、带托管私钥且未吊销的 Intermediate CA"
       >
         <Select
           placeholder="请选择 Intermediate CA"

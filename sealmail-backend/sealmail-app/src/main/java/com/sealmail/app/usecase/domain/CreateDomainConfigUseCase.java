@@ -8,6 +8,8 @@ import com.sealmail.app.security.UserContext;
 import com.sealmail.domain.policy.DomainConfig;
 import com.sealmail.domain.policy.DomainConfigRepository;
 import com.sealmail.domain.policy.DomainName;
+import com.sealmail.domain.policy.DeliveryTransportProfile;
+import com.sealmail.domain.policy.DecryptionMode;
 import com.sealmail.domain.policy.EncryptionPolicy;
 import com.sealmail.domain.policy.PreferredAlgorithm;
 import lombok.RequiredArgsConstructor;
@@ -75,15 +77,29 @@ public class CreateDomainConfigUseCase {
         if (request.getDkimEnabled() != null) {
             config.setDkimEnabled(request.getDkimEnabled());
         }
-        configureDeliveryRoute(config, request.getDeliveryHost(), request.getDeliveryPort());
+        configureDeliveryRoute(config, request.getDeliveryHost(),
+                request.getDeliveryTransportProfile(), request.getDeliveryPort());
+        if (request.getDecryptionMode() != null) {
+            config.changeDecryptionMode(parseEnum(
+                    DecryptionMode.class,
+                    request.getDecryptionMode(),
+                    "不支持的解密模式: "
+            ));
+        }
         if (Boolean.FALSE.equals(request.getActive())) {
             config.deactivate();
         }
     }
 
-    private void configureDeliveryRoute(DomainConfig config, String deliveryHost, Integer deliveryPort) {
+    private void configureDeliveryRoute(DomainConfig config,
+                                        String deliveryHost,
+                                        String deliveryTransportProfile,
+                                        Integer legacyDeliveryPort) {
         try {
-            config.configureDeliveryRoute(deliveryHost, deliveryPort);
+            DeliveryTransportProfile profile = deliveryTransportProfile != null
+                    ? parseEnum(DeliveryTransportProfile.class, deliveryTransportProfile, "不支持的投递传输配置: ")
+                    : DeliveryTransportProfile.fromLegacyPort(legacyDeliveryPort);
+            config.configureDeliveryRoute(deliveryHost, profile);
         } catch (IllegalArgumentException e) {
             throw BusinessException.badRequest(e.getMessage());
         }

@@ -11,6 +11,7 @@ import {
 } from '@ant-design/icons';
 import type { DomainConfig } from '../../types';
 import { DataTable } from '../../components/Page';
+import { algorithmPreferenceLabel, deliveryProfileLabel } from './domainConfigUtils';
 
 interface DomainConfigTableProps {
   data: DomainConfig[];
@@ -69,7 +70,7 @@ const DomainConfigTable: React.FC<DomainConfigTableProps> = ({
         };
         return (
           <Tag color={colorMap[record.preferredAlgorithm || 'AUTO'] || 'default'}>
-            {record.preferredAlgorithmDisplayName || '自动选择'}
+            {algorithmPreferenceLabel(record.preferredAlgorithm, record.preferredAlgorithmDisplayName)}
           </Tag>
         );
       },
@@ -99,11 +100,26 @@ const DomainConfigTable: React.FC<DomainConfigTableProps> = ({
           return <Tag color="default">本地</Tag>;
         }
         return record.deliveryHost && record.deliveryPort ? (
-          <Tag color="processing">{record.deliveryHost}:{record.deliveryPort}</Tag>
+          <Space direction="vertical" size={2}>
+            <Tag color="processing">{record.deliveryHost}:{record.deliveryPort}</Tag>
+            <Tag color="default">
+              {deliveryProfileLabel(record.deliveryTransportProfile, record.deliveryTransportProfileDisplayName)}
+            </Tag>
+          </Space>
         ) : (
           <Tag color="default">默认</Tag>
         );
       },
+    },
+    {
+      title: '解密模式',
+      dataIndex: 'decryptionModeDisplayName',
+      key: 'decryptionMode',
+      render: (_: string, record) => (
+        <Tag color={record.decryptionMode === 'END_TO_END_PASSTHROUGH' ? 'warning' : 'success'}>
+          {record.decryptionModeDisplayName || '网关代理解密'}
+        </Tag>
+      ),
     },
     {
       title: '状态',

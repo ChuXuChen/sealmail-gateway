@@ -44,19 +44,27 @@ public class MailTestController {
     }
 
     @PostMapping("/send")
-    @Operation(summary = "发送测试邮件", description = "构造一封简单邮件并通过SMTP中继发送")
+    @Operation(summary = "按当前配置发送测试邮件", description = "不强制 S/MIME；签名、加密与投递路由由当前域名配置决定")
     public ApiResponse<String> sendTestMail(@Valid @RequestBody SendMailWebRequest request,
                                             @AuthenticationPrincipal UserContext user) {
         requireAdmin(user);
-        return ApiResponse.ok(mailTestUseCase.sendPlain(request.toAppRequest(), user));
+        return ApiResponse.ok(mailTestUseCase.sendConfigured(request.toAppRequest(), user));
     }
 
     @PostMapping("/send-encrypted")
-    @Operation(summary = "发送加密签名邮件", description = "通过当前域名策略和证书绑定发送受保护测试邮件")
+    @Operation(summary = "发送受保护测试邮件", description = "高级入口：强制 S/MIME 签名和加密")
     public ApiResponse<String> sendEncryptedMail(@Valid @RequestBody SendMailWebRequest request,
                                                  @AuthenticationPrincipal UserContext user) {
         requireAdmin(user);
         return ApiResponse.ok(mailTestUseCase.sendProtected(request.toAppRequest(), user));
+    }
+
+    @PostMapping("/probe-route")
+    @Operation(summary = "探测当前投递路由", description = "使用 host + DeliveryTransportProfile 探测当前收件人域投递路由")
+    public ApiResponse<String> probeCurrentRoute(@Valid @RequestBody SendMailWebRequest request,
+                                                 @AuthenticationPrincipal UserContext user) {
+        requireAdmin(user);
+        return ApiResponse.ok(mailTestUseCase.probeCurrentRoute(request.toAppRequest(), user));
     }
 
     @GetMapping("/test-smtp-config")

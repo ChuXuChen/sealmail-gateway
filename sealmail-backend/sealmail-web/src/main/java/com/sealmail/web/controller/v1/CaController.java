@@ -20,6 +20,9 @@ import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
@@ -94,6 +97,19 @@ public class CaController {
         return ApiResponse.ok(queryUseCase.findById(id, user));
     }
 
+    @GetMapping("/{id}/pem")
+    @Operation(summary = "导出 CA 公开 PEM", description = "只返回 CA 公开证书；托管私钥不可导出")
+    public ResponseEntity<String> exportPem(
+            @Parameter(description = "CA 证书指纹") @PathVariable String id,
+            @AuthenticationPrincipal UserContext user) {
+        String pem = queryUseCase.exportCaPem(id, user);
+        return ResponseEntity.ok()
+                .contentType(MediaType.TEXT_PLAIN)
+                .header(HttpHeaders.CONTENT_DISPOSITION,
+                        "attachment; filename=\"" + safeFilename(id) + ".pem\"")
+                .body(pem);
+    }
+
     @PostMapping("/{id}/trust")
     @Operation(summary = "信任 CA", description = "幂等")
     public ApiResponse<CertificateResponse> trust(
@@ -127,5 +143,9 @@ public class CaController {
             @AuthenticationPrincipal UserContext user) {
         deleteUseCase.execute(id, user);
         return ApiResponse.noContent();
+    }
+
+    private String safeFilename(String value) {
+        return value == null ? "ca" : value.replaceAll("[^A-Za-z0-9._-]", "_");
     }
 }

@@ -156,7 +156,7 @@ const MainLayout: React.FC = () => {
     canManageCa(user) ? {
       key: ROUTES.opsProtectedTestMail,
       icon: <SendOutlined />,
-      label: '受保护测试邮件',
+      label: '测试邮件',
     } : null,
     canViewAuditLogs(user) ? {
       key: ROUTES.opsAuditLogs,

@@ -17,6 +17,8 @@ public class UpdateDomainConfigRequest {
     private Boolean signingEnabled;
     private Boolean dkimEnabled;
     private String deliveryHost;
+    private String deliveryTransportProfile;
     private Integer deliveryPort;
+    private String decryptionMode;
     private Boolean active;
 }

@@ -33,7 +33,8 @@ export const useDomainConfigs = () => {
         signingEnabled: values.signingEnabled || false,
         dkimEnabled: values.dkimEnabled || false,
         deliveryHost,
-        deliveryPort: deliveryHost ? values.deliveryPort : undefined,
+        deliveryTransportProfile: deliveryHost ? values.deliveryTransportProfile || 'SMTP_CLEAR' : undefined,
+        decryptionMode: values.decryptionMode || 'GATEWAY_TERMINATED',
         active: values.active ?? true,
       });
       message.success('域名配置创建成功');
@@ -57,7 +58,8 @@ export const useDomainConfigs = () => {
         signingEnabled: values.signingEnabled,
         dkimEnabled: values.dkimEnabled,
         deliveryHost: deliveryHost || '',
-        deliveryPort: deliveryHost ? values.deliveryPort : undefined,
+        deliveryTransportProfile: deliveryHost ? values.deliveryTransportProfile || 'SMTP_CLEAR' : 'SMTP_CLEAR',
+        decryptionMode: values.decryptionMode,
         active: values.active,
       });
       message.success('域名配置更新成功');

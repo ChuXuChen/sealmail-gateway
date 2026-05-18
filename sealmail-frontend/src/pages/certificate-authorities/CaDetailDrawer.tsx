@@ -1,6 +1,6 @@
 import React from 'react';
-import { Button, Descriptions, Space, Typography } from 'antd';
-import { LockOutlined, UnlockOutlined } from '@ant-design/icons';
+import { Alert, Button, Descriptions, Space, Typography } from 'antd';
+import { CopyOutlined, DownloadOutlined, LockOutlined, UnlockOutlined } from '@ant-design/icons';
 import type { Certificate } from '../../types';
 import { DetailDrawer } from '../../components/Page';
 import CertificateIdentityValue from '../certificates/CertificateIdentityValue';
@@ -15,6 +15,8 @@ interface CaDetailDrawerProps {
   rootById: Map<string, Certificate>;
   onClose: () => void;
   onConfirmAction: (type: ConfirmActionType, record: Certificate, closeDetail?: boolean) => void;
+  onCopyPem: (record: Certificate) => unknown | Promise<unknown>;
+  onDownloadPem: (record: Certificate) => unknown | Promise<unknown>;
   onTrust: (id: string) => unknown | Promise<unknown>;
 }
 
@@ -23,6 +25,8 @@ const CaDetailDrawer: React.FC<CaDetailDrawerProps> = ({
   rootById,
   onClose,
   onConfirmAction,
+  onCopyPem,
+  onDownloadPem,
   onTrust,
 }) => (
   <DetailDrawer title="CA 详情" width={640} open={!!detail} onClose={onClose}>
@@ -65,6 +69,20 @@ const CaDetailDrawer: React.FC<CaDetailDrawerProps> = ({
             )}
           </div>
         </div>
+
+        <Alert
+          type="info"
+          showIcon
+          message="仅可导出 CA 公开 PEM；托管私钥不可导出，对端网关只导入公开证书。"
+        />
+        <Space wrap>
+          <Button icon={<CopyOutlined />} onClick={() => onCopyPem(detail)}>
+            复制 PEM
+          </Button>
+          <Button icon={<DownloadOutlined />} onClick={() => onDownloadPem(detail)}>
+            下载 PEM
+          </Button>
+        </Space>
 
         <Descriptions column={1} bordered size="small">
           <Descriptions.Item label="别名">{detail.alias || '-'}</Descriptions.Item>

@@ -8,6 +8,8 @@ import com.sealmail.app.mapper.DomainDtoMapper;
 import com.sealmail.app.security.UserContext;
 import com.sealmail.domain.policy.DomainConfig;
 import com.sealmail.domain.policy.DomainConfigRepository;
+import com.sealmail.domain.policy.DeliveryTransportProfile;
+import com.sealmail.domain.policy.DecryptionMode;
 import com.sealmail.domain.policy.EncryptionPolicy;
 import com.sealmail.domain.policy.PreferredAlgorithm;
 import lombok.RequiredArgsConstructor;
@@ -65,8 +67,22 @@ public class UpdateDomainConfigUseCase {
             config.setDkimEnabled(request.getDkimEnabled());
         }
 
-        if (request.getDeliveryHost() != null || request.getDeliveryPort() != null) {
-            configureDeliveryRoute(config, request.getDeliveryHost(), request.getDeliveryPort());
+        if (request.getDeliveryHost() != null
+                || request.getDeliveryTransportProfile() != null
+                || request.getDeliveryPort() != null) {
+            configureDeliveryRoute(
+                    config,
+                    request.getDeliveryHost() != null ? request.getDeliveryHost() : config.getDeliveryHost(),
+                    request.getDeliveryTransportProfile(),
+                    request.getDeliveryPort());
+        }
+
+        if (request.getDecryptionMode() != null) {
+            config.changeDecryptionMode(parseEnum(
+                    DecryptionMode.class,
+                    request.getDecryptionMode(),
+                    "不支持的解密模式: "
+            ));
         }
 
         if (request.getActive() != null) {
@@ -84,9 +100,17 @@ public class UpdateDomainConfigUseCase {
         return mapper.toResponse(config);
     }
 
-    private void configureDeliveryRoute(DomainConfig config, String deliveryHost, Integer deliveryPort) {
+    private void configureDeliveryRoute(DomainConfig config,
+                                        String deliveryHost,
+                                        String deliveryTransportProfile,
+                                        Integer legacyDeliveryPort) {
         try {
-            config.configureDeliveryRoute(deliveryHost, deliveryPort);
+            DeliveryTransportProfile profile = deliveryTransportProfile != null
+                    ? parseEnum(DeliveryTransportProfile.class, deliveryTransportProfile, "不支持的投递传输配置: ")
+                    : (legacyDeliveryPort != null
+                    ? DeliveryTransportProfile.fromLegacyPort(legacyDeliveryPort)
+                    : config.getDeliveryTransportProfile());
+            config.configureDeliveryRoute(deliveryHost, profile);
         } catch (IllegalArgumentException e) {
             throw BusinessException.badRequest(e.getMessage());
         }

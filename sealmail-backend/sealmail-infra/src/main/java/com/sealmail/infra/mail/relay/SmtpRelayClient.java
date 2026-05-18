@@ -1,10 +1,15 @@
 package com.sealmail.infra.mail.relay;
 
 import com.sealmail.domain.mail.spi.SmtpRelayProbe;
+import com.sealmail.domain.policy.DeliveryTransportProfile;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
+import javax.net.ssl.SSLPeerUnverifiedException;
+import javax.net.ssl.SSLSession;
+import javax.net.ssl.SSLSocket;
+import javax.net.ssl.SSLSocketFactory;
 import java.io.BufferedInputStream;
 import java.io.BufferedOutputStream;
 import java.io.ByteArrayOutputStream;
@@ -16,6 +21,10 @@ import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.security.cert.CertificateEncodingException;
+import java.security.cert.X509Certificate;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.LinkedHashSet;
@@ -32,8 +41,8 @@ public class SmtpRelayClient implements SmtpRelayProbe {
     private static final Logger log = LoggerFactory.getLogger(SmtpRelayClient.class);
 
     public void send(SmtpRelayRequest request) throws SmtpRelayException {
-        try (SmtpSession session = openSession(request.connection())) {
-            initializeSession(session, request.connection());
+        try (SmtpSession session = openSession(request.connection(), null)) {
+            initializeSession(session, request.connection(), null);
 
             ensureExpected(session.command("MAIL FROM:<" + request.envelopeFrom() + ">"), "MAIL FROM", 250);
             for (String recipient : request.recipients()) {
@@ -49,20 +58,18 @@ public class SmtpRelayClient implements SmtpRelayProbe {
     }
 
     public SmtpRelayProbeResult probe(SmtpRelayConnectionSettings connection) throws SmtpRelayException {
-        try (SmtpSession session = openSession(connection)) {
-            SessionState state = initializeSession(session, connection);
+        ProbeState probe = new ProbeState(connection);
+        try (SmtpSession session = openSession(connection, probe)) {
+            SessionState state = initializeSession(session, connection, probe);
+            probe.authenticated = state.authenticated();
+            probe.capabilities = state.capabilities();
             session.quit();
-            return new SmtpRelayProbeResult(
-                    connection.host(),
-                    connection.port(),
-                    false,
-                    false,
-                    state.authenticated(),
-                    state.capabilities()
-            );
         } catch (IOException e) {
-            throw new SmtpRelayException("SMTP probe I/O failed: " + e.getMessage(), e);
+            probe.failIfUnset(probe.currentStage, e);
+        } catch (SmtpRelayException e) {
+            probe.failIfUnset(probe.currentStage, e);
         }
+        return probe.result();
     }
 
     @Override
@@ -74,7 +81,8 @@ public class SmtpRelayClient implements SmtpRelayProbe {
                     settings.port(),
                     settings.username(),
                     settings.password(),
-                    settings.timeoutMillis()
+                    settings.timeoutMillis(),
+                    settings.transportProfile()
             ));
         } catch (SmtpRelayException e) {
             throw new IllegalStateException(e.getMessage(), e);
@@ -82,25 +90,53 @@ public class SmtpRelayClient implements SmtpRelayProbe {
         return new SmtpProbeResult(
                 result.host(),
                 result.port(),
-                result.implicitTls(),
-                result.startTls(),
+                result.transportProfile(),
+                result.tcpConnected(),
+                result.ehloSucceeded(),
+                result.startTlsAdvertised(),
+                result.tlsHandshakeSucceeded(),
+                result.protocol(),
+                result.cipher(),
+                result.peerCertificateFingerprint(),
+                result.failureStage(),
                 result.authenticated(),
                 result.capabilities()
         );
     }
 
     private SessionState initializeSession(SmtpSession session,
-                                           SmtpRelayConnectionSettings connection)
+                                           SmtpRelayConnectionSettings connection,
+                                           ProbeState probe)
             throws IOException, SmtpRelayException {
+        stage(probe, "GREETING");
         ensureExpected(session.readResponse(), "server greeting", 220);
 
+        stage(probe, "EHLO");
         SmtpResponse hello = sendHello(session);
+        boolean ehloSucceeded = hello.ehloSucceeded();
         List<String> capabilities = hello.code() == 250 ? hello.lines() : List.of();
+        if (probe != null) {
+            probe.ehloSucceeded = ehloSucceeded;
+            probe.capabilities = capabilities;
+            probe.startTlsAdvertised = supportsCapability(capabilities, "STARTTLS");
+        }
+
+        if (connection.transportProfile().usesStartTls()) {
+            capabilities = startTls(session, connection, capabilities, probe);
+        }
 
         boolean authenticated = false;
         if (connection.hasAuthentication()) {
+            if (!session.tlsEstablished()) {
+                throw new SmtpRelayException("SMTP AUTH requires an established TLS/TLCP channel");
+            }
+            stage(probe, "AUTH");
             authenticate(session, connection, capabilities);
             authenticated = true;
+        }
+        if (probe != null) {
+            probe.authenticated = authenticated;
+            probe.capabilities = capabilities;
         }
 
         return new SessionState(List.copyOf(capabilities), authenticated);
@@ -110,13 +146,41 @@ public class SmtpRelayClient implements SmtpRelayProbe {
         String clientName = resolveClientName();
         SmtpResponse ehlo = session.command("EHLO " + clientName);
         if (ehlo.code() == 250) {
-            return ehlo;
+            return ehlo.withEhloSucceeded(true);
         }
 
         log.debug("EHLO rejected by relay, falling back to HELO: {}", ehlo.singleLine());
         SmtpResponse helo = session.command("HELO " + clientName);
         ensureExpected(helo, "HELO", 250);
-        return helo;
+        return helo.withEhloSucceeded(false);
+    }
+
+    private List<String> startTls(SmtpSession session,
+                                  SmtpRelayConnectionSettings connection,
+                                  List<String> capabilities,
+                                  ProbeState probe)
+            throws IOException, SmtpRelayException {
+        stage(probe, "STARTTLS");
+        if (!supportsCapability(capabilities, "STARTTLS")) {
+            throw new SmtpRelayException("STARTTLS not advertised by remote server");
+        }
+        ensureExpected(session.command("STARTTLS"), "STARTTLS", 220);
+
+        stage(probe, "TLS_HANDSHAKE");
+        if (connection.transportProfile().usesGmTls()) {
+            throw new SmtpRelayException("GM STARTTLS/TLCP probing requires SealMail Edge/Kona");
+        }
+        TlsInfo tlsInfo = session.upgradeToTls(connection.host(), connection.port());
+        markTls(probe, tlsInfo);
+
+        stage(probe, "EHLO_AFTER_TLS");
+        SmtpResponse tlsHello = sendHello(session);
+        List<String> tlsCapabilities = tlsHello.code() == 250 ? tlsHello.lines() : List.of();
+        if (probe != null) {
+            probe.ehloSucceeded = probe.ehloSucceeded || tlsHello.ehloSucceeded();
+            probe.capabilities = tlsCapabilities;
+        }
+        return tlsCapabilities;
     }
 
     private void authenticate(SmtpSession session,
@@ -174,12 +238,26 @@ public class SmtpRelayClient implements SmtpRelayProbe {
         ensureExpected(response, "AUTH PLAIN", 235);
     }
 
-    private SmtpSession openSession(SmtpRelayConnectionSettings connection) throws IOException {
+    private SmtpSession openSession(SmtpRelayConnectionSettings connection, ProbeState probe)
+            throws IOException, SmtpRelayException {
+        stage(probe, "TCP_CONNECT");
         Socket socket = new Socket();
         socket.connect(new InetSocketAddress(connection.host(), connection.port()), connection.timeoutMillis());
         socket.setSoTimeout(connection.timeoutMillis());
+        if (probe != null) {
+            probe.tcpConnected = true;
+        }
 
-        return new SmtpSession(socket);
+        SmtpSession session = new SmtpSession(socket);
+        if (connection.transportProfile().usesImplicitTls()) {
+            stage(probe, "TLS_HANDSHAKE");
+            if (connection.transportProfile().usesGmTls()) {
+                throw new SmtpRelayException("GM implicit TLS/TLCP probing requires SealMail Edge/Kona");
+            }
+            TlsInfo tlsInfo = session.upgradeToTls(connection.host(), connection.port());
+            markTls(probe, tlsInfo);
+        }
+        return session;
     }
 
     private static void ensureExpected(SmtpResponse response, String operation, int... expectedCodes)
@@ -214,6 +292,51 @@ public class SmtpRelayClient implements SmtpRelayProbe {
         return mechanisms;
     }
 
+    private static void stage(ProbeState probe, String stage) {
+        if (probe != null) {
+            probe.currentStage = stage;
+        }
+    }
+
+    private static void markTls(ProbeState probe, TlsInfo tlsInfo) {
+        if (probe == null || tlsInfo == null) {
+            return;
+        }
+        probe.tlsHandshakeSucceeded = true;
+        probe.protocol = tlsInfo.protocol();
+        probe.cipher = tlsInfo.cipher();
+        probe.peerCertificateFingerprint = tlsInfo.peerCertificateFingerprint();
+    }
+
+    private static TlsInfo tlsInfo(SSLSession session) {
+        return new TlsInfo(
+                session.getProtocol(),
+                session.getCipherSuite(),
+                peerFingerprint(session)
+        );
+    }
+
+    private static String peerFingerprint(SSLSession session) {
+        try {
+            java.security.cert.Certificate[] certificates = session.getPeerCertificates();
+            if (certificates.length == 0 || !(certificates[0] instanceof X509Certificate certificate)) {
+                return null;
+            }
+            byte[] digest = MessageDigest.getInstance("SHA-256").digest(certificate.getEncoded());
+            return hex(digest);
+        } catch (SSLPeerUnverifiedException | CertificateEncodingException | NoSuchAlgorithmException e) {
+            return null;
+        }
+    }
+
+    private static String hex(byte[] bytes) {
+        StringBuilder builder = new StringBuilder(bytes.length * 2);
+        for (byte b : bytes) {
+            builder.append(String.format("%02X", b));
+        }
+        return builder.toString();
+    }
+
     private static String resolveClientName() {
         try {
             String hostName = InetAddress.getLocalHost().getHostName();
@@ -230,10 +353,67 @@ public class SmtpRelayClient implements SmtpRelayProbe {
         return Base64.getEncoder().encodeToString(value.getBytes(StandardCharsets.UTF_8));
     }
 
+    private record TlsInfo(String protocol, String cipher, String peerCertificateFingerprint) {
+    }
+
     private record SessionState(List<String> capabilities, boolean authenticated) {
     }
 
-    private record SmtpResponse(int code, List<String> lines) {
+    private static final class ProbeState {
+        private final SmtpRelayConnectionSettings connection;
+        private boolean tcpConnected;
+        private boolean ehloSucceeded;
+        private boolean startTlsAdvertised;
+        private boolean tlsHandshakeSucceeded;
+        private String protocol;
+        private String cipher;
+        private String peerCertificateFingerprint;
+        private String failureStage;
+        private boolean authenticated;
+        private List<String> capabilities = List.of();
+        private String currentStage = "TCP_CONNECT";
+
+        private ProbeState(SmtpRelayConnectionSettings connection) {
+            this.connection = connection;
+        }
+
+        private void failIfUnset(String stage, Exception exception) {
+            if (failureStage != null && !failureStage.isBlank()) {
+                return;
+            }
+            String message = exception.getMessage();
+            failureStage = (stage == null || stage.isBlank() ? "UNKNOWN" : stage)
+                    + (message == null || message.isBlank() ? "" : ": " + message);
+        }
+
+        private SmtpRelayProbeResult result() {
+            return new SmtpRelayProbeResult(
+                    connection.host(),
+                    connection.port(),
+                    connection.transportProfile(),
+                    tcpConnected,
+                    ehloSucceeded,
+                    startTlsAdvertised,
+                    tlsHandshakeSucceeded,
+                    protocol,
+                    cipher,
+                    peerCertificateFingerprint,
+                    failureStage,
+                    authenticated,
+                    capabilities
+            );
+        }
+    }
+
+    private record SmtpResponse(int code, List<String> lines, boolean ehloSucceeded) {
+
+        private SmtpResponse(int code, List<String> lines) {
+            this(code, lines, false);
+        }
+
+        private SmtpResponse withEhloSucceeded(boolean value) {
+            return new SmtpResponse(code, lines, value);
+        }
 
         String singleLine() {
             return code + " " + String.join(" | ", lines);
@@ -242,7 +422,7 @@ public class SmtpRelayClient implements SmtpRelayProbe {
 
     private final class SmtpSession implements AutoCloseable {
 
-        private final Socket socket;
+        private Socket socket;
         private InputStream input;
         private OutputStream output;
 
@@ -250,6 +430,27 @@ public class SmtpRelayClient implements SmtpRelayProbe {
             this.socket = socket;
             this.input = new BufferedInputStream(socket.getInputStream());
             this.output = new BufferedOutputStream(socket.getOutputStream());
+        }
+
+        private TlsInfo upgradeToTls(String host, int port) throws IOException {
+            SSLSocketFactory factory = (SSLSocketFactory) SSLSocketFactory.getDefault();
+            SSLSocket sslSocket = (SSLSocket) factory
+                    .createSocket(socket, host, port, true);
+            sslSocket.setUseClientMode(true);
+            sslSocket.setSoTimeout(socket.getSoTimeout());
+            sslSocket.startHandshake();
+            replaceSocket(sslSocket);
+            return tlsInfo(sslSocket.getSession());
+        }
+
+        private boolean tlsEstablished() {
+            return socket instanceof SSLSocket;
+        }
+
+        private void replaceSocket(Socket upgradedSocket) throws IOException {
+            this.socket = upgradedSocket;
+            this.input = new BufferedInputStream(upgradedSocket.getInputStream());
+            this.output = new BufferedOutputStream(upgradedSocket.getOutputStream());
         }
 
         private SmtpResponse command(String command) throws IOException, SmtpRelayException {

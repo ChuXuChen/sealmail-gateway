@@ -14,7 +14,7 @@ const OpsToolsPage: React.FC = () => {
     <PageShell>
       <PageHeader
         title="运维工具"
-        description="集中进入 SMTP 链路探测和受保护测试邮件。"
+        description="集中进入 SMTP 链路探测和测试邮件。"
       />
       <Row gutter={[16, 16]}>
         <Col xs={24} md={12}>
@@ -28,9 +28,9 @@ const OpsToolsPage: React.FC = () => {
           </Card>
         </Col>
         <Col xs={24} md={12}>
-          <Card title="受保护测试邮件">
+          <Card title="测试邮件">
             <Space direction="vertical" size={12} className="full-width">
-              <Text>提交一封测试邮件，验证当前域名策略、证书绑定和投递链路。</Text>
+              <Text>默认按当前域名策略和投递路由提交测试邮件。</Text>
               <Button type="primary" icon={<SendOutlined />} onClick={() => navigate(ROUTES.opsProtectedTestMail)}>
                 编写测试邮件
               </Button>

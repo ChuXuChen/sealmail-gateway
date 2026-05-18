@@ -1,5 +1,7 @@
 package com.sealmail.infra.mail.relay;
 
+import com.sealmail.domain.policy.DeliveryTransportProfile;
+
 /**
  * Connection parameters for a downstream SMTP relay.
  */
@@ -8,7 +10,8 @@ public record SmtpRelayConnectionSettings(
         int port,
         String username,
         String password,
-        int timeoutMillis
+        int timeoutMillis,
+        DeliveryTransportProfile transportProfile
 ) {
 
     public SmtpRelayConnectionSettings {
@@ -21,6 +24,15 @@ public record SmtpRelayConnectionSettings(
         if (timeoutMillis <= 0) {
             throw new IllegalArgumentException("SMTP relay timeout must be positive");
         }
+        transportProfile = transportProfile != null ? transportProfile : DeliveryTransportProfile.SMTP_CLEAR;
+    }
+
+    public SmtpRelayConnectionSettings(String host,
+                                       int port,
+                                       String username,
+                                       String password,
+                                       int timeoutMillis) {
+        this(host, port, username, password, timeoutMillis, DeliveryTransportProfile.SMTP_CLEAR);
     }
 
     public boolean hasAuthentication() {

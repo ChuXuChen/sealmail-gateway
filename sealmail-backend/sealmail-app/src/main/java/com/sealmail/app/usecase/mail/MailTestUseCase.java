@@ -11,7 +11,9 @@ import com.sealmail.domain.mail.spi.OutboundMailSubmitter;
 import com.sealmail.domain.mail.spi.SmtpRelayProbe;
 import com.sealmail.domain.mailsecurity.CryptoProfile;
 import com.sealmail.domain.mailsecurity.CryptoProfileSelector;
+import com.sealmail.domain.mailsecurity.DeliveryRouteResolver;
 import com.sealmail.domain.mailsecurity.MailEnvelope;
+import com.sealmail.domain.policy.DeliveryTransportProfile;
 import com.sealmail.domain.shared.model.EmailAddress;
 import com.sealmail.domain.system.SystemSettingsProvider;
 import org.springframework.stereotype.Service;
@@ -31,14 +33,16 @@ public class MailTestUseCase {
     private final SmtpRelayProbe smtpRelayProbe;
     private final MailMessageComposer mailMessageComposer;
     private final CryptoProfileSelector cryptoProfileSelector;
+    private final DeliveryRouteResolver deliveryRouteResolver;
 
     public MailTestUseCase(OutboundMailSubmitter outboundMailSubmitter,
-                           CertificateRepository certificateRepository,
-                           SystemSettingsProvider systemSettingsProvider,
-                           RelayPolicyPort relayPolicyPort,
-                           SmtpRelayProbe smtpRelayProbe,
-                           MailMessageComposer mailMessageComposer,
-                           CryptoProfileSelector cryptoProfileSelector) {
+	                           CertificateRepository certificateRepository,
+	                           SystemSettingsProvider systemSettingsProvider,
+	                           RelayPolicyPort relayPolicyPort,
+	                           SmtpRelayProbe smtpRelayProbe,
+	                           MailMessageComposer mailMessageComposer,
+	                           CryptoProfileSelector cryptoProfileSelector,
+	                           DeliveryRouteResolver deliveryRouteResolver) {
         this.outboundMailSubmitter = outboundMailSubmitter;
         this.certificateRepository = certificateRepository;
         this.systemSettingsProvider = systemSettingsProvider;
@@ -46,18 +50,23 @@ public class MailTestUseCase {
         this.smtpRelayProbe = smtpRelayProbe;
         this.mailMessageComposer = mailMessageComposer;
         this.cryptoProfileSelector = cryptoProfileSelector;
+        this.deliveryRouteResolver = deliveryRouteResolver;
     }
 
     @Transactional(readOnly = true)
-    public String sendPlain(SendMailRequest request, UserContext user) {
+    public String sendConfigured(SendMailRequest request, UserContext user) {
         requireAdmin(user);
         try {
             OutboundMailSubmitter.PlainOutboundMailSubmission submission = plainSubmission(request);
             outboundMailSubmitter.submitPlain(submission);
-            return "邮件已提交发送，请查看日志和收件箱";
+            return "测试邮件已按当前域名策略和投递路由提交发送，请查看日志和收件箱";
         } catch (Exception e) {
             throw BusinessException.badRequest("邮件发送失败: " + e.getMessage());
         }
+    }
+
+    public String sendPlain(SendMailRequest request, UserContext user) {
+        return sendConfigured(request, user);
     }
 
     private OutboundMailSubmitter.PlainOutboundMailSubmission plainSubmission(SendMailRequest request) {
@@ -137,34 +146,57 @@ public class MailTestUseCase {
         StringBuilder result = new StringBuilder();
         if (settings.delivery().postfix().enabled()) {
             appendProbeResult(result, "after-filter", new SmtpRelayProbe.SmtpConnectionSettings(
-                    settings.delivery().postfix().host(),
-                    settings.delivery().postfix().afterFilterPort(),
-                    "",
-                    "",
-                    settings.delivery().postfix().timeoutMs()
-            ));
-            result.append("\n");
-            appendProbeResult(result, "outbound", new SmtpRelayProbe.SmtpConnectionSettings(
-                    settings.delivery().postfix().host(),
-                    settings.delivery().postfix().outboundPort(),
-                    "",
-                    "",
-                    settings.delivery().postfix().timeoutMs()
-            ));
-        } else {
-            RelayPolicyPort.RelayProbeSettings relay = relayPolicyPort.getProbeSettings();
-            if (!relay.enabled()) {
-                return "SMTP配置测试结果:\ndirect-relay: SKIPPED: direct relay policy disabled";
-            }
-            appendProbeResult(result, "direct-relay", new SmtpRelayProbe.SmtpConnectionSettings(
-                    relay.host(),
-                    relay.port(),
-                    relay.username(),
-                    relay.password(),
-                    relay.timeoutMs()
-            ));
-        }
-        return "SMTP配置测试结果:\n" + result;
+	                    settings.delivery().postfix().host(),
+	                    settings.delivery().postfix().afterFilterPort(),
+	                    "",
+	                    "",
+	                    settings.delivery().postfix().timeoutMs(),
+	                    DeliveryTransportProfile.SMTP_CLEAR
+	            ));
+	            result.append("\n");
+	            appendProbeResult(result, "outbound", new SmtpRelayProbe.SmtpConnectionSettings(
+	                    settings.delivery().postfix().host(),
+	                    settings.delivery().postfix().outboundPort(),
+	                    "",
+	                    "",
+	                    settings.delivery().postfix().timeoutMs(),
+	                    DeliveryTransportProfile.SMTP_CLEAR
+	            ));
+	        } else {
+	            RelayPolicyPort.RelayProbeSettings relay = relayPolicyPort.getProbeSettings();
+	            if (!relay.enabled()) {
+	                return "SMTP配置测试结果:\ndirect-relay: SKIPPED: direct relay policy disabled";
+	            }
+	            DeliveryTransportProfile profile = DeliveryTransportProfile.fromLegacyPort(relay.port());
+	            appendProbeResult(result, "direct-relay", new SmtpRelayProbe.SmtpConnectionSettings(
+	                    relay.host(),
+	                    profile.defaultPort(),
+	                    relay.username(),
+	                    relay.password(),
+	                    relay.timeoutMs(),
+	                    profile
+	            ));
+	        }
+	        return "SMTP配置测试结果:\n" + result;
+	    }
+
+    @Transactional(readOnly = true)
+    public String probeCurrentRoute(SendMailRequest request, UserContext user) {
+        requireAdmin(user);
+        List<EmailAddress> recipients = request.to().stream().map(EmailAddress::new).toList();
+        return deliveryRouteResolver.resolve(recipients)
+                .map(route -> {
+                    StringBuilder result = new StringBuilder("当前投递路由探测结果:\n");
+                    appendProbeResult(result, "delivery-route", new SmtpRelayProbe.SmtpConnectionSettings(
+                            route.host(),
+                            route.port(),
+                            "",
+                            "",
+                            systemSettingsProvider.snapshot().delivery().postfix().timeoutMs(),
+                            route.transportProfile()));
+                    return result.toString();
+                })
+                .orElse("当前投递路由探测结果:\nSKIPPED: 未找到收件人域的统一投递路由");
     }
 
     private MailMessageComposer.MailDraft draft(SendMailRequest request) {

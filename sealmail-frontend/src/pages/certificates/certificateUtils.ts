@@ -14,6 +14,8 @@ export interface ImportCertificateValues {
   privateKeyData?: string;
 }
 
+export type ImportCertificateMode = 'PUBLIC_CERTIFICATE' | 'GATEWAY_MANAGED_PRIVATE_KEY';
+
 export interface SelfSignedCertificateValues {
   ownerEmail: string;
   algorithm: 'RSA' | 'SM2';

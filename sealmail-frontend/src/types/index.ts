@@ -404,6 +404,15 @@ export interface AuditLog {
 }
 
 // Domain Config Types
+export type DeliveryTransportProfile =
+  | 'SMTP_CLEAR'
+  | 'SMTP_STARTTLS_STANDARD'
+  | 'SMTP_IMPLICIT_TLS_STANDARD'
+  | 'SMTP_STARTTLS_GM'
+  | 'SMTP_IMPLICIT_TLS_GM';
+
+export type DecryptionMode = 'GATEWAY_TERMINATED' | 'END_TO_END_PASSTHROUGH';
+
 export interface DomainConfig {
   id: string;
   domain: string;
@@ -415,7 +424,11 @@ export interface DomainConfig {
   signingEnabled: boolean;
   dkimEnabled: boolean;
   deliveryHost?: string;
+  deliveryTransportProfile?: DeliveryTransportProfile;
+  deliveryTransportProfileDisplayName?: string;
   deliveryPort?: number;
+  decryptionMode?: DecryptionMode;
+  decryptionModeDisplayName?: string;
   active: boolean;
 }
 
@@ -427,7 +440,9 @@ export interface CreateDomainConfigRequest {
   signingEnabled?: boolean;
   dkimEnabled?: boolean;
   deliveryHost?: string;
+  deliveryTransportProfile?: DeliveryTransportProfile;
   deliveryPort?: number;
+  decryptionMode?: DecryptionMode;
   active?: boolean;
 }
 
@@ -437,7 +452,9 @@ export interface UpdateDomainConfigRequest {
   signingEnabled?: boolean;
   dkimEnabled?: boolean;
   deliveryHost?: string;
+  deliveryTransportProfile?: DeliveryTransportProfile;
   deliveryPort?: number;
+  decryptionMode?: DecryptionMode;
   active?: boolean;
 }
 
@@ -839,12 +856,14 @@ export interface DlpTestRequest {
   direction?: 'INBOUND' | 'OUTBOUND';
 }
 
-export interface SendProtectedMailRequest {
+export interface SendTestMailRequest {
   from: string;
   to: string[];
   subject: string;
   content: string;
 }
+
+export type SendProtectedMailRequest = SendTestMailRequest;
 
 // Certificate Issuance Types
 export interface GenerateSelfSignedRequest {

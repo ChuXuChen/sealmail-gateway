@@ -23,9 +23,9 @@ const ToolsSection: React.FC<ToolsSectionProps> = ({ onOpenProbe, onOpenTest }) 
         </Card>
       </Col>
       <Col xs={24} md={12}>
-        <Card type="inner" title="受保护测试邮件">
+        <Card type="inner" title="测试邮件">
           <Space direction="vertical" size={12} className="full-width">
-            <Text>提交一封测试邮件，验证当前域名策略、证书绑定和投递链路。</Text>
+            <Text>默认按当前域名策略和投递路由提交测试邮件。</Text>
             <Button type="primary" icon={<SendOutlined />} onClick={onOpenTest}>
               发送测试
             </Button>

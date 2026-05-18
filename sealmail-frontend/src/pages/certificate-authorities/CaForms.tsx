@@ -96,7 +96,7 @@ export const IntermediateCaModal: React.FC<IntermediateCaModalProps> = ({
         name="rootCaId"
         label="父 Root CA"
         rules={[{ required: true }]}
-        extra="只列出有私钥且未吊销的 Root CA"
+        extra="只列出带托管私钥且未吊销的 Root CA"
       >
         <Select
           placeholder="请选择 Root CA"
@@ -149,7 +149,7 @@ export const SignCsrModal: React.FC<SignCsrModalProps> = ({
         name="caCertId"
         label="Intermediate CA"
         rules={[{ required: true, message: '请选择 Intermediate CA' }]}
-        extra="只列出 pathLen=0、带私钥、未吊销且链路可信的 Intermediate CA"
+        extra="只列出 pathLen=0、带托管私钥、未吊销且链路可信的 Intermediate CA"
       >
         <Select
           placeholder="请选择 Intermediate CA"

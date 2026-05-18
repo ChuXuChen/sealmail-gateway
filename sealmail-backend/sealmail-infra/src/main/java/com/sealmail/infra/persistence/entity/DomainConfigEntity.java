@@ -35,6 +35,12 @@ public class DomainConfigEntity {
     @Column(name = "delivery_port")
     private Integer deliveryPort;
 
+    @Column(name = "delivery_transport_profile", length = 64)
+    private String deliveryTransportProfile;
+
+    @Column(name = "decryption_mode", length = 64)
+    private String decryptionMode;
+
     @Column(name = "preferred_algorithm", length = 32)
     private String preferredAlgorithm;
 

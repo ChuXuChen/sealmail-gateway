@@ -3,6 +3,7 @@ import { message } from 'antd';
 import { caApi, certificateApi } from '../../api/client';
 import { getApiErrorMessage } from '../../api/errors';
 import type { Certificate } from '../../types';
+import { copyTextToClipboard, downloadTextFile, safePemFilename } from '../../utils/pemExport';
 import type { CaFilters, CaTableRecord, CreateIntermediateCaValues, CreateRootCaValues, SignCsrValues } from './caUtils';
 import { defaultCaFilters, getUnavailableSigningReason, matchesCertificateFilters } from './caUtils';
 
@@ -194,6 +195,35 @@ export const useCertificateAuthorities = () => {
     }
   }, [loadData]);
 
+  const fetchPem = useCallback(async (id: string) => {
+    const response = await caApi.pem(id);
+    return response.data;
+  }, []);
+
+  const copyPem = useCallback(async (record: Certificate) => {
+    try {
+      const pem = await fetchPem(record.id);
+      await copyTextToClipboard(pem);
+      message.success('CA 公开 PEM 已复制');
+      return true;
+    } catch (error) {
+      message.error(getApiErrorMessage(error, '复制 CA PEM 失败'));
+      return false;
+    }
+  }, [fetchPem]);
+
+  const downloadPem = useCallback(async (record: Certificate) => {
+    try {
+      const pem = await fetchPem(record.id);
+      downloadTextFile(safePemFilename(record.alias || record.subjectDn || record.id, 'ca'), pem);
+      message.success('CA 公开 PEM 已下载');
+      return true;
+    } catch (error) {
+      message.error(getApiErrorMessage(error, '下载 CA PEM 失败'));
+      return false;
+    }
+  }, [fetchPem]);
+
   const updateFilter = useCallback(<K extends keyof CaFilters>(key: K, value: CaFilters[K]) => {
     setFilters((prev) => ({ ...prev, [key]: value }));
   }, []);
@@ -206,8 +236,10 @@ export const useCertificateAuthorities = () => {
     algorithmOptions,
     createIntermediate,
     createRoot,
+    copyPem,
     data,
     deleteCa,
+    downloadPem,
     expandedRowKeys,
     filters,
     issuing,

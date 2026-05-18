@@ -22,7 +22,7 @@ const RevocationTag: React.FC<{ cert: Certificate }> = ({ cert }) => (
 );
 
 const PrivateKeyTag: React.FC<{ cert: Certificate }> = ({ cert }) => (
-  <Tag color={cert.hasPrivateKey ? 'green' : 'default'}>{cert.hasPrivateKey ? '私钥' : '无钥'}</Tag>
+  <Tag color={cert.hasPrivateKey ? 'green' : 'default'}>{cert.hasPrivateKey ? '托管私钥' : '无钥'}</Tag>
 );
 
 const ChainTag: React.FC<{ cert: Certificate }> = ({ cert }) => (
