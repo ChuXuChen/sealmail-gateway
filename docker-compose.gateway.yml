@@ -11,7 +11,7 @@ services:
     ports:
       - "127.0.0.1:${SEALMAIL_DB_HOST_PORT:-5433}:5432"
     volumes:
-      - ./runtime/${SEALMAIL_SITE:-node}/postgres:/var/lib/postgresql/data
+      - postgres-data:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${SEALMAIL_DB_USERNAME:-sealmail} -d ${SEALMAIL_DB_NAME:-sealmail}"]
       interval: 10s
@@ -54,7 +54,20 @@ services:
       - "127.0.0.1:${SEALMAIL_BACKEND_HTTP_PORT:-8080}:8080"
       - "127.0.0.1:${SEALMAIL_SMTP_DEBUG_PORT:-10025}:10025"
     volumes:
-      - ./runtime/${SEALMAIL_SITE:-node}/keystore:/var/lib/sealmail/keystore
+      - backend-keystore:/var/lib/sealmail/keystore
+
+  frontend:
+    build:
+      context: .
+      dockerfile: docker/frontend/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      - sealmail-backend
+    environment:
+      BACKEND_UPSTREAM: http://sealmail-backend:8080
+      NGINX_ENVSUBST_FILTER: ^BACKEND_UPSTREAM$
+    ports:
+      - "${SEALMAIL_FRONTEND_BIND:-127.0.0.1}:${SEALMAIL_FRONTEND_HTTP_PORT:-8088}:80"
 
   postfix:
     build:
@@ -86,7 +99,7 @@ services:
     ports:
       - "${POSTFIX_PUBLIC_SMTP_PORT:-587}:25"
     volumes:
-      - ./runtime/${SEALMAIL_SITE:-node}/postfix-tls:/etc/postfix/tls
+      - postfix-tls:/etc/postfix/tls
 
   sealmail-edge:
     build:
@@ -123,7 +136,12 @@ services:
       - "127.0.0.1:${MAILPIT_SMTP_DEBUG_PORT:-1025}:1025"
       - "127.0.0.1:${MAILPIT_UI_HOST_PORT:-8025}:8025"
     volumes:
-      - ./runtime/${SEALMAIL_SITE:-node}/mailpit:/data
+      - mailpit-data:/data
     environment:
       MP_DATABASE: /data/mailpit.db
 
+volumes:
+  postgres-data:
+  backend-keystore:
+  postfix-tls:
+  mailpit-data:

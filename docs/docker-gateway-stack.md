@@ -12,7 +12,9 @@ docker/postfix/Dockerfile
 docker/postfix/entrypoint.sh
 docker/sealmail-edge/Dockerfile
 docker/sealmail-edge/entrypoint.sh
+docker/frontend/Dockerfile
 sealmail-backend/Dockerfile
+ops/gateway-stack-up.sh
 ```
 
 The stack runs:
@@ -20,6 +22,7 @@ The stack runs:
 ```text
 PostgreSQL
 SealMail Backend
+SealMail Frontend
 Postfix
 SealMail Edge
 Mailpit
@@ -61,6 +64,12 @@ EDGE_OUTBOUND_ROUTES=alpha.sealmail.top=<server-a-public-ip>:2525
 Then start:
 
 ```bash
+ops/gateway-stack-up.sh
+```
+
+The script validates the required secrets and then runs:
+
+```bash
 docker compose --env-file .env.gateway -f docker-compose.gateway.yml up -d --build
 ```
 
@@ -85,11 +94,22 @@ Keep these bound to localhost or behind SSH tunnel:
 ```text
 5433  PostgreSQL debug mapping
 8080  SealMail API
+8088  SealMail frontend
 10025 SealMail content-filter SMTP debug mapping
 1025  Mailpit SMTP debug mapping
 8025  Mailpit UI
 2727  Edge admin
 ```
+
+The frontend is served by Nginx and proxies `/api/**` to `sealmail-backend:8080`
+inside the Compose network. By default it is bound to `127.0.0.1:8088`; use an
+SSH tunnel for remote administration:
+
+```bash
+ssh -L 8088:127.0.0.1:8088 user@server
+```
+
+Then open `http://localhost:8088`.
 
 ## Route Modes
 
@@ -121,11 +141,19 @@ EDGE_TLS_TRUST_STORE_PASSWORD=...
 For a quick trust-only lab, `EDGE_TLS_TRUST_ALL=true` can be used, but do not use
 that setting outside an isolated test.
 
+PostgreSQL data, the backend S/MIME keystore, Postfix TLS files, and Mailpit
+data use Docker named volumes. This avoids first-run host UID/GID write
+failures. Back up these volumes before deleting the stack:
+
+```bash
+docker volume ls | grep sealmail-gateway
+```
+
 ## Notes
 
 Postfix auto-generates a self-signed RSA TLS certificate if
-`runtime/<site>/postfix-tls/tls.crt` and `tls.key` do not exist. That is enough
-to test STARTTLS encryption with `POSTFIX_REMOTE_TLS_SECURITY_LEVEL=encrypt`,
+the `postfix-tls` volume does not already contain `tls.crt` and `tls.key`. That
+is enough to test STARTTLS encryption with `POSTFIX_REMOTE_TLS_SECURITY_LEVEL=encrypt`,
 but it does not prove public CA trust or hostname verification.
 
 After startup, configure SealMail domain policies in the UI/API:
