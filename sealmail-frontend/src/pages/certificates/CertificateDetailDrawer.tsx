@@ -1,5 +1,5 @@
 import React from 'react';
-import { Button, Descriptions, Popconfirm, Space, Tag, Typography } from 'antd';
+import { Button, Descriptions, Popconfirm, Space, Tag } from 'antd';
 import {
   FileProtectOutlined,
   KeyOutlined,
@@ -10,6 +10,7 @@ import {
 import type { Certificate } from '../../types';
 import { DetailDrawer } from '../../components/Page';
 import { formatDate } from './certificateUtils';
+import CertificateIdentityValue from './CertificateIdentityValue';
 import CertificateStatusTags, { CertificateAlgorithmTag } from './CertificateStatusTags';
 
 interface CertificateDetailDrawerProps {
@@ -37,9 +38,11 @@ const CertificateDetailDrawer: React.FC<CertificateDetailDrawerProps> = ({
         </Descriptions.Item>
         <Descriptions.Item label="颁发者DN">{certificate.issuerDn || '-'}</Descriptions.Item>
         <Descriptions.Item label="主体DN">{certificate.subjectDn || '-'}</Descriptions.Item>
-        <Descriptions.Item label="序列号">{certificate.serialNumber || '-'}</Descriptions.Item>
+        <Descriptions.Item label="序列号">
+          <CertificateIdentityValue value={certificate.serialNumber} />
+        </Descriptions.Item>
         <Descriptions.Item label="指纹">
-          <Typography.Text copyable>{certificate.thumbprint}</Typography.Text>
+          <CertificateIdentityValue value={certificate.thumbprint} />
         </Descriptions.Item>
         <Descriptions.Item label="有效期">
           {formatDate(certificate.notBefore)} - {formatDate(certificate.notAfter)}

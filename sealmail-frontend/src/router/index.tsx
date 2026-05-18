@@ -15,7 +15,6 @@ import {
   canViewAuditLogs,
   canViewCrl,
   canViewQuarantine,
-  canViewSystemStatus,
 } from '../auth/permissions';
 import { PageShell } from '../components/Page';
 import { ROUTES } from './routes';
@@ -31,7 +30,6 @@ const DlpQuarantine = React.lazy(() => import('../pages/DlpQuarantine'));
 const DlpPatterns = React.lazy(() => import('../pages/DlpPatterns'));
 const DlpSelection = React.lazy(() => import('../pages/DlpSelection'));
 const DlpEvents = React.lazy(() => import('../pages/DlpEvents'));
-const ConfigOverview = React.lazy(() => import('../pages/Settings'));
 const AuditLogs = React.lazy(() => import('../pages/AuditLogs'));
 const DomainConfigs = React.lazy(() => import('../pages/DomainConfigs'));
 const MailAuth = React.lazy(() => import('../pages/MailAuth'));
@@ -39,15 +37,8 @@ const GmEdgePolicyPage = React.lazy(() => import('../pages/policies/GmEdgePolicy
 const SmimeSuitePolicyPage = React.lazy(() => import('../pages/policies/SmimeSuitePolicyPage'));
 const RelayPolicyPage = React.lazy(() => import('../pages/policies/RelayPolicyPage'));
 const QuarantinePolicyPage = React.lazy(() => import('../pages/policies/QuarantinePolicyPage'));
-const SmtpEntryPolicyPage = React.lazy(() => import('../pages/policies/SmtpEntryPolicyPage'));
-const DeliveryPolicyPage = React.lazy(() => import('../pages/policies/DeliveryPolicyPage'));
-const RuntimeStatusPage = React.lazy(() => import('../pages/ops/RuntimeStatusPage'));
-const OpsToolsPage = React.lazy(() => import('../pages/ops/OpsToolsPage'));
 const SmtpProbePage = React.lazy(() => import('../pages/ops/SmtpProbePage'));
 const ProtectedTestMailPage = React.lazy(() => import('../pages/ops/ProtectedTestMailPage'));
-const CertificateValidationPage = React.lazy(() => import('../pages/trust/CertificateValidationPage'));
-const CryptoCapabilitiesPage = React.lazy(() => import('../pages/trust/CryptoCapabilitiesPage'));
-const GmTlsEdgePage = React.lazy(() => import('../pages/trust/GmTlsEdgePage'));
 const Forbidden = React.lazy(() => import('../pages/Forbidden'));
 
 interface ProtectedRouteProps {
@@ -187,11 +178,11 @@ const router = createBrowserRouter([
           },
           {
             path: 'smtp-entry',
-            element: roleElement(canViewSystemStatus, <SmtpEntryPolicyPage />),
+            element: <Navigate to={ROUTES.dashboard} replace />,
           },
           {
             path: 'delivery',
-            element: roleElement(canViewSystemStatus, <DeliveryPolicyPage />),
+            element: <Navigate to={ROUTES.dashboard} replace />,
           },
         ],
       },
@@ -216,15 +207,15 @@ const router = createBrowserRouter([
           },
           {
             path: 'certificate-validation',
-            element: roleElement(canViewSystemStatus, <CertificateValidationPage />),
+            element: <Navigate to={ROUTES.dashboard} replace />,
           },
           {
             path: 'crypto-capabilities',
-            element: roleElement(canViewSystemStatus, <CryptoCapabilitiesPage />),
+            element: <Navigate to={ROUTES.dashboard} replace />,
           },
           {
             path: 'gm-tls-edge',
-            element: roleElement(canViewSystemStatus, <GmTlsEdgePage />),
+            element: <Navigate to={ROUTES.dashboard} replace />,
           },
         ],
       },
@@ -233,19 +224,39 @@ const router = createBrowserRouter([
         children: [
           {
             index: true,
-            element: <Navigate to={ROUTES.opsConfigOverview} replace />,
+            element: <Navigate to={ROUTES.dashboard} replace />,
           },
           {
             path: 'runtime',
-            element: roleElement(canViewSystemStatus, <RuntimeStatusPage />),
+            element: <Navigate to={ROUTES.dashboard} replace />,
           },
           {
             path: 'config-overview',
-            element: roleElement(canViewSystemStatus, <ConfigOverview />),
+            element: <Navigate to={ROUTES.dashboard} replace />,
           },
           {
             path: 'tools',
-            element: roleElement(canManageCa, <OpsToolsPage />),
+            element: <Navigate to={ROUTES.opsSmtpProbe} replace />,
+          },
+          {
+            path: 'smtp-entry',
+            element: <Navigate to={ROUTES.dashboard} replace />,
+          },
+          {
+            path: 'delivery',
+            element: <Navigate to={ROUTES.dashboard} replace />,
+          },
+          {
+            path: 'certificate-validation',
+            element: <Navigate to={ROUTES.dashboard} replace />,
+          },
+          {
+            path: 'crypto-capabilities',
+            element: <Navigate to={ROUTES.dashboard} replace />,
+          },
+          {
+            path: 'gm-tls-edge',
+            element: <Navigate to={ROUTES.dashboard} replace />,
           },
           {
             path: 'smtp-probe',
@@ -267,7 +278,7 @@ const router = createBrowserRouter([
       },
       {
         path: 'settings',
-        element: <Navigate to={ROUTES.opsConfigOverview} replace />,
+        element: <Navigate to={ROUTES.dashboard} replace />,
       },
       {
         path: 'exception-mails',

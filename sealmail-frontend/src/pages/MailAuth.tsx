@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Button, Card, Col, Form, Row, Select, Space, Statistic, Tag } from 'antd';
+import { Button, Card, Col, Form, Row, Select, Space, Statistic, Tabs, Tag } from 'antd';
 import { ReloadOutlined, RetweetOutlined } from '@ant-design/icons';
 import { PageHeader, PageShell } from '../components/Page';
 import MailAuthDnsRecords from './mail-auth/MailAuthDnsRecords';
@@ -85,6 +85,20 @@ const MailAuth: React.FC = () => {
     }
   };
 
+  const domainSelector = (
+    <div className="config-panel config-panel--compact">
+      <Select
+        showSearch
+        className="mail-auth-domain-select"
+        placeholder="选择域名"
+        value={selectedDomain || undefined}
+        options={domainOptions}
+        loading={loading}
+        onChange={(value) => selectDomain(value)}
+      />
+    </div>
+  );
+
   return (
     <PageShell className="mail-auth-page">
       <PageHeader
@@ -107,67 +121,83 @@ const MailAuth: React.FC = () => {
         )}
       />
 
-      <Row gutter={[16, 16]}>
-        <Col xs={24} sm={12} lg={6}>
-          <Card className="mail-auth-stat-card">
-            <Statistic title="认证服务" value={status?.authservId || '-'} />
-          </Card>
-        </Col>
-        <Col xs={24} sm={12} lg={6}>
-          <Card className="mail-auth-stat-card">
-            <Statistic title="域名策略" value={status?.domainPolicyCount ?? 0} />
-          </Card>
-        </Col>
-        <Col xs={24} sm={12} lg={6}>
-          <Card className="mail-auth-stat-card">
-            <Statistic title="DKIM 启用域名" value={status?.dkimEnabledDomainCount ?? 0} />
-          </Card>
-        </Col>
-        <Col xs={24} sm={12} lg={6}>
-          <Card className="mail-auth-stat-card">
-            <Statistic title="失败动作" value={status?.failureDefaultAction || '-'} />
-          </Card>
-        </Col>
-      </Row>
-
-      <MailAuthGlobalPolicyForm
-        form={globalForm}
-        loading={savingGlobal}
-        onSubmit={saveGlobalPolicy}
-      />
-
-      <Card className="mail-auth-section" title="域名选择">
-        <Select
-          showSearch
-          className="mail-auth-domain-select"
-          placeholder="选择域名"
-          value={selectedDomain || undefined}
-          options={domainOptions}
-          loading={loading}
-          onChange={(value) => selectDomain(value)}
-        />
-      </Card>
-
-      <Row gutter={[16, 16]}>
-        <Col xs={24} xl={14}>
-          <MailAuthDomainPolicyForm
-            form={domainForm}
-            loading={savingDomain}
-            selectedDomain={selectedDomain}
-            onSubmit={saveDomainPolicy}
-          />
-        </Col>
-        <Col xs={24} xl={10}>
-          <Card title="DNS TXT" className="mail-auth-section">
-            <MailAuthDnsRecords records={dnsRecords} onCopyText={copyText} />
-          </Card>
-        </Col>
-      </Row>
-
-      <MailAuthProbeTable
-        loading={probing}
-        probes={probeResults.length > 0 ? probeResults : status?.recentDnsProbes || []}
-        onProbe={probeDns}
+      <Tabs
+        className="config-tabs"
+        items={[
+          {
+            key: 'global',
+            label: '全局策略',
+            children: (
+              <div className="config-section-stack">
+                <Row gutter={[16, 16]}>
+                  <Col xs={24} sm={12} lg={6}>
+                    <Card className="mail-auth-stat-card">
+                      <Statistic title="认证服务" value={status?.authservId || '-'} />
+                    </Card>
+                  </Col>
+                  <Col xs={24} sm={12} lg={6}>
+                    <Card className="mail-auth-stat-card">
+                      <Statistic title="域名策略" value={status?.domainPolicyCount ?? 0} />
+                    </Card>
+                  </Col>
+                  <Col xs={24} sm={12} lg={6}>
+                    <Card className="mail-auth-stat-card">
+                      <Statistic title="DKIM 启用域名" value={status?.dkimEnabledDomainCount ?? 0} />
+                    </Card>
+                  </Col>
+                  <Col xs={24} sm={12} lg={6}>
+                    <Card className="mail-auth-stat-card">
+                      <Statistic title="失败动作" value={status?.failureDefaultAction || '-'} />
+                    </Card>
+                  </Col>
+                </Row>
+                <MailAuthGlobalPolicyForm
+                  form={globalForm}
+                  loading={savingGlobal}
+                  onSubmit={saveGlobalPolicy}
+                />
+              </div>
+            ),
+          },
+          {
+            key: 'domain',
+            label: '域名策略',
+            children: (
+              <div className="config-section-stack">
+                {domainSelector}
+                <MailAuthDomainPolicyForm
+                  form={domainForm}
+                  loading={savingDomain}
+                  selectedDomain={selectedDomain}
+                  onSubmit={saveDomainPolicy}
+                />
+              </div>
+            ),
+          },
+          {
+            key: 'dns',
+            label: 'DNS TXT',
+            children: (
+              <div className="config-section-stack">
+                {domainSelector}
+                <Card title="DNS TXT" className="mail-auth-section">
+                  <MailAuthDnsRecords records={dnsRecords} onCopyText={copyText} />
+                </Card>
+              </div>
+            ),
+          },
+          {
+            key: 'probe',
+            label: 'DNS 探测',
+            children: (
+              <MailAuthProbeTable
+                loading={probing}
+                probes={probeResults.length > 0 ? probeResults : status?.recentDnsProbes || []}
+                onProbe={probeDns}
+              />
+            ),
+          },
+        ]}
       />
 
       <MailAuthRotateDkimModal

@@ -236,17 +236,15 @@ export const CertificateValidationPanel: React.FC<SettingsPanelProps> = ({ setti
 );
 
 export const CryptoCapabilitiesPanel: React.FC<SettingsPanelProps> = ({ settings }) => (
-  <Card title="算法能力">
-    {settings?.smimeSuitePolicy ? (
-      <Space size={8} wrap style={{ marginBottom: 12 }}>
-        <Tag color="processing" className="settings-tag">
-          STANDARD 默认: {settings.smimeSuitePolicy.defaultStandardSuite}
-        </Tag>
-        <Tag color="error" className="settings-tag">
-          GM 默认: {settings.smimeSuitePolicy.defaultGmSuite}
-        </Tag>
+  <Card
+    title="算法能力"
+    extra={settings?.smimeSuitePolicy ? (
+      <Space size={6} wrap>
+        <Tag color="processing" className="settings-tag">标准默认 {settings.smimeSuitePolicy.defaultStandardSuite}</Tag>
+        <Tag color="error" className="settings-tag">国密默认 {settings.smimeSuitePolicy.defaultGmSuite}</Tag>
       </Space>
     ) : null}
+  >
     <CryptoCapabilityTags capabilities={settings?.cryptoCapabilities} />
   </Card>
 );

@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { Layout, Menu, Avatar, Dropdown, Grid, Button, Drawer, Space, Tag, Typography, theme } from 'antd';
 import {
+  DashboardOutlined,
   SafetyOutlined,
   InboxOutlined,
   SettingOutlined,
@@ -16,7 +17,6 @@ import {
   MailOutlined,
   MenuFoldOutlined,
   MenuUnfoldOutlined,
-  CloudServerOutlined,
   ToolOutlined,
   ThunderboltOutlined,
   SendOutlined,
@@ -33,7 +33,6 @@ import {
   canViewAuditLogs,
   canViewCrl,
   canViewQuarantine,
-  canViewSystemStatus,
   getPermissionSummary,
   getPrimaryRole,
 } from '../../auth/permissions';
@@ -120,16 +119,6 @@ const MainLayout: React.FC = () => {
       icon: <InboxOutlined />,
       label: '隔离策略',
     } : null,
-    canViewSystemStatus(user) ? {
-      key: ROUTES.policiesSmtpEntry,
-      icon: <CloudServerOutlined />,
-      label: 'SMTP 入口',
-    } : null,
-    canViewSystemStatus(user) ? {
-      key: ROUTES.policiesDelivery,
-      icon: <PartitionOutlined />,
-      label: '投递链路',
-    } : null,
   ].filter(Boolean) as ItemType[], [user]);
 
   const trustChildren = useMemo<ItemType[]>(() => [
@@ -148,39 +137,9 @@ const MainLayout: React.FC = () => {
       icon: <StopOutlined />,
       label: 'CRL 吊销列表',
     } : null,
-    canViewSystemStatus(user) ? {
-      key: ROUTES.trustCertificateValidation,
-      icon: <SafetyOutlined />,
-      label: '证书校验',
-    } : null,
-    canViewSystemStatus(user) ? {
-      key: ROUTES.trustCryptoCapabilities,
-      icon: <FileProtectOutlined />,
-      label: '算法能力',
-    } : null,
-    canViewSystemStatus(user) ? {
-      key: ROUTES.trustGmTlsEdge,
-      icon: <SafetyOutlined />,
-      label: '国密 TLS Edge',
-    } : null,
   ].filter(Boolean) as ItemType[], [user]);
 
   const opsChildren = useMemo<ItemType[]>(() => [
-    canViewSystemStatus(user) ? {
-      key: ROUTES.opsRuntime,
-      icon: <CloudServerOutlined />,
-      label: '运行状态',
-    } : null,
-    canViewSystemStatus(user) ? {
-      key: ROUTES.opsConfigOverview,
-      icon: <SettingOutlined />,
-      label: '配置总览',
-    } : null,
-    canManageCa(user) ? {
-      key: ROUTES.opsTools,
-      icon: <ToolOutlined />,
-      label: '运维工具',
-    } : null,
     canManageCa(user) ? {
       key: ROUTES.opsSmtpProbe,
       icon: <ThunderboltOutlined />,
@@ -199,6 +158,11 @@ const MainLayout: React.FC = () => {
   ].filter(Boolean) as ItemType[], [user]);
 
   const menuItems = useMemo<ItemType[]>(() => [
+    {
+      key: ROUTES.dashboard,
+      icon: <DashboardOutlined />,
+      label: 'Dashboard',
+    },
     dispositionChildren.length > 0 ? {
       key: 'disposition',
       icon: <InboxOutlined />,
@@ -224,6 +188,23 @@ const MainLayout: React.FC = () => {
       children: opsChildren,
     } : null,
   ].filter(Boolean) as ItemType[], [dispositionChildren, opsChildren, policyChildren, trustChildren]);
+
+  const aliasMenuKeys: Record<string, string> = {
+    [ROUTES.opsRuntime]: ROUTES.dashboard,
+    [ROUTES.opsConfigOverview]: ROUTES.dashboard,
+    [ROUTES.opsTools]: ROUTES.opsSmtpProbe,
+    [ROUTES.opsSmtpEntry]: ROUTES.dashboard,
+    [ROUTES.opsDelivery]: ROUTES.dashboard,
+    [ROUTES.opsCertificateValidation]: ROUTES.dashboard,
+    [ROUTES.opsCryptoCapabilities]: ROUTES.dashboard,
+    [ROUTES.opsGmTlsEdge]: ROUTES.dashboard,
+    [ROUTES.trustCertificateValidation]: ROUTES.dashboard,
+    [ROUTES.trustCryptoCapabilities]: ROUTES.dashboard,
+    [ROUTES.trustGmTlsEdge]: ROUTES.dashboard,
+    [ROUTES.policiesSmtpEntry]: ROUTES.dashboard,
+    [ROUTES.policiesDelivery]: ROUTES.dashboard,
+  };
+  const selectedMenuKey = aliasMenuKeys[location.pathname] || location.pathname;
 
   const handleMenuClick = ({ key }: { key: string }) => {
     if (!key.startsWith('/')) return;
@@ -268,8 +249,9 @@ const MainLayout: React.FC = () => {
       </div>
 
       <Menu
+        className="main-layout__menu"
         theme="dark"
-        selectedKeys={[location.pathname]}
+        selectedKeys={[selectedMenuKey]}
         defaultOpenKeys={['disposition', 'policies', 'trust', 'ops']}
         mode="inline"
         items={menuItems}

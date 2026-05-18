@@ -1,16 +1,18 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { Button, Descriptions, Drawer, Input, InputNumber, Select, Space, Table, Tag, message } from 'antd';
+import { Button, Descriptions, Drawer, Input, InputNumber, Select, Space, Table, Tabs, Tag, message } from 'antd';
 import { ReloadOutlined } from '@ant-design/icons';
 import type { TableColumnsType } from 'antd';
 import { dlpApi } from '../api/client';
 import { getApiErrorMessage } from '../api/errors';
-import type { DlpEvent, DlpEvidence } from '../types';
+import type { DlpEvent, DlpEvidence, DlpUbaSenderRisk } from '../types';
 import { DataTable, DlpActionTag, FilterBar, PageHeader, PageShell, formatDateTime } from '../components/Page';
 
 const DlpEvents: React.FC = () => {
   const [data, setData] = useState<DlpEvent[]>([]);
   const [evidence, setEvidence] = useState<DlpEvidence[]>([]);
+  const [ubaRisks, setUbaRisks] = useState<DlpUbaSenderRisk[]>([]);
   const [loading, setLoading] = useState(false);
+  const [riskLoading, setRiskLoading] = useState(false);
   const [pagination, setPagination] = useState({ page: 1, size: 20, total: 0 });
   const [action, setAction] = useState<string | undefined>();
   const [minSeverity, setMinSeverity] = useState<number | undefined>();
@@ -38,9 +40,25 @@ const DlpEvents: React.FC = () => {
     }
   }, [action, domain, minSeverity, pagination.page, pagination.size, rule]);
 
+  const loadRisks = useCallback(async () => {
+    setRiskLoading(true);
+    try {
+      const response = await dlpApi.listUbaSenderRisks({ limit: 100 });
+      setUbaRisks(response.data.data);
+    } catch (error) {
+      message.error(getApiErrorMessage(error, '加载发件人风险失败'));
+    } finally {
+      setRiskLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     void Promise.resolve().then(loadData);
   }, [loadData]);
+
+  useEffect(() => {
+    void Promise.resolve().then(loadRisks);
+  }, [loadRisks]);
 
   const openDetail = async (record: DlpEvent) => {
     setSelected(record);
@@ -73,35 +91,73 @@ const DlpEvents: React.FC = () => {
     { title: '操作', key: 'actions', width: 90, fixed: 'right', render: (_: unknown, record) => <Button type="link" size="small" onClick={() => openDetail(record)}>查看</Button> },
   ];
 
+  const riskColumns: TableColumnsType<DlpUbaSenderRisk> = [
+    { title: '发件人', dataIndex: 'senderEmail', key: 'senderEmail', width: 220, ellipsis: true },
+    { title: '风险', dataIndex: 'riskLevel', key: 'riskLevel', width: 90, render: (value: string) => <Tag color={value === 'HIGH' ? 'red' : value === 'MEDIUM' ? 'orange' : 'green'}>{value}</Tag> },
+    { title: '外发', dataIndex: 'outboundMessages', key: 'outboundMessages', width: 90 },
+    { title: '外部域', dataIndex: 'externalDomainCount', key: 'externalDomainCount', width: 90 },
+    { title: 'DLP 命中', dataIndex: 'dlpHitCount', key: 'dlpHitCount', width: 100 },
+    { title: '高风险', dataIndex: 'highRiskCount', key: 'highRiskCount', width: 90 },
+    { title: '原因', dataIndex: 'lastReasons', key: 'lastReasons', ellipsis: true, render: (values: string[]) => values.join('；') || '-' },
+    { title: '最近活动', dataIndex: 'lastSeenAt', key: 'lastSeenAt', width: 170, render: formatDateTime },
+  ];
+
   return (
     <PageShell>
       <PageHeader title="DLP 命中事件" description="查看 DLP 命中记录、策略来源、抽取 warning 和脱敏证据。" />
 
-      <FilterBar onRefresh={loadData} onReset={clearFilters} refreshLoading={loading}>
-        <Select className="filter-control-sm" allowClear placeholder="动作" value={action} onChange={(value) => { setAction(value); setPagination((prev) => ({ ...prev, page: 1 })); }} options={[
-          { value: 'WARN', label: '告警' },
-          { value: 'MUST_ENCRYPT', label: '强制加密' },
-          { value: 'QUARANTINE', label: '隔离' },
-          { value: 'BLOCK', label: '阻断' },
-        ]} />
-        <InputNumber className="filter-control-sm" min={1} max={10} placeholder="最低级别" value={minSeverity} onChange={(value) => { setMinSeverity(value || undefined); setPagination((prev) => ({ ...prev, page: 1 })); }} />
-        <Input className="filter-control-md" allowClear placeholder="规则" value={rule} onChange={(event) => setRule(event.target.value || undefined)} />
-        <Input className="filter-control-md" allowClear placeholder="域名" value={domain} onChange={(event) => setDomain(event.target.value || undefined)} />
-        <Button icon={<ReloadOutlined />} onClick={loadData}>查询</Button>
-      </FilterBar>
+      <Tabs
+        className="config-tabs"
+        items={[
+          {
+            key: 'events',
+            label: '命中事件',
+            children: (
+              <div className="config-section-stack">
+                <FilterBar onRefresh={loadData} onReset={clearFilters} refreshLoading={loading}>
+                  <Select className="filter-control-sm" allowClear placeholder="动作" value={action} onChange={(value) => { setAction(value); setPagination((prev) => ({ ...prev, page: 1 })); }} options={[
+                    { value: 'WARN', label: '告警' },
+                    { value: 'MUST_ENCRYPT', label: '强制加密' },
+                    { value: 'QUARANTINE', label: '隔离' },
+                    { value: 'BLOCK', label: '阻断' },
+                  ]} />
+                  <InputNumber className="filter-control-sm" min={1} max={10} placeholder="最低级别" value={minSeverity} onChange={(value) => { setMinSeverity(value || undefined); setPagination((prev) => ({ ...prev, page: 1 })); }} />
+                  <Input className="filter-control-md" allowClear placeholder="规则" value={rule} onChange={(event) => setRule(event.target.value || undefined)} />
+                  <Input className="filter-control-md" allowClear placeholder="域名" value={domain} onChange={(event) => setDomain(event.target.value || undefined)} />
+                  <Button icon={<ReloadOutlined />} onClick={loadData}>查询</Button>
+                </FilterBar>
 
-      <DataTable<DlpEvent>
-        rowKey="id"
-        loading={loading}
-        dataSource={data}
-        columns={columns}
-        scroll={{ x: 1220 }}
-        pagination={{
-          current: pagination.page,
-          pageSize: pagination.size,
-          total: pagination.total,
-          onChange: (page, size) => setPagination({ page, size, total: pagination.total }),
-        }}
+                <DataTable<DlpEvent>
+                  rowKey="id"
+                  loading={loading}
+                  dataSource={data}
+                  columns={columns}
+                  scroll={{ x: 1220 }}
+                  pagination={{
+                    current: pagination.page,
+                    pageSize: pagination.size,
+                    total: pagination.total,
+                    onChange: (page, size) => setPagination({ page, size, total: pagination.total }),
+                  }}
+                />
+              </div>
+            ),
+          },
+          {
+            key: 'sender-risks',
+            label: '发件人风险',
+            children: (
+              <DataTable<DlpUbaSenderRisk>
+                rowKey="senderEmail"
+                loading={riskLoading}
+                dataSource={ubaRisks}
+                columns={riskColumns}
+                scroll={{ x: 1040 }}
+                pagination={{ pageSize: 20, total: ubaRisks.length }}
+              />
+            ),
+          },
+        ]}
       />
 
       <Drawer title="DLP 事件证据" width={760} open={!!selected} onClose={() => { setSelected(null); setEvidence([]); }}>

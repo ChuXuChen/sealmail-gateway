@@ -47,6 +47,8 @@ root.render(
           fontSizeHeading4: 20,
           fontSizeHeading5: 16,
           fontWeightStrong: 650,
+          boxShadow: 'none',
+          boxShadowSecondary: 'none',
           lineHeight: 1.58,
           lineHeightHeading1: 1.12,
           lineHeightHeading2: 1.18,

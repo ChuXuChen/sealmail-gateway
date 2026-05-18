@@ -14,14 +14,46 @@
   border-right: 1px solid rgba(255, 255, 255, 0.08);
 }
 
+.main-layout__sider .ant-layout-sider-children {
+  display: flex;
+  min-height: 0;
+  height: 100%;
+  flex-direction: column;
+}
+
 .main-layout__sider .ant-layout-sider-trigger {
   border-top: 1px solid rgba(255, 255, 255, 0.08);
   background: #111816;
 }
 
-.main-layout__sider .ant-menu {
+.main-layout__sider .ant-menu,
+.main-layout__nav-drawer .ant-menu {
   padding: 8px;
   background: transparent;
+}
+
+.main-layout__menu {
+  min-height: 0;
+  flex: 1;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.28) transparent;
+}
+
+.main-layout__menu::-webkit-scrollbar {
+  width: 6px;
+}
+
+.main-layout__menu::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.28);
+}
+
+.main-layout__nav-drawer .ant-drawer-body {
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
 }
 
 .main-layout__sider .ant-menu-item,
@@ -66,7 +98,7 @@
   padding: 0 28px;
   border-bottom: 1px solid rgba(32, 40, 39, 0.08);
   backdrop-filter: blur(14px);
-  box-shadow: 0 8px 24px rgba(23, 33, 31, 0.06);
+  box-shadow: none;
 }
 
 .main-layout__header-spacer {
@@ -94,7 +126,7 @@
 .main-layout__user:hover {
   border-color: rgba(47, 111, 100, 0.34);
   background: #ffffff;
-  box-shadow: 0 8px 20px rgba(23, 33, 31, 0.08);
+  box-shadow: none;
 }
 
 .main-layout__user-name {

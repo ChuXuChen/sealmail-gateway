@@ -3,8 +3,9 @@
 }
 
 :root {
-  --font-sans: "Inter", "MiSans", "PingFang SC", "Microsoft YaHei UI", "Microsoft YaHei", "Noto Sans CJK SC", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  --font-display: "Inter", "MiSans", "PingFang SC", "Microsoft YaHei UI", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif;
+  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei UI", "Microsoft YaHei", "Noto Sans CJK SC", "MiSans", "Inter", sans-serif;
+  --font-display: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei UI", "Microsoft YaHei", "Noto Sans CJK SC", "MiSans", "Inter", sans-serif;
+  --font-numeric: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei UI", "Microsoft YaHei", "Noto Sans CJK SC", "Inter", sans-serif;
   --font-mono: "JetBrains Mono", "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
   --text-xs: 12px;
   --text-sm: 13px;
@@ -17,8 +18,13 @@
   --weight-medium: 520;
   --weight-semibold: 650;
   --weight-bold: 760;
+  --surface-page: #f3f5f2;
+  --surface-panel: #ffffff;
+  --surface-subtle: #f8faf7;
+  --line-subtle: rgba(32, 40, 39, 0.1);
+  --line-strong: rgba(32, 40, 39, 0.16);
   color: #202827;
-  background: #f5f6f2;
+  background: var(--surface-page);
   font-synthesis: none;
   text-rendering: optimizeLegibility;
 }
@@ -27,9 +33,7 @@ body {
   margin: 0;
   min-width: 320px;
   min-height: 100vh;
-  background:
-    linear-gradient(135deg, rgba(47, 111, 100, 0.08) 0%, transparent 34%),
-    linear-gradient(180deg, #f7f8f4 0%, #eef2ec 100%);
+  background: var(--surface-page);
   font-family: var(--font-sans);
   font-size: var(--text-md);
   font-weight: var(--weight-regular);
@@ -70,10 +74,14 @@ b {
 .ant-typography pre,
 .ant-input-code,
 .ant-input-data-count,
-.ant-statistic-content,
 .mono-small,
 .settings-probe-result {
   font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.ant-statistic-content {
+  font-family: var(--font-numeric);
   font-variant-numeric: tabular-nums;
 }
 

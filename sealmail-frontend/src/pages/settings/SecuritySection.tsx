@@ -22,7 +22,15 @@ const SecuritySection: React.FC<SecuritySectionProps> = ({ settings }) => (
         </Descriptions.Item>
       </Descriptions>
     </Card>
-    <Card title="算法能力">
+    <Card
+      title="算法能力"
+      extra={settings?.smimeSuitePolicy ? (
+        <Space size={6} wrap>
+          <Tag color="processing" className="settings-tag">标准默认 {settings.smimeSuitePolicy.defaultStandardSuite}</Tag>
+          <Tag color="error" className="settings-tag">国密默认 {settings.smimeSuitePolicy.defaultGmSuite}</Tag>
+        </Space>
+      ) : null}
+    >
       <CryptoCapabilityTags capabilities={settings?.cryptoCapabilities} />
     </Card>
     <Card title="国密 TLS Edge">
