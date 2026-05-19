@@ -36,8 +36,8 @@ const Crl: React.FC = () => {
         caApi.list(),
         certificateApi.list({ includeAll: true, page: 1, size: 500 }),
       ]);
-      setCas(caRes.data.data);
-      setAllCerts(certRes.data.data.items);
+      setCas(caRes);
+      setAllCerts(certRes.items);
     } catch (error) {
       message.error(getApiErrorMessage(error, '加载 CA / 证书数据失败'));
     } finally {

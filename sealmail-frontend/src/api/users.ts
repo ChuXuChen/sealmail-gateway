@@ -7,43 +7,30 @@ import type {
   UserStatusFilter,
 } from '../types';
 import apiClient from './http';
+import { unwrapApiResponse } from './response';
 
 export const userApi = {
-  list: async (status: UserStatusFilter = 'active') => {
-    const response = await apiClient.get<ApiResponse<UserAccount[]>>('/api/v1/users', { params: { status } });
-    return response.data.data;
-  },
+  list: (status: UserStatusFilter = 'active') =>
+    unwrapApiResponse(apiClient.get<ApiResponse<UserAccount[]>>('/api/v1/users', { params: { status } })),
 
-  create: async (data: CreateUserRequest) => {
-    const response = await apiClient.post<ApiResponse<UserAccount>>('/api/v1/users', data);
-    return response.data.data;
-  },
+  create: (data: CreateUserRequest) =>
+    unwrapApiResponse(apiClient.post<ApiResponse<UserAccount>>('/api/v1/users', data)),
 
-  update: async (userId: string, data: UpdateUserRequest) => {
-    const response = await apiClient.put<ApiResponse<UserAccount>>(`/api/v1/users/${encodeURIComponent(userId)}`, data);
-    return response.data.data;
-  },
+  update: (userId: string, data: UpdateUserRequest) =>
+    unwrapApiResponse(apiClient.put<ApiResponse<UserAccount>>(`/api/v1/users/${encodeURIComponent(userId)}`, data)),
 
-  disable: async (userId: string) => {
-    const response = await apiClient.post<ApiResponse<UserAccount>>(`/api/v1/users/${encodeURIComponent(userId)}/disable`);
-    return response.data.data;
-  },
+  disable: (userId: string) =>
+    unwrapApiResponse(apiClient.post<ApiResponse<UserAccount>>(`/api/v1/users/${encodeURIComponent(userId)}/disable`)),
 
-  enable: async (userId: string) => {
-    const response = await apiClient.post<ApiResponse<UserAccount>>(`/api/v1/users/${encodeURIComponent(userId)}/enable`);
-    return response.data.data;
-  },
+  enable: (userId: string) =>
+    unwrapApiResponse(apiClient.post<ApiResponse<UserAccount>>(`/api/v1/users/${encodeURIComponent(userId)}/enable`)),
 
-  unlock: async (userId: string) => {
-    const response = await apiClient.post<ApiResponse<UserAccount>>(`/api/v1/users/${encodeURIComponent(userId)}/unlock`);
-    return response.data.data;
-  },
+  unlock: (userId: string) =>
+    unwrapApiResponse(apiClient.post<ApiResponse<UserAccount>>(`/api/v1/users/${encodeURIComponent(userId)}/unlock`)),
 
-  resetPassword: async (userId: string, data: ResetPasswordRequest) => {
-    const response = await apiClient.post<ApiResponse<UserAccount>>(
+  resetPassword: (userId: string, data: ResetPasswordRequest) =>
+    unwrapApiResponse(apiClient.post<ApiResponse<UserAccount>>(
       `/api/v1/users/${encodeURIComponent(userId)}/reset-password`,
       data,
-    );
-    return response.data.data;
-  },
+    )),
 };

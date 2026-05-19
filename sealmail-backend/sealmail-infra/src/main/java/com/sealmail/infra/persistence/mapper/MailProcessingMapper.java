@@ -7,6 +7,8 @@ import com.sealmail.domain.mailsecurity.*;
 import com.sealmail.domain.quarantine.QuarantineReason;
 import com.sealmail.domain.shared.model.EmailAddress;
 import com.sealmail.infra.persistence.entity.MailProcessingEntity;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 import java.util.LinkedHashMap;
@@ -15,6 +17,8 @@ import java.util.Map;
 
 @Component
 public class MailProcessingMapper {
+
+    private static final Logger log = LoggerFactory.getLogger(MailProcessingMapper.class);
 
     private final ObjectMapper objectMapper;
 
@@ -61,7 +65,10 @@ public class MailProcessingMapper {
         if (entity.getResult() != null) {
             try {
                 processing.completeProcessing(ProcessingResult.valueOf(entity.getResult()));
-            } catch (Exception ignored) {}
+            } catch (IllegalArgumentException e) {
+                log.debug("Skipped invalid persisted mail processing result for {}: {}",
+                        entity.getId(), entity.getResult());
+            }
         }
 
         processing.clearDomainEvents();

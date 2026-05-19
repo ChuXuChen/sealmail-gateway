@@ -59,8 +59,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   const login = async (username: string, password: string) => {
     try {
-      const response = await authApi.login({ username, password });
-      const { accessToken, user } = response.data.data;
+      const { accessToken, user } = await authApi.login({ username, password });
       const userData = normalizeUser(user);
 
       localStorage.setItem('accessToken', accessToken);
@@ -87,8 +86,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   };
 
   const refreshUser = async () => {
-    const response = await authApi.me();
-    const userData = storeUser(response.data.data);
+    const userData = storeUser(await authApi.me());
     setUser(userData);
     return userData;
   };

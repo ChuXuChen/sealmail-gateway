@@ -52,22 +52,20 @@ final class DmarcEvaluator {
     }
 
     private DmarcRecord dmarcRecord(String fromDomain) {
-        String canonicalFrom = domainResolver.canonicalDomain(fromDomain);
-        if (canonicalFrom == null) {
-            return null;
-        }
+        return domainResolver.canonicalDomainValue(fromDomain)
+                .flatMap(this::dmarcRecordFor)
+                .orElse(null);
+    }
+
+    private java.util.Optional<DmarcRecord> dmarcRecordFor(String canonicalFrom) {
         Map<String, String> exact = recordAt("_dmarc." + canonicalFrom);
         if (!exact.isEmpty()) {
-            return new DmarcRecord(canonicalFrom, exact, false);
+            return java.util.Optional.of(new DmarcRecord(canonicalFrom, exact, false));
         }
-        String orgDomain = domainResolver.organizationalDomain(canonicalFrom);
-        if (orgDomain != null && !canonicalFrom.equals(orgDomain)) {
-            Map<String, String> organizational = recordAt("_dmarc." + orgDomain);
-            if (!organizational.isEmpty()) {
-                return new DmarcRecord(orgDomain, organizational, true);
-            }
-        }
-        return null;
+        return domainResolver.organizationalDomainValue(canonicalFrom)
+                .filter(orgDomain -> !canonicalFrom.equals(orgDomain))
+                .map(orgDomain -> new DmarcRecord(orgDomain, recordAt("_dmarc." + orgDomain), true))
+                .filter(record -> !record.tags().isEmpty());
     }
 
     private Map<String, String> recordAt(String name) {
@@ -97,15 +95,15 @@ final class DmarcEvaluator {
     }
 
     private boolean aligned(String fromDomain, String authDomain, String mode) {
-        String from = domainResolver.canonicalDomain(fromDomain);
-        String auth = domainResolver.canonicalDomain(authDomain);
-        if (from == null || auth == null) {
+        java.util.Optional<String> from = domainResolver.canonicalDomainValue(fromDomain);
+        java.util.Optional<String> auth = domainResolver.canonicalDomainValue(authDomain);
+        if (from.isEmpty() || auth.isEmpty()) {
             return false;
         }
         if ("s".equals(mode)) {
             return from.equals(auth);
         }
-        return domainResolver.relaxedAligned(from, auth);
+        return domainResolver.relaxedAligned(from.get(), auth.get());
     }
 
     private boolean isBlank(String value) {

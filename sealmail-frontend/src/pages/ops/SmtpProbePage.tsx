@@ -25,16 +25,12 @@ const SmtpProbePage: React.FC = () => {
 
     setLoading(true);
     try {
-      const response = await mailTestApi.probeRoute({
+      const probeResult = await mailTestApi.probeRoute({
         from: values.from,
         to: recipients,
         subject: values.subject || 'SealMail 路由探测',
         content: values.content || 'probe',
-      });
-      if (!response.data.success) {
-        throw new Error(response.data.message);
-      }
-      const probeResult = response.data.data || '';
+      }) || '';
       setResult(probeResult);
       if (probeResult.includes('FAILED')) {
         message.warning('SMTP 探测完成，存在失败链路');
@@ -51,11 +47,7 @@ const SmtpProbePage: React.FC = () => {
   const handleProbeSystem = useCallback(async () => {
     setLoading(true);
     try {
-      const response = await mailTestApi.testSmtpConfig();
-      if (!response.data.success) {
-        throw new Error(response.data.message);
-      }
-      const probeResult = response.data.data || '';
+      const probeResult = await mailTestApi.testSmtpConfig() || '';
       setResult(probeResult);
       if (probeResult.includes('FAILED')) {
         message.warning('SMTP 探测完成，存在失败链路');

@@ -35,18 +35,18 @@ const DlpQuarantine: React.FC = () => {
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
-      const response = await dlpQuarantineApi.list({
+      const page = await dlpQuarantineApi.list({
         page: pagination.page,
         size: pagination.size,
         reason: reasonFilter,
       });
-      setData(response.data.data.items);
+      setData(page.items);
       setPagination((prev) => ({
         ...prev,
-        total: response.data.data.total,
+        total: page.total,
       }));
       setSelectedRowKeys((prev) => {
-        const visibleIds = new Set(response.data.data.items.map((item) => item.id));
+        const visibleIds = new Set(page.items.map((item) => item.id));
         return prev.filter((id) => visibleIds.has(String(id)));
       });
     } catch (error) {
@@ -321,8 +321,7 @@ const DlpQuarantine: React.FC = () => {
           setSelectedItem(record);
           setDetailVisible(true);
           try {
-            const response = await dlpQuarantineApi.evidence(record.id);
-            setSelectedEvidence(response.data.data);
+            setSelectedEvidence(await dlpQuarantineApi.evidence(record.id));
           } catch (error) {
             setSelectedEvidence([]);
             message.error(getApiErrorMessage(error, '加载 DLP 证据失败'));

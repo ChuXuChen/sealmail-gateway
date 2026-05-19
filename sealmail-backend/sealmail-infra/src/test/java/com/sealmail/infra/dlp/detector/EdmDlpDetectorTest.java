@@ -9,7 +9,7 @@ import com.sealmail.domain.dlp.DlpRuleType;
 import com.sealmail.domain.dlp.DlpScanRequest;
 import com.sealmail.domain.policy.DispositionAction;
 import com.sealmail.infra.dlp.DlpHashSupport;
-import com.sealmail.infra.dlp.config.DlpConfigService;
+import com.sealmail.infra.dlp.config.DlpRuntimeConfigPort;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -23,7 +23,7 @@ class EdmDlpDetectorTest {
 
     @Test
     void matchesOnlyNormalizedHashWithoutDatasetPlaintext() {
-        DlpConfigService configService = mock(DlpConfigService.class);
+        DlpRuntimeConfigPort configService = mock(DlpRuntimeConfigPort.class);
         when(configService.edmDatasetEnabled("dataset-1")).thenReturn(true);
         when(configService.edmHashes("dataset-1")).thenReturn(Set.of(DlpHashSupport.sha256("customer-7788")));
         EdmDlpDetector detector = new EdmDlpDetector(configService);

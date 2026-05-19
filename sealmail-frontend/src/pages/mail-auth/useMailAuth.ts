@@ -41,31 +41,30 @@ export const useMailAuth = () => {
       return null;
     }
 
-    const [policyResponse, recordsResponse] = await Promise.all([
+    const [policy, records] = await Promise.all([
       mailAuthApi.domainPolicy(normalized),
       mailAuthApi.dnsRecords(normalized),
     ]);
     setSelectedDomain(normalized);
-    setDomainPolicy(policyResponse.data.data);
-    setDnsRecords(recordsResponse.data.data);
-    return policyResponse.data.data;
+    setDomainPolicy(policy);
+    setDnsRecords(records);
+    return policy;
   }, []);
 
   const loadInitial = useCallback(async () => {
     setLoading(true);
     try {
-      const [policyResponse, statusResponse, domainsResponse] = await Promise.all([
+      const [policy, status, domains] = await Promise.all([
         mailAuthApi.policy(),
         mailAuthApi.status(),
         domainConfigApi.findAll(),
       ]);
-      const allDomains = domainsResponse.data.data;
-      setGlobalPolicy(policyResponse.data.data);
-      setStatus(statusResponse.data.data);
-      setDomains(allDomains);
+      setGlobalPolicy(policy);
+      setStatus(status);
+      setDomains(domains);
       const defaultDomain = selectedDomain
-        || allDomains.find((item) => item.localDomain)?.domain
-        || allDomains[0]?.domain
+        || domains.find((item) => item.localDomain)?.domain
+        || domains[0]?.domain
         || '';
       if (defaultDomain) {
         await loadDomainArtifacts(defaultDomain);
@@ -90,8 +89,7 @@ export const useMailAuth = () => {
 
   const refreshStatus = useCallback(async () => {
     try {
-      const response = await mailAuthApi.status();
-      setStatus(response.data.data);
+      setStatus(await mailAuthApi.status());
     } catch (error) {
       message.error(getApiErrorMessage(error, '刷新邮件认证状态失败'));
     }
@@ -100,8 +98,7 @@ export const useMailAuth = () => {
   const saveGlobalPolicy = useCallback(async (values: MailAuthGlobalFormValues) => {
     setSavingGlobal(true);
     try {
-      const response = await mailAuthApi.updatePolicy(globalPayload(values));
-      setGlobalPolicy(response.data.data);
+      setGlobalPolicy(await mailAuthApi.updatePolicy(globalPayload(values)));
       await refreshStatus();
       message.success('全局邮件认证策略已保存');
       return true;
@@ -120,10 +117,12 @@ export const useMailAuth = () => {
     }
     setSavingDomain(true);
     try {
-      const response = await mailAuthApi.updateDomainPolicy(selectedDomain, domainPayload(values));
-      const recordsResponse = await mailAuthApi.dnsRecords(selectedDomain);
-      setDomainPolicy(response.data.data);
-      setDnsRecords(recordsResponse.data.data);
+      const [policy, records] = await Promise.all([
+        mailAuthApi.updateDomainPolicy(selectedDomain, domainPayload(values)),
+        mailAuthApi.dnsRecords(selectedDomain),
+      ]);
+      setDomainPolicy(policy);
+      setDnsRecords(records);
       await refreshStatus();
       message.success('域名邮件认证策略已保存');
       return true;
@@ -142,8 +141,7 @@ export const useMailAuth = () => {
     }
     setProbing(true);
     try {
-      const response = await mailAuthApi.dnsProbe(selectedDomain);
-      setProbeResults(response.data.data);
+      setProbeResults(await mailAuthApi.dnsProbe(selectedDomain));
       await refreshStatus();
       message.success('DNS 探测已完成');
     } catch (error) {
@@ -160,15 +158,17 @@ export const useMailAuth = () => {
     }
     setRotating(true);
     try {
-      const response = await mailAuthApi.rotateDkimSelector(selectedDomain, {
-        selector: values.selector,
-        keySecretRef: values.keySecretRef?.trim() || undefined,
-        keyPath: values.keyPath?.trim() || undefined,
-        signedHeaders: cleanList(values.signedHeaders),
-      });
-      const recordsResponse = await mailAuthApi.dnsRecords(selectedDomain);
-      setDomainPolicy(response.data.data);
-      setDnsRecords(recordsResponse.data.data);
+      const [policy, records] = await Promise.all([
+        mailAuthApi.rotateDkimSelector(selectedDomain, {
+          selector: values.selector,
+          keySecretRef: values.keySecretRef?.trim() || undefined,
+          keyPath: values.keyPath?.trim() || undefined,
+          signedHeaders: cleanList(values.signedHeaders),
+        }),
+        mailAuthApi.dnsRecords(selectedDomain),
+      ]);
+      setDomainPolicy(policy);
+      setDnsRecords(records);
       await refreshStatus();
       message.success('DKIM selector 已轮换');
       return true;

@@ -6,10 +6,14 @@ import com.sealmail.domain.policy.DecryptionMode;
 import com.sealmail.domain.policy.EncryptionPolicy;
 import com.sealmail.domain.policy.PreferredAlgorithm;
 import com.sealmail.infra.persistence.entity.DomainConfigEntity;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 @Component
 public class DomainConfigMapper {
+
+    private static final Logger log = LoggerFactory.getLogger(DomainConfigMapper.class);
 
     public DomainConfigEntity toEntity(DomainConfig domainConfig) {
         DomainConfigEntity entity = new DomainConfigEntity();
@@ -50,7 +54,10 @@ public class DomainConfigMapper {
         if (!entity.isActive()) {
             try {
                 config.deactivate();
-            } catch (Exception ignored) {}
+            } catch (RuntimeException e) {
+                log.debug("Skipped invalid persisted domain activation state for {}: {}",
+                        entity.getId(), e.getMessage());
+            }
         }
         config.setDkimEnabled(entity.isDkimEnabled());
         DeliveryTransportProfile profile = entity.getDeliveryTransportProfile() != null

@@ -48,15 +48,15 @@ const ExceptionMails: React.FC = () => {
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
-      const response = await exceptionMailApi.list({
+      const page = await exceptionMailApi.list({
         page: pagination.page,
         size: pagination.size,
         reason: reasonFilter,
       });
-      setData(response.data.data.items);
+      setData(page.items);
       setPagination((prev) => ({
         ...prev,
-        total: response.data.data.total,
+        total: page.total,
       }));
     } catch (error) {
       message.error(getApiErrorMessage(error, '加载异常邮件失败'));

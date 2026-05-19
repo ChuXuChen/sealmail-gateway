@@ -7,20 +7,21 @@ import type {
   UserContext,
 } from '../types';
 import apiClient from './http';
+import { unwrapApiResponse } from './response';
 
 export const authApi = {
   login: (data: LoginRequest) =>
-    apiClient.post<ApiResponse<LoginResponse>>('/api/v1/auth/login', data),
+    unwrapApiResponse(apiClient.post<ApiResponse<LoginResponse>>('/api/v1/auth/login', data)),
 
   logout: () =>
-    apiClient.post<ApiResponse<void>>('/api/v1/auth/logout'),
+    unwrapApiResponse(apiClient.post<ApiResponse<void>>('/api/v1/auth/logout')),
 
   me: () =>
-    apiClient.get<ApiResponse<UserContext>>('/api/v1/auth/me'),
+    unwrapApiResponse(apiClient.get<ApiResponse<UserContext>>('/api/v1/auth/me')),
 
   updateProfile: (data: UpdateProfileRequest) =>
-    apiClient.put<ApiResponse<UserContext>>('/api/v1/auth/profile', data),
+    unwrapApiResponse(apiClient.put<ApiResponse<UserContext>>('/api/v1/auth/profile', data)),
 
   changePassword: (data: ChangePasswordRequest) =>
-    apiClient.post<ApiResponse<void>>('/api/v1/auth/change-password', data),
+    unwrapApiResponse(apiClient.post<ApiResponse<void>>('/api/v1/auth/change-password', data)),
 };

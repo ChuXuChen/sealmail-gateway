@@ -45,9 +45,7 @@ public class QuarantineReleaseFlowAssembler {
     public IntegrationFlow build(MessageChannel quarantineReleaseChannel) {
         return IntegrationFlow.from(quarantineReleaseChannel)
                 .handle(Message.class, (message, headers) ->
-                        stepRunner.runFlowAction(message, MailFlowStep.ROUTING, routingStep::routeReleasedMail))
-                .handle(Message.class, (message, headers) ->
-                        releaseGuard.failIfQuarantined(message, MailFlowStep.ROUTING.errorType()))
+                        runGuardedReleaseFlowAction(message, MailFlowStep.ROUTING, routingStep::routeReleasedMail))
                 .route(Message.class, routeDecider::releaseDirectionRoute,
                         mapping -> mapping
                                 .subFlowMapping(MailFlowRoute.RELEASE_OUTBOUND, outboundReleaseFlow())
@@ -59,21 +57,13 @@ public class QuarantineReleaseFlowAssembler {
     private IntegrationFlow outboundReleaseFlow() {
         return flow -> flow
                 .handle(Message.class, (message, headers) ->
-                        runReleaseStep(message, MailFlowStep.SIGN, signStep::execute))
+                        runGuardedReleaseStep(message, MailFlowStep.SIGN, signStep::execute))
                 .handle(Message.class, (message, headers) ->
-                        releaseGuard.failIfQuarantined(message, MailFlowStep.SIGN.errorType()))
+                        runGuardedReleaseStep(message, MailFlowStep.ENCRYPT, encryptStep::execute))
                 .handle(Message.class, (message, headers) ->
-                        runReleaseStep(message, MailFlowStep.ENCRYPT, encryptStep::execute))
+                        runGuardedReleaseStep(message, MailFlowStep.DKIM_SIGN, dkimSignStep::execute))
                 .handle(Message.class, (message, headers) ->
-                        releaseGuard.failIfQuarantined(message, MailFlowStep.ENCRYPT.errorType()))
-                .handle(Message.class, (message, headers) ->
-                        runReleaseStep(message, MailFlowStep.DKIM_SIGN, dkimSignStep::execute))
-                .handle(Message.class, (message, headers) ->
-                        releaseGuard.failIfQuarantined(message, MailFlowStep.DKIM_SIGN.errorType()))
-                .handle(Message.class, (message, headers) ->
-                        runReleaseStep(message, MailFlowStep.RELAY, relayStep::execute))
-                .handle(Message.class, (message, headers) ->
-                        releaseGuard.failIfQuarantined(message, MailFlowStep.RELAY.errorType()))
+                        runGuardedReleaseStep(message, MailFlowStep.RELAY, relayStep::execute))
                 .handle(Message.class, (message, headers) -> completionService.completeSuccess(message))
                 .nullChannel();
     }
@@ -90,13 +80,9 @@ public class QuarantineReleaseFlowAssembler {
     private IntegrationFlow inboundEncryptThenRelayFlow() {
         return flow -> flow
                 .handle(Message.class, (message, headers) ->
-                        runReleaseStep(message, MailFlowStep.ENCRYPT, encryptStep::execute))
+                        runGuardedReleaseStep(message, MailFlowStep.ENCRYPT, encryptStep::execute))
                 .handle(Message.class, (message, headers) ->
-                        releaseGuard.failIfQuarantined(message, MailFlowStep.ENCRYPT.errorType()))
-                .handle(Message.class, (message, headers) ->
-                        runReleaseStep(message, MailFlowStep.RELAY, relayStep::execute))
-                .handle(Message.class, (message, headers) ->
-                        releaseGuard.failIfQuarantined(message, MailFlowStep.RELAY.errorType()))
+                        runGuardedReleaseStep(message, MailFlowStep.RELAY, relayStep::execute))
                 .handle(Message.class, (message, headers) -> completionService.completeSuccess(message))
                 .nullChannel();
     }
@@ -104,11 +90,23 @@ public class QuarantineReleaseFlowAssembler {
     private IntegrationFlow inboundRelayFlow() {
         return flow -> flow
                 .handle(Message.class, (message, headers) ->
-                        runReleaseStep(message, MailFlowStep.RELAY, relayStep::execute))
-                .handle(Message.class, (message, headers) ->
-                        releaseGuard.failIfQuarantined(message, MailFlowStep.RELAY.errorType()))
+                        runGuardedReleaseStep(message, MailFlowStep.RELAY, relayStep::execute))
                 .handle(Message.class, (message, headers) -> completionService.completeSuccess(message))
                 .nullChannel();
+    }
+
+    private Message<byte[]> runGuardedReleaseFlowAction(Object message,
+                                                        MailFlowStep step,
+                                                        MailProcessingTracker.StepAction action) {
+        Message<byte[]> result = stepRunner.runFlowAction(message, step, action);
+        return releaseGuard.failIfQuarantined(result, step.errorType());
+    }
+
+    private Message<byte[]> runGuardedReleaseStep(Object message,
+                                                  MailFlowStep step,
+                                                  MailProcessingTracker.StepAction action) {
+        Message<byte[]> result = runReleaseStep(message, step, action);
+        return releaseGuard.failIfQuarantined(result, step.errorType());
     }
 
     private Message<byte[]> runReleaseStep(Object message,

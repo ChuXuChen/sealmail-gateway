@@ -27,10 +27,10 @@ const Dashboard: React.FC = () => {
       if (quarantineResponse.status === 'rejected' || exceptionResponse.status === 'rejected') {
         throw new Error('failed to load dashboard statistics');
       }
-      setStats(quarantineResponse.value.data.data);
-      setExceptionStats(exceptionResponse.value.data.data);
-      if (settingsResponse.status === 'fulfilled' && settingsResponse.value.data.success) {
-        setSettings(settingsResponse.value.data.data);
+      setStats(quarantineResponse.value);
+      setExceptionStats(exceptionResponse.value);
+      if (settingsResponse.status === 'fulfilled') {
+        setSettings(settingsResponse.value);
       }
     } catch {
       message.error('加载统计数据失败');

@@ -13,8 +13,7 @@ export const useDomainConfigs = () => {
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
-      const response = await domainConfigApi.findAll();
-      setData(response.data.data);
+      setData(await domainConfigApi.findAll());
     } catch (error) {
       message.error(getApiErrorMessage(error, '加载域名配置失败'));
     } finally {

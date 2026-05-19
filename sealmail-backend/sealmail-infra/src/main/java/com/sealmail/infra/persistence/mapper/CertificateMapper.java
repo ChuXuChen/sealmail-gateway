@@ -10,6 +10,8 @@ import com.sealmail.domain.certificate.ValidityPeriod;
 import com.sealmail.domain.key.KeyRecord;
 import com.sealmail.domain.shared.model.EmailAddress;
 import com.sealmail.infra.persistence.entity.CertificateEntity;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 import java.math.BigInteger;
@@ -18,6 +20,8 @@ import java.util.stream.Collectors;
 
 @Component
 public class CertificateMapper {
+
+    private static final Logger log = LoggerFactory.getLogger(CertificateMapper.class);
 
     private final ObjectMapper objectMapper;
 
@@ -113,7 +117,10 @@ public class CertificateMapper {
                         entity.getRevocationReason(),
                         entity.getRevocationCrlReason(),
                         entity.getRevocationDate());
-            } catch (Exception ignored) {}
+            } catch (RuntimeException e) {
+                log.debug("Skipped invalid persisted certificate revocation state for {}: {}",
+                        entity.getThumbprint(), e.getMessage());
+            }
         }
 
         cert.setCA(entity.isCa());
@@ -126,7 +133,10 @@ public class CertificateMapper {
                 Set<String> ekus = objectMapper.readValue(
                         entity.getExtendedKeyUsages(), new TypeReference<Set<String>>() {});
                 cert.setExtendedKeyUsages(ekus);
-            } catch (JsonProcessingException ignored) {}
+            } catch (JsonProcessingException e) {
+                log.debug("Skipped invalid persisted certificate EKU JSON for {}: {}",
+                        entity.getThumbprint(), e.getOriginalMessage());
+            }
         }
 
         if (entity.getPrivateKeySecretRef() != null && !entity.getPrivateKeySecretRef().isBlank()) {

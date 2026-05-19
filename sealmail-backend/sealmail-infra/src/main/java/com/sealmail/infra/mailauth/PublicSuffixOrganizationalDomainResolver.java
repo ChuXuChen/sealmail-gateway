@@ -3,47 +3,56 @@ package com.sealmail.infra.mailauth;
 import com.google.common.net.InternetDomainName;
 
 import java.util.Locale;
+import java.util.Optional;
 
 final class PublicSuffixOrganizationalDomainResolver {
 
     String organizationalDomain(String domain) {
-        String canonical = canonicalDomain(domain);
-        if (canonical == null) {
-            return null;
+        return organizationalDomainValue(domain).orElse(null);
+    }
+
+    Optional<String> organizationalDomainValue(String domain) {
+        Optional<String> canonical = canonicalDomainValue(domain);
+        if (canonical.isEmpty()) {
+            return Optional.empty();
         }
         try {
-            InternetDomainName name = InternetDomainName.from(canonical);
+            InternetDomainName name = InternetDomainName.from(canonical.get());
             if (!name.isUnderPublicSuffix()) {
-                return null;
+                return Optional.empty();
             }
-            return name.topPrivateDomain().toString();
+            return Optional.of(name.topPrivateDomain().toString());
         } catch (IllegalArgumentException | IllegalStateException e) {
-            return null;
+            return Optional.empty();
         }
     }
 
     boolean relaxedAligned(String fromDomain, String authDomain) {
-        String from = canonicalDomain(fromDomain);
-        String auth = canonicalDomain(authDomain);
-        if (from == null || auth == null) {
+        Optional<String> from = canonicalDomainValue(fromDomain);
+        Optional<String> auth = canonicalDomainValue(authDomain);
+        if (from.isEmpty() || auth.isEmpty()) {
             return false;
         }
         if (from.equals(auth)) {
             return true;
         }
-        String fromOrg = organizationalDomain(from);
-        String authOrg = organizationalDomain(auth);
-        return fromOrg != null && fromOrg.equals(authOrg);
+        Optional<String> fromOrg = organizationalDomainValue(from.get());
+        Optional<String> authOrg = organizationalDomainValue(auth.get());
+        return fromOrg.isPresent() && fromOrg.equals(authOrg);
     }
 
     String canonicalDomain(String domain) {
+        return canonicalDomainValue(domain).orElse(null);
+    }
+
+    Optional<String> canonicalDomainValue(String domain) {
         if (domain == null || domain.isBlank()) {
-            return null;
+            return Optional.empty();
         }
         String canonical = domain.trim().toLowerCase(Locale.ROOT);
         while (canonical.endsWith(".")) {
             canonical = canonical.substring(0, canonical.length() - 1);
         }
-        return canonical.isBlank() ? null : canonical;
+        return canonical.isBlank() ? Optional.empty() : Optional.of(canonical);
     }
 }

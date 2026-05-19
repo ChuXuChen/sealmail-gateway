@@ -5,8 +5,8 @@ import com.sealmail.domain.dlp.DlpViolation;
 import com.sealmail.domain.dlp.DlpRuleType;
 import com.sealmail.domain.mailsecurity.MailEnvelope;
 import com.sealmail.domain.dlp.spi.DlpContentScanner;
-import com.sealmail.infra.dlp.config.DlpConfigService;
 import com.sealmail.infra.dlp.config.DlpPatternConfig;
+import com.sealmail.infra.dlp.config.DlpRuntimeConfigPort;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
@@ -17,9 +17,9 @@ import java.util.regex.Pattern;
 @Component
 public class ConfiguredRegexDlpScanner implements DlpContentScanner {
 
-    private final DlpConfigService configService;
+    private final DlpRuntimeConfigPort configService;
 
-    public ConfiguredRegexDlpScanner(DlpConfigService configService) {
+    public ConfiguredRegexDlpScanner(DlpRuntimeConfigPort configService) {
         this.configService = configService;
     }
 

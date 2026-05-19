@@ -11,6 +11,7 @@ import type {
   SignCsrRequest,
 } from '../types';
 import apiClient from './http';
+import { unwrapApiResponse } from './response';
 
 type CertificateImportRequest = {
   pemData: string;
@@ -22,10 +23,10 @@ type CertificateImportRequest = {
 
 export const certificateApi = {
   list: (params: { owner?: string; includeAll?: boolean; page?: number; size?: number }) =>
-    apiClient.get<ApiResponse<PageResponse<Certificate>>>('/api/v1/certificates', { params }),
+    unwrapApiResponse(apiClient.get<ApiResponse<PageResponse<Certificate>>>('/api/v1/certificates', { params })),
 
   getById: (id: string) =>
-    apiClient.get<ApiResponse<Certificate>>(`/api/v1/certificates/${id}`),
+    unwrapApiResponse(apiClient.get<ApiResponse<Certificate>>(`/api/v1/certificates/${id}`)),
 
   pem: (id: string) =>
     apiClient.get<string>(`/api/v1/certificates/${encodeURIComponent(id)}/pem`, {
@@ -33,33 +34,33 @@ export const certificateApi = {
     }),
 
   import: (data: CertificateImportRequest) =>
-    apiClient.post<ApiResponse<Certificate>>('/api/v1/certificates/import', data),
+    unwrapApiResponse(apiClient.post<ApiResponse<Certificate>>('/api/v1/certificates/import', data)),
 
   trust: (id: string) =>
-    apiClient.post<ApiResponse<Certificate>>(`/api/v1/certificates/${id}/trust`),
+    unwrapApiResponse(apiClient.post<ApiResponse<Certificate>>(`/api/v1/certificates/${id}/trust`)),
 
   untrust: (id: string) =>
-    apiClient.post<ApiResponse<Certificate>>(`/api/v1/certificates/${id}/untrust`),
+    unwrapApiResponse(apiClient.post<ApiResponse<Certificate>>(`/api/v1/certificates/${id}/untrust`)),
 
   revoke: (id: string, reason?: string) =>
-    apiClient.post<ApiResponse<Certificate>>(`/api/v1/certificates/${id}/revoke`, { reason }),
+    unwrapApiResponse(apiClient.post<ApiResponse<Certificate>>(`/api/v1/certificates/${id}/revoke`, { reason })),
 
   delete: (id: string) =>
-    apiClient.delete<ApiResponse<void>>(`/api/v1/certificates/${id}`),
+    unwrapApiResponse(apiClient.delete<ApiResponse<void>>(`/api/v1/certificates/${id}`)),
 
   generateSelfSigned: (data: GenerateSelfSignedRequest) =>
-    apiClient.post<ApiResponse<Certificate>>('/api/v1/certificates/generate-self-signed', data),
+    unwrapApiResponse(apiClient.post<ApiResponse<Certificate>>('/api/v1/certificates/generate-self-signed', data)),
 
   issue: (data: IssueEndEntityRequest) =>
-    apiClient.post<ApiResponse<Certificate>>('/api/v1/certificates/issue', data),
+    unwrapApiResponse(apiClient.post<ApiResponse<Certificate>>('/api/v1/certificates/issue', data)),
 
   signCsr: (data: SignCsrRequest) =>
-    apiClient.post<ApiResponse<Certificate>>('/api/v1/certificates/sign-csr', data),
+    unwrapApiResponse(apiClient.post<ApiResponse<Certificate>>('/api/v1/certificates/sign-csr', data)),
 };
 
 export const certificateBindingApi = {
   list: (params?: { domain?: string; owner?: string }) =>
-    apiClient.get<ApiResponse<CertificateBinding[]>>('/api/v1/certificate-bindings', { params }),
+    unwrapApiResponse(apiClient.get<ApiResponse<CertificateBinding[]>>('/api/v1/certificate-bindings', { params })),
 
   upsert: (data: {
     ownerEmail: string;
@@ -67,35 +68,35 @@ export const certificateBindingApi = {
     purpose: CertificateBindingPurpose;
     enabled: boolean;
   }) =>
-    apiClient.post<ApiResponse<CertificateBinding>>('/api/v1/certificate-bindings', data),
+    unwrapApiResponse(apiClient.post<ApiResponse<CertificateBinding>>('/api/v1/certificate-bindings', data)),
 
   delete: (id: string) =>
-    apiClient.delete<ApiResponse<void>>(`/api/v1/certificate-bindings/${encodeURIComponent(id)}`),
+    unwrapApiResponse(apiClient.delete<ApiResponse<void>>(`/api/v1/certificate-bindings/${encodeURIComponent(id)}`)),
 };
 
 export const caApi = {
-  list: () => apiClient.get<ApiResponse<Certificate[]>>('/api/v1/cas'),
-  getById: (id: string) => apiClient.get<ApiResponse<Certificate>>(`/api/v1/cas/${id}`),
+  list: () => unwrapApiResponse(apiClient.get<ApiResponse<Certificate[]>>('/api/v1/cas')),
+  getById: (id: string) => unwrapApiResponse(apiClient.get<ApiResponse<Certificate>>(`/api/v1/cas/${id}`)),
   pem: (id: string) =>
     apiClient.get<string>(`/api/v1/cas/${encodeURIComponent(id)}/pem`, {
       responseType: 'text',
     }),
   createRoot: (data: CreateRootCaRequest) =>
-    apiClient.post<ApiResponse<Certificate>>('/api/v1/cas/root', data),
+    unwrapApiResponse(apiClient.post<ApiResponse<Certificate>>('/api/v1/cas/root', data)),
   createIntermediate: (data: CreateIntermediateCaRequest) =>
-    apiClient.post<ApiResponse<Certificate>>('/api/v1/cas/intermediate', data),
+    unwrapApiResponse(apiClient.post<ApiResponse<Certificate>>('/api/v1/cas/intermediate', data)),
   import: (data: CertificateImportRequest) =>
-    apiClient.post<ApiResponse<Certificate>>('/api/v1/cas/import', data),
+    unwrapApiResponse(apiClient.post<ApiResponse<Certificate>>('/api/v1/cas/import', data)),
   importCrl: (id: string, data: { crlPem?: string; crlDerBase64?: string }) =>
-    apiClient.post<ApiResponse<Certificate>>(`/api/v1/cas/${encodeURIComponent(id)}/crl`, data),
+    unwrapApiResponse(apiClient.post<ApiResponse<Certificate>>(`/api/v1/cas/${encodeURIComponent(id)}/crl`, data)),
   trust: (id: string) =>
-    apiClient.post<ApiResponse<Certificate>>(`/api/v1/cas/${id}/trust`),
+    unwrapApiResponse(apiClient.post<ApiResponse<Certificate>>(`/api/v1/cas/${id}/trust`)),
   untrust: (id: string) =>
-    apiClient.post<ApiResponse<Certificate>>(`/api/v1/cas/${id}/untrust`),
+    unwrapApiResponse(apiClient.post<ApiResponse<Certificate>>(`/api/v1/cas/${id}/untrust`)),
   revoke: (id: string, reason?: string) =>
-    apiClient.post<ApiResponse<Certificate>>(`/api/v1/cas/${id}/revoke`, { reason }),
+    unwrapApiResponse(apiClient.post<ApiResponse<Certificate>>(`/api/v1/cas/${id}/revoke`, { reason })),
   delete: (id: string) =>
-    apiClient.delete<ApiResponse<void>>(`/api/v1/cas/${id}`),
+    unwrapApiResponse(apiClient.delete<ApiResponse<void>>(`/api/v1/cas/${id}`)),
 };
 
 export const crlUrls = {

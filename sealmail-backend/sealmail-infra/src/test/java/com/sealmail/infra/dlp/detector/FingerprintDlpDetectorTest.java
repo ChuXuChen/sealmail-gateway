@@ -9,7 +9,7 @@ import com.sealmail.domain.dlp.DlpRuleType;
 import com.sealmail.domain.dlp.DlpScanRequest;
 import com.sealmail.domain.policy.DispositionAction;
 import com.sealmail.infra.dlp.DlpHashSupport;
-import com.sealmail.infra.dlp.config.DlpConfigService;
+import com.sealmail.infra.dlp.config.DlpRuntimeConfigPort;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -24,7 +24,7 @@ class FingerprintDlpDetectorTest {
     @Test
     void triggersWhenDocumentChunksOverlapLibrary() {
         String document = "alpha beta gamma delta epsilon zeta eta theta";
-        DlpConfigService configService = mock(DlpConfigService.class);
+        DlpRuntimeConfigPort configService = mock(DlpRuntimeConfigPort.class);
         when(configService.fingerprintLibraryEnabled("library-1")).thenReturn(true);
         when(configService.fingerprintHashes("library-1")).thenReturn(Set.of(
                 DlpHashSupport.sha256("alpha beta gamma delta epsilon"),

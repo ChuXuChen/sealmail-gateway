@@ -7,6 +7,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.Optional;
 
 @Component
 public class AuthenticationResultsHeaderWriter {
@@ -26,11 +27,12 @@ public class AuthenticationResultsHeaderWriter {
 
     private byte[] removeSameAuthservResults(byte[] content, String authservId) {
         String message = new String(content, StandardCharsets.ISO_8859_1);
-        HeaderBoundary boundary = findHeaderBoundary(message);
-        if (boundary == null) {
-            return content;
-        }
+        return findHeaderBoundary(message)
+                .map(boundary -> removeSameAuthservResults(message, boundary, authservId))
+                .orElse(content);
+    }
 
+    private byte[] removeSameAuthservResults(String message, HeaderBoundary boundary, String authservId) {
         String filteredHeaders = filterHeaderBlock(
                 message.substring(0, boundary.headerEnd()),
                 authservId,
@@ -39,16 +41,16 @@ public class AuthenticationResultsHeaderWriter {
         return (filteredHeaders + boundary.separator() + body).getBytes(StandardCharsets.ISO_8859_1);
     }
 
-    private HeaderBoundary findHeaderBoundary(String message) {
+    private Optional<HeaderBoundary> findHeaderBoundary(String message) {
         int crlf = message.indexOf("\r\n\r\n");
         int lf = message.indexOf("\n\n");
         if (crlf < 0 && lf < 0) {
-            return null;
+            return Optional.empty();
         }
         if (crlf >= 0 && (lf < 0 || crlf <= lf)) {
-            return new HeaderBoundary(crlf, crlf + 4, "\r\n\r\n", "\r\n");
+            return Optional.of(new HeaderBoundary(crlf, crlf + 4, "\r\n\r\n", "\r\n"));
         }
-        return new HeaderBoundary(lf, lf + 2, "\n\n", "\n");
+        return Optional.of(new HeaderBoundary(lf, lf + 2, "\n\n", "\n"));
     }
 
     private String filterHeaderBlock(String headerBlock, String authservId, String lineSeparator) {

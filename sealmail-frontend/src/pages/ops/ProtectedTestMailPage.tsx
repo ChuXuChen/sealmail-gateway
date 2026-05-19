@@ -30,13 +30,10 @@ const ProtectedTestMailPage: React.FC = () => {
         subject: values.subject,
         content: values.content,
       };
-      const response = mode === 'PROTECTED'
+      const result = mode === 'PROTECTED'
         ? await mailTestApi.sendEncrypted(payload)
         : await mailTestApi.send(payload);
-      if (!response.data.success) {
-        throw new Error(response.data.message || response.data.data);
-      }
-      message.success(response.data.data || '测试邮件已提交');
+      message.success(result || '测试邮件已提交');
       form.resetFields();
     } catch (error) {
       message.error(getApiErrorMessage(error, '测试邮件发送失败'));

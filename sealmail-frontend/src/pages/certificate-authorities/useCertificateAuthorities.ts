@@ -16,8 +16,7 @@ export const useCertificateAuthorities = () => {
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await caApi.list();
-      setData(res.data.data);
+      setData(await caApi.list());
     } catch (error) {
       message.error(getApiErrorMessage(error, '加载 CA 列表失败'));
     } finally {

@@ -5,32 +5,35 @@ import type {
   UpdateDomainConfigRequest,
 } from '../types';
 import apiClient from './http';
+import { unwrapApiResponse } from './response';
 
 export const domainConfigApi = {
   findAll: () =>
-    apiClient.get<ApiResponse<DomainConfig[]>>('/api/v1/domains'),
+    unwrapApiResponse(apiClient.get<ApiResponse<DomainConfig[]>>('/api/v1/domains')),
 
   findAllActive: () =>
-    apiClient.get<ApiResponse<DomainConfig[]>>('/api/v1/domains/active'),
+    unwrapApiResponse(apiClient.get<ApiResponse<DomainConfig[]>>('/api/v1/domains/active')),
 
   findLocalDomains: () =>
-    apiClient.get<ApiResponse<DomainConfig[]>>('/api/v1/domains/local'),
+    unwrapApiResponse(apiClient.get<ApiResponse<DomainConfig[]>>('/api/v1/domains/local')),
 
   findRemoteDomains: () =>
-    apiClient.get<ApiResponse<DomainConfig[]>>('/api/v1/domains/remote'),
+    unwrapApiResponse(apiClient.get<ApiResponse<DomainConfig[]>>('/api/v1/domains/remote')),
 
   findById: (id: string) =>
-    apiClient.get<ApiResponse<DomainConfig>>(`/api/v1/domains/${encodeURIComponent(id)}`),
+    unwrapApiResponse(apiClient.get<ApiResponse<DomainConfig>>(`/api/v1/domains/${encodeURIComponent(id)}`)),
 
   findByDomain: (domain: string) =>
-    apiClient.get<ApiResponse<DomainConfig>>(`/api/v1/domains/domain/${encodeURIComponent(domain)}`),
+    unwrapApiResponse(apiClient.get<ApiResponse<DomainConfig>>(
+      `/api/v1/domains/domain/${encodeURIComponent(domain)}`,
+    )),
 
   create: (data: CreateDomainConfigRequest) =>
-    apiClient.post<ApiResponse<DomainConfig>>('/api/v1/domains', data),
+    unwrapApiResponse(apiClient.post<ApiResponse<DomainConfig>>('/api/v1/domains', data)),
 
   update: (id: string, data: UpdateDomainConfigRequest) =>
-    apiClient.put<ApiResponse<DomainConfig>>(`/api/v1/domains/${encodeURIComponent(id)}`, data),
+    unwrapApiResponse(apiClient.put<ApiResponse<DomainConfig>>(`/api/v1/domains/${encodeURIComponent(id)}`, data)),
 
   delete: (id: string) =>
-    apiClient.delete<ApiResponse<void>>(`/api/v1/domains/${encodeURIComponent(id)}`),
+    unwrapApiResponse(apiClient.delete<ApiResponse<void>>(`/api/v1/domains/${encodeURIComponent(id)}`)),
 };

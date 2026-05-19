@@ -7,7 +7,6 @@ import com.sealmail.domain.mailsecurity.MailProcessingRepository;
 import com.sealmail.infra.events.DomainEventPublisher;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.messaging.Message;
 import org.springframework.messaging.support.MessageBuilder;
 import org.springframework.stereotype.Component;
@@ -21,12 +20,6 @@ public class MailErrorDecisionHandler {
     private final DomainEventPublisher domainEventPublisher;
     private final MailErrorClassifier classifier;
 
-    public MailErrorDecisionHandler(MailProcessingRepository mailProcessingRepository,
-                                    DomainEventPublisher domainEventPublisher) {
-        this(mailProcessingRepository, domainEventPublisher, new MailErrorClassifier());
-    }
-
-    @Autowired
     public MailErrorDecisionHandler(MailProcessingRepository mailProcessingRepository,
                                     DomainEventPublisher domainEventPublisher,
                                     MailErrorClassifier classifier) {

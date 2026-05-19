@@ -27,11 +27,7 @@ export const useSettingsSnapshot = () => {
     }
 
     try {
-      const response = await systemSettingsApi.get();
-      if (!response.data.success) {
-        throw new Error(response.data.message);
-      }
-      setSettings(response.data.data);
+      setSettings(await systemSettingsApi.get());
 
       const [relayResponse, quarantineResponse, gmEdgeResponse, smimeSuiteResponse] = await Promise.allSettled([
         runtimePolicyApi.getRelay(),
@@ -40,23 +36,23 @@ export const useSettingsSnapshot = () => {
         runtimePolicyApi.getSmimeSuite(),
       ]);
 
-      if (relayResponse.status === 'fulfilled' && relayResponse.value.data.success) {
-        setRelayPolicy(relayResponse.value.data.data);
+      if (relayResponse.status === 'fulfilled') {
+        setRelayPolicy(relayResponse.value);
       } else {
         setRelayPolicy(null);
       }
-      if (quarantineResponse.status === 'fulfilled' && quarantineResponse.value.data.success) {
-        setQuarantinePolicy(quarantineResponse.value.data.data);
+      if (quarantineResponse.status === 'fulfilled') {
+        setQuarantinePolicy(quarantineResponse.value);
       } else {
         setQuarantinePolicy(null);
       }
-      if (gmEdgeResponse.status === 'fulfilled' && gmEdgeResponse.value.data.success) {
-        setGmEdgePolicy(gmEdgeResponse.value.data.data);
+      if (gmEdgeResponse.status === 'fulfilled') {
+        setGmEdgePolicy(gmEdgeResponse.value);
       } else {
         setGmEdgePolicy(null);
       }
-      if (smimeSuiteResponse.status === 'fulfilled' && smimeSuiteResponse.value.data.success) {
-        setSmimeSuitePolicy(smimeSuiteResponse.value.data.data);
+      if (smimeSuiteResponse.status === 'fulfilled') {
+        setSmimeSuitePolicy(smimeSuiteResponse.value);
       } else {
         setSmimeSuitePolicy(null);
       }

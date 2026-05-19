@@ -8,7 +8,7 @@ import com.sealmail.domain.dlp.DlpRuleType;
 import com.sealmail.domain.dlp.DlpScanRequest;
 import com.sealmail.domain.dlp.spi.DlpDetector;
 import com.sealmail.infra.dlp.DlpHashSupport;
-import com.sealmail.infra.dlp.config.DlpConfigService;
+import com.sealmail.infra.dlp.config.DlpRuntimeConfigPort;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
@@ -23,9 +23,9 @@ public class EdmDlpDetector implements DlpDetector {
 
     private static final Pattern TOKEN = Pattern.compile("[\\p{L}\\p{N}@._+\\-]{3,128}");
 
-    private final DlpConfigService configService;
+    private final DlpRuntimeConfigPort configService;
 
-    public EdmDlpDetector(DlpConfigService configService) {
+    public EdmDlpDetector(DlpRuntimeConfigPort configService) {
         this.configService = configService;
     }
 

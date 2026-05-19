@@ -14,6 +14,7 @@ import java.math.BigInteger;
 import java.net.InetAddress;
 import java.util.List;
 import java.util.Locale;
+import java.util.Optional;
 import java.util.Properties;
 
 @Component
@@ -40,22 +41,20 @@ public class PostfixTrustedSourceResolver implements TrustedMailSourcePort {
         if (!trustedRelay(candidate.sourceIp())) {
             return withDetail(candidate, "remote source is not a trusted relay");
         }
-        String originalIp = originalIpFromHeaders(rawContent);
-        if (!hasText(originalIp)) {
-            return withDetail(candidate, "trusted relay did not provide an original client IP header");
-        }
-        return new MailSourceIdentity(
-                originalIp,
-                candidate.envelopeFromDomain(),
-                candidate.headerFromDomain(),
-                candidate.helo(),
-                true,
-                "source IP resolved from trusted relay header");
+        return originalIpFromHeaders(rawContent)
+                .map(originalIp -> new MailSourceIdentity(
+                        originalIp,
+                        candidate.envelopeFromDomain(),
+                        candidate.headerFromDomain(),
+                        candidate.helo(),
+                        true,
+                        "source IP resolved from trusted relay header"))
+                .orElseGet(() -> withDetail(candidate, "trusted relay did not provide an original client IP header"));
     }
 
-    private String originalIpFromHeaders(byte[] rawContent) {
+    private Optional<String> originalIpFromHeaders(byte[] rawContent) {
         if (rawContent == null || rawContent.length == 0) {
-            return null;
+            return Optional.empty();
         }
         try {
             MimeMessage message = new MimeMessage(
@@ -67,21 +66,21 @@ public class PostfixTrustedSourceResolver implements TrustedMailSourcePort {
                     continue;
                 }
                 for (String value : values) {
-                    String ip = firstValidIp(value);
-                    if (ip != null) {
+                    Optional<String> ip = firstValidIp(value);
+                    if (ip.isPresent()) {
                         return ip;
                     }
                 }
             }
         } catch (Exception ignored) {
-            return null;
+            return Optional.empty();
         }
-        return null;
+        return Optional.empty();
     }
 
-    private String firstValidIp(String value) {
+    private Optional<String> firstValidIp(String value) {
         if (value == null) {
-            return null;
+            return Optional.empty();
         }
         for (String token : value.split(",")) {
             String candidate = token.trim();
@@ -89,10 +88,10 @@ public class PostfixTrustedSourceResolver implements TrustedMailSourcePort {
                 candidate = candidate.substring(1, candidate.length() - 1);
             }
             if (validIp(candidate)) {
-                return candidate;
+                return Optional.of(candidate);
             }
         }
-        return null;
+        return Optional.empty();
     }
 
     private boolean trustedRelay(String sourceIp) {

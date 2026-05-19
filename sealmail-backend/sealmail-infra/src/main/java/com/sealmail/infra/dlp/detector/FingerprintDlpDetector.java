@@ -8,7 +8,7 @@ import com.sealmail.domain.dlp.DlpRuleType;
 import com.sealmail.domain.dlp.DlpScanRequest;
 import com.sealmail.domain.dlp.spi.DlpDetector;
 import com.sealmail.infra.dlp.DlpHashSupport;
-import com.sealmail.infra.dlp.config.DlpConfigService;
+import com.sealmail.infra.dlp.config.DlpRuntimeConfigPort;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
@@ -20,9 +20,9 @@ import java.util.Set;
 @Component
 public class FingerprintDlpDetector implements DlpDetector {
 
-    private final DlpConfigService configService;
+    private final DlpRuntimeConfigPort configService;
 
-    public FingerprintDlpDetector(DlpConfigService configService) {
+    public FingerprintDlpDetector(DlpRuntimeConfigPort configService) {
         this.configService = configService;
     }
 

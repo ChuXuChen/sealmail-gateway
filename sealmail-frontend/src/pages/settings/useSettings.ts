@@ -67,27 +67,19 @@ export const useSettings = ({ gmEdgeForm, quarantineForm, relayForm, smimeSuiteF
     }
 
     try {
-      const [response, relayResponse, quarantineResponse, gmEdgeResponse, smimeSuiteResponse] = await Promise.all([
+      const [settings, relay, quarantine, gmEdge, smimeSuite] = await Promise.all([
         systemSettingsApi.get(),
         runtimePolicyApi.getRelay(),
         runtimePolicyApi.getQuarantine(),
         runtimePolicyApi.getGmEdge(),
         runtimePolicyApi.getSmimeSuite(),
       ]);
-      if (!response.data.success) {
-        throw new Error(response.data.message);
-      }
-      setSettings(response.data.data);
-      setRelayPolicy(relayResponse.data.data);
-      setQuarantinePolicy(quarantineResponse.data.data);
-      setGmEdgePolicy(gmEdgeResponse.data.data);
-      setSmimeSuitePolicy(smimeSuiteResponse.data.data);
-      applyPolicyForms(
-        relayResponse.data.data,
-        quarantineResponse.data.data,
-        gmEdgeResponse.data.data,
-        smimeSuiteResponse.data.data,
-      );
+      setSettings(settings);
+      setRelayPolicy(relay);
+      setQuarantinePolicy(quarantine);
+      setGmEdgePolicy(gmEdge);
+      setSmimeSuitePolicy(smimeSuite);
+      applyPolicyForms(relay, quarantine, gmEdge, smimeSuite);
     } catch (error) {
       message.error(getApiErrorMessage(error, '加载系统设置失败'));
     } finally {
@@ -101,26 +93,20 @@ export const useSettings = ({ gmEdgeForm, quarantineForm, relayForm, smimeSuiteF
 
     const loadInitialSettings = async () => {
       try {
-        const [response, relayResponse, quarantineResponse, gmEdgeResponse, smimeSuiteResponse] = await Promise.all([
+        const [settings, relay, quarantine, gmEdge, smimeSuite] = await Promise.all([
           systemSettingsApi.get(),
           runtimePolicyApi.getRelay(),
           runtimePolicyApi.getQuarantine(),
           runtimePolicyApi.getGmEdge(),
           runtimePolicyApi.getSmimeSuite(),
         ]);
-        if (!response.data.success) throw new Error(response.data.message);
         if (mounted) {
-          setSettings(response.data.data);
-          setRelayPolicy(relayResponse.data.data);
-          setQuarantinePolicy(quarantineResponse.data.data);
-          setGmEdgePolicy(gmEdgeResponse.data.data);
-          setSmimeSuitePolicy(smimeSuiteResponse.data.data);
-          applyPolicyForms(
-            relayResponse.data.data,
-            quarantineResponse.data.data,
-            gmEdgeResponse.data.data,
-            smimeSuiteResponse.data.data,
-          );
+          setSettings(settings);
+          setRelayPolicy(relay);
+          setQuarantinePolicy(quarantine);
+          setGmEdgePolicy(gmEdge);
+          setSmimeSuitePolicy(smimeSuite);
+          applyPolicyForms(relay, quarantine, gmEdge, smimeSuite);
         }
       } catch (error) {
         if (mounted) {
@@ -143,11 +129,7 @@ export const useSettings = ({ gmEdgeForm, quarantineForm, relayForm, smimeSuiteF
   const handleProbe = useCallback(async () => {
     setProbeLoading(true);
     try {
-      const response = await mailTestApi.testSmtpConfig();
-      if (!response.data.success) {
-        throw new Error(response.data.message);
-      }
-      const result = response.data.data || '';
+      const result = await mailTestApi.testSmtpConfig() || '';
       setProbeResult(result);
       if (result.includes('FAILED')) {
         message.warning('SMTP 探测完成，存在失败链路');
@@ -170,16 +152,13 @@ export const useSettings = ({ gmEdgeForm, quarantineForm, relayForm, smimeSuiteF
 
     setTestLoading(true);
     try {
-      const response = await mailTestApi.send({
+      const result = await mailTestApi.send({
         from: values.from,
         to: recipients,
         subject: values.subject,
         content: values.content,
       });
-      if (!response.data.success) {
-        throw new Error(response.data.message || response.data.data);
-      }
-      message.success(response.data.data || '测试邮件已提交');
+      message.success(result || '测试邮件已提交');
       testForm.resetFields();
       return true;
     } catch (error) {
@@ -192,17 +171,13 @@ export const useSettings = ({ gmEdgeForm, quarantineForm, relayForm, smimeSuiteF
 
   const handleRelayPolicySave = useCallback(async (values: RelayPolicyFormValues) => {
     try {
-      const response = await runtimePolicyApi.updateRelay(values);
-      if (!response.data.success) throw new Error(response.data.message);
-      setRelayPolicy(response.data.data);
+      const relay = await runtimePolicyApi.updateRelay(values);
+      setRelayPolicy(relay);
       relayForm.setFieldsValue({
-        ...response.data.data,
+        ...relay,
         clearPasswordSecretRef: false,
       });
-      const settingsResponse = await systemSettingsApi.get();
-      if (settingsResponse.data.success) {
-        setSettings(settingsResponse.data.data);
-      }
+      setSettings(await systemSettingsApi.get());
       message.success('Relay 策略已保存');
     } catch (error) {
       message.error(getApiErrorMessage(error, 'Relay 策略保存失败'));
@@ -211,14 +186,10 @@ export const useSettings = ({ gmEdgeForm, quarantineForm, relayForm, smimeSuiteF
 
   const handleQuarantinePolicySave = useCallback(async (values: QuarantinePolicyFormValues) => {
     try {
-      const response = await runtimePolicyApi.updateQuarantine(values);
-      if (!response.data.success) throw new Error(response.data.message);
-      setQuarantinePolicy(response.data.data);
-      quarantineForm.setFieldsValue(response.data.data);
-      const settingsResponse = await systemSettingsApi.get();
-      if (settingsResponse.data.success) {
-        setSettings(settingsResponse.data.data);
-      }
+      const quarantine = await runtimePolicyApi.updateQuarantine(values);
+      setQuarantinePolicy(quarantine);
+      quarantineForm.setFieldsValue(quarantine);
+      setSettings(await systemSettingsApi.get());
       message.success('隔离策略已保存');
     } catch (error) {
       message.error(getApiErrorMessage(error, '隔离策略保存失败'));
@@ -227,14 +198,10 @@ export const useSettings = ({ gmEdgeForm, quarantineForm, relayForm, smimeSuiteF
 
   const handleGmEdgePolicySave = useCallback(async (values: GmEdgePolicyFormValues) => {
     try {
-      const response = await runtimePolicyApi.updateGmEdge(values);
-      if (!response.data.success) throw new Error(response.data.message);
-      setGmEdgePolicy(response.data.data);
-      gmEdgeForm.setFieldsValue(applyGmEdgeDefaults(response.data.data));
-      const settingsResponse = await systemSettingsApi.get();
-      if (settingsResponse.data.success) {
-        setSettings(settingsResponse.data.data);
-      }
+      const gmEdge = await runtimePolicyApi.updateGmEdge(values);
+      setGmEdgePolicy(gmEdge);
+      gmEdgeForm.setFieldsValue(applyGmEdgeDefaults(gmEdge));
+      setSettings(await systemSettingsApi.get());
       message.success('国密 Edge 策略已保存');
     } catch (error) {
       message.error(getApiErrorMessage(error, '国密 Edge 策略保存失败'));
@@ -243,17 +210,13 @@ export const useSettings = ({ gmEdgeForm, quarantineForm, relayForm, smimeSuiteF
 
   const handleSmimeSuitePolicySave = useCallback(async (values: SmimeSuitePolicyFormValues) => {
     try {
-      const response = await runtimePolicyApi.updateSmimeSuite(values);
-      if (!response.data.success) throw new Error(response.data.message);
-      setSmimeSuitePolicy(response.data.data);
+      const smimeSuite = await runtimePolicyApi.updateSmimeSuite(values);
+      setSmimeSuitePolicy(smimeSuite);
       smimeSuiteForm?.setFieldsValue({
-        defaultStandardSuite: response.data.data.defaultStandardSuite,
-        defaultGmSuite: response.data.data.defaultGmSuite,
+        defaultStandardSuite: smimeSuite.defaultStandardSuite,
+        defaultGmSuite: smimeSuite.defaultGmSuite,
       });
-      const settingsResponse = await systemSettingsApi.get();
-      if (settingsResponse.data.success) {
-        setSettings(settingsResponse.data.data);
-      }
+      setSettings(await systemSettingsApi.get());
       message.success('S/MIME 套件策略已保存');
     } catch (error) {
       message.error(getApiErrorMessage(error, 'S/MIME 套件策略保存失败'));

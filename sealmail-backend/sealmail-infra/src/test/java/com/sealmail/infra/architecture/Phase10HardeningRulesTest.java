@@ -68,7 +68,7 @@ class Phase10HardeningRulesTest {
     void productionCodeDoesNotCarryStandaloneKeyGenerationUtilities() throws IOException {
         List<Path> violations = productionJavaFiles(BACKEND_ROOT).stream()
                 .filter(path -> containsAny(path,
-                        "System.out.println(",
+                        "System" + ".out.println(",
                         "privateKeyToPEM(",
                         "class SM2KeyGenerator"))
                 .toList();

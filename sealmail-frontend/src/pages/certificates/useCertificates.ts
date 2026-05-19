@@ -32,12 +32,12 @@ export const useCertificates = () => {
         caApi.list(),
         certificateBindingApi.list(),
       ]);
-      setData(certRes.data.data.items);
-      setCas(caRes.data.data);
-      setBindings(bindingRes.data.data);
+      setData(certRes.items);
+      setCas(caRes);
+      setBindings(bindingRes);
       setPagination((prev) => ({
         ...prev,
-        total: certRes.data.data.total,
+        total: certRes.total,
       }));
     } catch (error) {
       message.error(getApiErrorMessage(error, '加载证书列表失败'));

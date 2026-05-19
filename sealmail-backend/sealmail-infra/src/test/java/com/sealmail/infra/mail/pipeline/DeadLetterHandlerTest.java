@@ -39,7 +39,7 @@ class DeadLetterHandlerTest {
         when(quarantineChannel.send(any())).thenReturn(true);
         MailProcessingRepository repository = mock(MailProcessingRepository.class);
         DomainEventPublisher publisher = mock(DomainEventPublisher.class);
-        MailErrorDecisionHandler decisionHandler = new MailErrorDecisionHandler(repository, publisher);
+        MailErrorDecisionHandler decisionHandler = decisionHandler(repository, publisher);
         MailFlowErrorHandlingState errorHandlingState = new MailFlowErrorHandlingState();
         DeadLetterHandler handler = new DeadLetterHandler(quarantineChannel, decisionHandler, errorHandlingState);
 
@@ -90,7 +90,7 @@ class DeadLetterHandlerTest {
     void decisionHandlerUpdatesProcessingWhenErrorHasProcessingId() {
         MailProcessingRepository repository = mock(MailProcessingRepository.class);
         DomainEventPublisher publisher = mock(DomainEventPublisher.class);
-        MailErrorDecisionHandler decisionHandler = new MailErrorDecisionHandler(repository, publisher);
+        MailErrorDecisionHandler decisionHandler = decisionHandler(repository, publisher);
         byte[] payload = "raw mail".getBytes();
         MailEnvelope envelope = new MailEnvelope(
                 "msg-2@example.com",
@@ -120,7 +120,7 @@ class DeadLetterHandlerTest {
         MessageChannel quarantineChannel = mock(MessageChannel.class);
         MailProcessingRepository repository = mock(MailProcessingRepository.class);
         DomainEventPublisher publisher = mock(DomainEventPublisher.class);
-        MailErrorDecisionHandler decisionHandler = new MailErrorDecisionHandler(repository, publisher);
+        MailErrorDecisionHandler decisionHandler = decisionHandler(repository, publisher);
         MailFlowErrorHandlingState errorHandlingState = new MailFlowErrorHandlingState();
         DeadLetterHandler handler = new DeadLetterHandler(quarantineChannel, decisionHandler, errorHandlingState);
         byte[] payload = "raw mail".getBytes();
@@ -150,5 +150,10 @@ class DeadLetterHandlerTest {
     @SuppressWarnings("unchecked")
     private static ArgumentCaptor<Message<byte[]>> messageCaptor() {
         return ArgumentCaptor.forClass(Message.class);
+    }
+
+    private static MailErrorDecisionHandler decisionHandler(MailProcessingRepository repository,
+                                                            DomainEventPublisher publisher) {
+        return new MailErrorDecisionHandler(repository, publisher, new MailErrorClassifier());
     }
 }

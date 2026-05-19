@@ -13,7 +13,7 @@ import com.sealmail.domain.mailsecurity.MailEnvelope;
 import com.sealmail.domain.mailsecurity.MailProcessingContext;
 import com.sealmail.domain.policy.DispositionAction;
 import com.sealmail.domain.shared.model.EmailAddress;
-import com.sealmail.infra.dlp.config.DlpConfigService;
+import com.sealmail.infra.dlp.config.DlpRuntimeConfigPort;
 import com.sealmail.infra.dlp.detector.RegexDlpDetector;
 import com.sealmail.infra.mail.MimeMailMessageComposer;
 import org.junit.jupiter.api.Test;
@@ -46,7 +46,7 @@ class DlpEvaluationServicePolicyChainTest {
                         rawMail))
                 .withDirection(MailDirection.OUTBOUND);
 
-        DlpConfigService configService = mock(DlpConfigService.class);
+        DlpRuntimeConfigPort configService = mock(DlpRuntimeConfigPort.class);
         when(configService.activePolicies()).thenReturn(List.of(policy()));
         when(configService.activeRuleGroups()).thenReturn(List.of(ruleGroup()));
         when(configService.activeRules()).thenReturn(List.of(rule(DispositionAction.QUARANTINE)));
@@ -89,7 +89,7 @@ class DlpEvaluationServicePolicyChainTest {
                         rawMail))
                 .withDirection(MailDirection.OUTBOUND);
 
-        DlpConfigService configService = mock(DlpConfigService.class);
+        DlpRuntimeConfigPort configService = mock(DlpRuntimeConfigPort.class);
         when(configService.activePolicies()).thenReturn(List.of(policy()));
         when(configService.activeRuleGroups()).thenReturn(List.of(ruleGroup()));
         when(configService.activeRules()).thenReturn(List.of(rule(DispositionAction.WARN)));

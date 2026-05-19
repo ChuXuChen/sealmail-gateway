@@ -1,8 +1,8 @@
 package com.sealmail.infra.dlp.scanner;
 
 import com.sealmail.domain.policy.DispositionAction;
-import com.sealmail.infra.dlp.config.DlpConfigService;
 import com.sealmail.infra.dlp.config.DlpPatternConfig;
+import com.sealmail.infra.dlp.config.DlpRuntimeConfigPort;
 import org.junit.jupiter.api.Test;
 
 import java.time.Instant;
@@ -18,7 +18,7 @@ class ConfiguredRegexDlpScannerTest {
 
     @Test
     void scansOnlyPatternsSelectedForEnvelope() {
-        DlpConfigService configService = mock(DlpConfigService.class);
+        DlpRuntimeConfigPort configService = mock(DlpRuntimeConfigPort.class);
         when(configService.activePatternsFor(any())).thenReturn(List.of(
                 pattern("block-rule", "BLOCK_TOKEN", DispositionAction.BLOCK)
         ));

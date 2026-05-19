@@ -10,9 +10,6 @@ import org.springframework.messaging.MessageChannel;
 import org.springframework.messaging.support.ErrorMessage;
 import org.springframework.stereotype.Component;
 
-import java.io.ByteArrayOutputStream;
-import java.io.PrintStream;
-import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -100,10 +97,26 @@ public class DeadLetterHandler {
         if (t == null) {
             return "";
         }
-        ByteArrayOutputStream baos = new ByteArrayOutputStream();
-        PrintStream ps = new PrintStream(baos);
-        t.printStackTrace(ps);
-        return baos.toString(StandardCharsets.UTF_8);
+        StringBuilder builder = new StringBuilder();
+        appendStackTrace(builder, t, "");
+        return builder.toString();
+    }
+
+    private void appendStackTrace(StringBuilder builder, Throwable throwable, String prefix) {
+        builder.append(prefix)
+                .append(throwable.getClass().getName())
+                .append(": ")
+                .append(throwable.getMessage())
+                .append(System.lineSeparator());
+        for (StackTraceElement element : throwable.getStackTrace()) {
+            builder.append("\tat ")
+                    .append(element)
+                    .append(System.lineSeparator());
+        }
+        Throwable cause = throwable.getCause();
+        if (cause != null) {
+            appendStackTrace(builder, cause, "Caused by: ");
+        }
     }
 
     private Map<String, Object> extractHeaders(Message<?> message) {

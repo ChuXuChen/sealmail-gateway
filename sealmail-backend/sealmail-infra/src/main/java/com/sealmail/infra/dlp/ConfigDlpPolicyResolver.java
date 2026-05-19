@@ -10,7 +10,7 @@ import com.sealmail.domain.dlp.spi.DlpPolicyResolver;
 import com.sealmail.domain.mailsecurity.MailEnvelope;
 import com.sealmail.domain.mailsecurity.MailProcessingContext;
 import com.sealmail.domain.shared.model.EmailAddress;
-import com.sealmail.infra.dlp.config.DlpConfigService;
+import com.sealmail.infra.dlp.config.DlpRuntimeConfigPort;
 import org.springframework.stereotype.Component;
 
 import java.util.Comparator;
@@ -23,9 +23,9 @@ import java.util.regex.Pattern;
 @Component
 public class ConfigDlpPolicyResolver implements DlpPolicyResolver {
 
-    private final DlpConfigService configService;
+    private final DlpRuntimeConfigPort configService;
 
-    public ConfigDlpPolicyResolver(DlpConfigService configService) {
+    public ConfigDlpPolicyResolver(DlpRuntimeConfigPort configService) {
         this.configService = configService;
     }
 

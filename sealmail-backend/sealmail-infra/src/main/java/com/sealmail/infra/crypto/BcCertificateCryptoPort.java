@@ -4,14 +4,9 @@ import com.sealmail.domain.certificate.CertificateId;
 import com.sealmail.domain.certificate.KeyUsage;
 import com.sealmail.domain.certificate.ValidityPeriod;
 import com.sealmail.domain.certificate.spi.CertificateCryptoPort;
-import org.bouncycastle.asn1.ASN1Encodable;
 import org.bouncycastle.asn1.ASN1ObjectIdentifier;
 import org.bouncycastle.asn1.pkcs.PrivateKeyInfo;
-import org.bouncycastle.asn1.x500.RDN;
 import org.bouncycastle.asn1.x500.X500Name;
-import org.bouncycastle.asn1.x500.style.BCStyle;
-import org.bouncycastle.asn1.x500.style.IETFUtils;
-import org.bouncycastle.asn1.x509.AuthorityKeyIdentifier;
 import org.bouncycastle.asn1.x509.BasicConstraints;
 import org.bouncycastle.asn1.x509.CRLDistPoint;
 import org.bouncycastle.asn1.x509.CRLReason;
@@ -22,33 +17,22 @@ import org.bouncycastle.asn1.x509.Extension;
 import org.bouncycastle.asn1.x509.GeneralName;
 import org.bouncycastle.asn1.x509.GeneralNames;
 import org.bouncycastle.asn1.x509.KeyPurposeId;
-import org.bouncycastle.asn1.x509.SubjectKeyIdentifier;
 import org.bouncycastle.asn1.x509.SubjectPublicKeyInfo;
 import org.bouncycastle.cert.X509CRLHolder;
-import org.bouncycastle.cert.X509CertificateHolder;
 import org.bouncycastle.cert.X509v2CRLBuilder;
 import org.bouncycastle.cert.jcajce.JcaX509CRLConverter;
 import org.bouncycastle.cert.jcajce.JcaX509CertificateConverter;
 import org.bouncycastle.cert.jcajce.JcaX509ExtensionUtils;
 import org.bouncycastle.cert.jcajce.JcaX509v3CertificateBuilder;
 import org.bouncycastle.jce.provider.BouncyCastleProvider;
-import org.bouncycastle.openssl.PEMKeyPair;
-import org.bouncycastle.openssl.PEMParser;
-import org.bouncycastle.openssl.jcajce.JcaPEMKeyConverter;
-import org.bouncycastle.openssl.jcajce.JcaPEMWriter;
 import org.bouncycastle.operator.ContentSigner;
 import org.bouncycastle.operator.jcajce.JcaContentSignerBuilder;
 import org.bouncycastle.operator.jcajce.JcaContentVerifierProviderBuilder;
 import org.bouncycastle.pkcs.PKCS10CertificationRequest;
 import org.bouncycastle.pkcs.jcajce.JcaPKCS10CertificationRequest;
-import org.bouncycastle.x509.extension.X509ExtensionUtil;
 import org.springframework.stereotype.Component;
 
-import java.io.ByteArrayInputStream;
-import java.io.StringReader;
-import java.io.StringWriter;
 import java.math.BigInteger;
-import java.nio.charset.StandardCharsets;
 import java.security.KeyFactory;
 import java.security.KeyPair;
 import java.security.KeyPairGenerator;
@@ -57,7 +41,6 @@ import java.security.PrivateKey;
 import java.security.PublicKey;
 import java.security.SecureRandom;
 import java.security.Security;
-import java.security.cert.CertificateFactory;
 import java.security.cert.X509CRL;
 import java.security.cert.X509Certificate;
 import java.security.interfaces.RSAPrivateCrtKey;
@@ -75,6 +58,9 @@ import java.util.Set;
 
 @Component
 public class BcCertificateCryptoPort implements CertificateCryptoPort {
+
+    private final BcCertificateExtensions certificateExtensions = new BcCertificateExtensions();
+    private final BcCertificatePemCodec pemCodec = new BcCertificatePemCodec();
 
     static {
         if (Security.getProvider("BC") == null) {
@@ -101,7 +87,7 @@ public class BcCertificateCryptoPort implements CertificateCryptoPort {
                     .build());
             return new CertificateMaterial(
                     describe(x509, command.algorithm()),
-                    privateKeyToPem(keyPair.getPrivate()),
+                    pemCodec.privateKeyToPem(keyPair.getPrivate()),
                     keyPair.getPublic().getFormat());
         } catch (Exception e) {
             throw new CertificateCryptoException("Failed to issue self-signed certificate: " + e.getMessage(), e);
@@ -112,8 +98,8 @@ public class BcCertificateCryptoPort implements CertificateCryptoPort {
     public CertificateMaterial issueWithIssuer(IssueWithIssuerCommand command) {
         try {
             KeyPair subjectKeyPair = generateKeyPair(command.subjectAlgorithm());
-            PrivateKey issuerPrivateKey = parsePrivateKey(command.issuerPrivateKeyPem());
-            X509Certificate issuer = parseCertificate(command.issuerCertificatePem());
+            PrivateKey issuerPrivateKey = pemCodec.parsePrivateKey(command.issuerPrivateKeyPem());
+            X509Certificate issuer = pemCodec.parseCertificate(command.issuerCertificatePem());
             X509Certificate x509 = issue(CertSpec.builder()
                     .subjectPubKey(subjectKeyPair.getPublic())
                     .subjectDn(command.subjectDn())
@@ -129,7 +115,7 @@ public class BcCertificateCryptoPort implements CertificateCryptoPort {
                     .build());
             return new CertificateMaterial(
                     describe(x509, command.subjectAlgorithm()),
-                    privateKeyToPem(subjectKeyPair.getPrivate()),
+                    pemCodec.privateKeyToPem(subjectKeyPair.getPrivate()),
                     subjectKeyPair.getPublic().getFormat());
         } catch (Exception e) {
             throw new CertificateCryptoException("Failed to issue certificate: " + e.getMessage(), e);
@@ -150,10 +136,10 @@ public class BcCertificateCryptoPort implements CertificateCryptoPort {
     @Override
     public CertificateDescriptor signCsr(SignCsrCommand command) {
         try {
-            PKCS10CertificationRequest csr = parseCsr(command.csrPem());
+            PKCS10CertificationRequest csr = pemCodec.parseCsr(command.csrPem());
             validateCsr(csr);
-            X509Certificate caCert = parseCertificate(command.issuerCertificatePem());
-            PrivateKey caPrivateKey = parsePrivateKey(command.issuerPrivateKeyPem());
+            X509Certificate caCert = pemCodec.parseCertificate(command.issuerCertificatePem());
+            PrivateKey caPrivateKey = pemCodec.parsePrivateKey(command.issuerPrivateKeyPem());
             X509Certificate signed = signCsr(
                     csr,
                     caCert,
@@ -169,9 +155,12 @@ public class BcCertificateCryptoPort implements CertificateCryptoPort {
     @Override
     public CsrInfo validateCsr(String csrPem) {
         try {
-            PKCS10CertificationRequest csr = parseCsr(csrPem);
+            PKCS10CertificationRequest csr = pemCodec.parseCsr(csrPem);
             validateCsr(csr);
-            return new CsrInfo(csr.getSubject().toString(), extractEmail(csr.getSubject()), detectAlgorithm(csr.getSubjectPublicKeyInfo()));
+            return new CsrInfo(
+                    csr.getSubject().toString(),
+                    certificateExtensions.emailAddress(csr.getSubject()).orElse(null),
+                    detectAlgorithm(csr.getSubjectPublicKeyInfo()));
         } catch (IllegalArgumentException e) {
             throw e;
         } catch (Exception e) {
@@ -182,7 +171,7 @@ public class BcCertificateCryptoPort implements CertificateCryptoPort {
     @Override
     public CertificateDescriptor readCertificate(String certificatePem) {
         try {
-            X509Certificate x509 = parseCertificate(certificatePem);
+            X509Certificate x509 = pemCodec.parseCertificate(certificatePem);
             return describe(x509, detectPublicKeyAlgorithm(x509.getPublicKey().getAlgorithm()));
         } catch (Exception e) {
             throw new CertificateCryptoException("Failed to read certificate: " + e.getMessage(), e);
@@ -192,7 +181,9 @@ public class BcCertificateCryptoPort implements CertificateCryptoPort {
     @Override
     public void validateCertificateMatchesPrivateKey(String certificatePem, String privateKeyPem) {
         try {
-            validateCertificateMatchesPrivateKey(parseCertificate(certificatePem), parsePrivateKey(privateKeyPem));
+            validateCertificateMatchesPrivateKey(
+                    pemCodec.parseCertificate(certificatePem),
+                    pemCodec.parsePrivateKey(privateKeyPem));
         } catch (IllegalArgumentException e) {
             throw e;
         } catch (Exception e) {
@@ -203,7 +194,7 @@ public class BcCertificateCryptoPort implements CertificateCryptoPort {
     @Override
     public boolean isSelfSigned(String certificatePem) {
         try {
-            X509Certificate cert = parseCertificate(certificatePem);
+            X509Certificate cert = pemCodec.parseCertificate(certificatePem);
             if (!cert.getSubjectX500Principal().equals(cert.getIssuerX500Principal())) {
                 return false;
             }
@@ -217,10 +208,10 @@ public class BcCertificateCryptoPort implements CertificateCryptoPort {
     @Override
     public boolean isIssuedBy(String subjectCertificatePem, String issuerCertificatePem) {
         try {
-            X509Certificate subject = parseCertificate(subjectCertificatePem);
-            X509Certificate issuer = parseCertificate(issuerCertificatePem);
-            String subjectAki = extractAuthorityKeyIdentifier(subject);
-            String issuerSki = extractSubjectKeyIdentifier(issuer);
+            X509Certificate subject = pemCodec.parseCertificate(subjectCertificatePem);
+            X509Certificate issuer = pemCodec.parseCertificate(issuerCertificatePem);
+            String subjectAki = certificateExtensions.authorityKeyIdentifier(subject).orElse(null);
+            String issuerSki = certificateExtensions.subjectKeyIdentifier(issuer).orElse(null);
             subject.verify(issuer.getPublicKey(), "BC");
             return subjectAki == null || issuerSki == null || subjectAki.equalsIgnoreCase(issuerSki);
         } catch (Exception e) {
@@ -231,12 +222,12 @@ public class BcCertificateCryptoPort implements CertificateCryptoPort {
     @Override
     public CrlContent normalizeAndValidateCrl(String caCertificatePem, String crlPem, String crlDerBase64) {
         try {
-            X509Certificate caX509 = parseCertificate(caCertificatePem);
+            X509Certificate caX509 = pemCodec.parseCertificate(caCertificatePem);
             X509CRL crl;
             if (crlPem != null && !crlPem.isBlank()) {
-                crl = parseCrl(crlPem);
+                crl = pemCodec.parseCrl(crlPem);
             } else if (crlDerBase64 != null && !crlDerBase64.isBlank()) {
-                crl = parseCrl(Base64.getDecoder().decode(crlDerBase64));
+                crl = pemCodec.parseCrl(Base64.getDecoder().decode(crlDerBase64));
             } else {
                 throw new IllegalArgumentException("请提供 PEM CRL 或 DER .crl 文件内容");
             }
@@ -244,7 +235,7 @@ public class BcCertificateCryptoPort implements CertificateCryptoPort {
                 throw new IllegalArgumentException("CRL issuer 与所选 CA subject 不一致");
             }
             crl.verify(caX509.getPublicKey(), "BC");
-            return new CrlContent(crl.getEncoded(), crlToPem(crl));
+            return new CrlContent(crl.getEncoded(), pemCodec.crlToPem(crl));
         } catch (IllegalArgumentException e) {
             throw e;
         } catch (Exception e) {
@@ -255,8 +246,8 @@ public class BcCertificateCryptoPort implements CertificateCryptoPort {
     @Override
     public CrlContent generateCrl(GenerateCrlCommand command) {
         try {
-            X509Certificate caX509 = parseCertificate(command.caCertificatePem());
-            PrivateKey caPriv = parsePrivateKey(command.caPrivateKeyPem());
+            X509Certificate caX509 = pemCodec.parseCertificate(command.caCertificatePem());
+            PrivateKey caPriv = pemCodec.parsePrivateKey(command.caPrivateKeyPem());
             Date thisUpdate = Date.from(command.thisUpdate());
             Date nextUpdate = Date.from(command.nextUpdate());
 
@@ -282,20 +273,14 @@ public class BcCertificateCryptoPort implements CertificateCryptoPort {
             ContentSigner signer = new JcaContentSignerBuilder(sigAlg).setProvider("BC").build(caPriv);
             X509CRLHolder holder = builder.build(signer);
             X509CRL crl = new JcaX509CRLConverter().setProvider("BC").getCRL(holder);
-            return new CrlContent(crl.getEncoded(), crlToPem(crl));
+            return new CrlContent(crl.getEncoded(), pemCodec.crlToPem(crl));
         } catch (Exception e) {
             throw new CertificateCryptoException("Failed to generate CRL: " + e.getMessage(), e);
         }
     }
 
     public String writeCsrPem(PKCS10CertificationRequest csr) {
-        try (StringWriter sw = new StringWriter(); JcaPEMWriter writer = new JcaPEMWriter(sw)) {
-            writer.writeObject(csr);
-            writer.flush();
-            return sw.toString();
-        } catch (Exception e) {
-            throw new CertificateCryptoException("Failed to encode CSR: " + e.getMessage(), e);
-        }
+        return pemCodec.csrToPem(csr);
     }
 
     KeyPair generateKeyPair(String algorithm) throws Exception {
@@ -410,7 +395,7 @@ public class BcCertificateCryptoPort implements CertificateCryptoPort {
             pathLen = basicConstraints == Integer.MAX_VALUE ? 0 : basicConstraints;
         }
         return new CertificateDescriptor(
-                certificateToPem(x509),
+                pemCodec.certificateToPem(x509),
                 algorithm,
                 computeThumbprint(x509),
                 new ValidityPeriod(
@@ -420,11 +405,11 @@ public class BcCertificateCryptoPort implements CertificateCryptoPort {
                 x509.getIssuerX500Principal().getName(),
                 x509.getSubjectX500Principal().getName(),
                 x509.getSerialNumber(),
-                extractSubjectKeyIdentifier(x509),
+                certificateExtensions.subjectKeyIdentifier(x509).orElse(null),
                 pathLen != null,
                 pathLen,
                 readExtendedKeyUsages(x509),
-                extractCrlDistributionPointUrl(x509));
+                certificateExtensions.crlDistributionPointUrl(x509).orElse(null));
     }
 
     private Set<String> readExtendedKeyUsages(X509Certificate x509) {
@@ -476,78 +461,6 @@ public class BcCertificateCryptoPort implements CertificateCryptoPort {
         return sb.toString();
     }
 
-    private String extractSubjectKeyIdentifier(X509Certificate cert) {
-        try {
-            byte[] skiValue = cert.getExtensionValue(Extension.subjectKeyIdentifier.getId());
-            if (skiValue == null) return null;
-            SubjectKeyIdentifier skid = SubjectKeyIdentifier.getInstance(
-                    X509ExtensionUtil.fromExtensionValue(skiValue));
-            return toHex(skid.getKeyIdentifier());
-        } catch (Exception e) {
-            return null;
-        }
-    }
-
-    private String extractAuthorityKeyIdentifier(X509Certificate cert) {
-        try {
-            byte[] akiValue = cert.getExtensionValue(Extension.authorityKeyIdentifier.getId());
-            if (akiValue == null) return null;
-            AuthorityKeyIdentifier akid = AuthorityKeyIdentifier.getInstance(
-                    X509ExtensionUtil.fromExtensionValue(akiValue));
-            return akid.getKeyIdentifier() == null ? null : toHex(akid.getKeyIdentifier());
-        } catch (Exception e) {
-            return null;
-        }
-    }
-
-    private String extractCrlDistributionPointUrl(X509Certificate cert) {
-        try {
-            byte[] ext = cert.getExtensionValue(Extension.cRLDistributionPoints.getId());
-            if (ext == null) {
-                return null;
-            }
-            CRLDistPoint distPoint = CRLDistPoint.getInstance(X509ExtensionUtil.fromExtensionValue(ext));
-            if (distPoint == null) {
-                return null;
-            }
-            for (DistributionPoint dp : distPoint.getDistributionPoints()) {
-                DistributionPointName name = dp.getDistributionPoint();
-                if (name == null || name.getType() != DistributionPointName.FULL_NAME) {
-                    continue;
-                }
-                GeneralNames generalNames = GeneralNames.getInstance(name.getName());
-                for (GeneralName generalName : generalNames.getNames()) {
-                    if (generalName.getTagNo() == GeneralName.uniformResourceIdentifier) {
-                        return generalName.getName().toString();
-                    }
-                }
-            }
-        } catch (Exception ignored) {
-        }
-        return null;
-    }
-
-    private String extractEmail(X500Name subject) {
-        for (RDN rdn : subject.getRDNs(BCStyle.EmailAddress)) {
-            String email = readRdn(rdn);
-            if (email != null) return email;
-        }
-        for (RDN rdn : subject.getRDNs(BCStyle.E)) {
-            String email = readRdn(rdn);
-            if (email != null) return email;
-        }
-        for (RDN rdn : subject.getRDNs(BCStyle.CN)) {
-            String cn = readRdn(rdn);
-            if (cn != null && cn.contains("@")) return cn;
-        }
-        return null;
-    }
-
-    private String readRdn(RDN rdn) {
-        ASN1Encodable enc = rdn.getFirst() == null ? null : rdn.getFirst().getValue();
-        return enc == null ? null : IETFUtils.valueToString(enc);
-    }
-
     private String detectAlgorithm(SubjectPublicKeyInfo spki) {
         String oid = spki.getAlgorithm().getAlgorithm().getId();
         if ("1.2.840.113549.1.1.1".equals(oid)) return "RSA";
@@ -562,97 +475,6 @@ public class BcCertificateCryptoPort implements CertificateCryptoPort {
             case "RSA" -> "RSA";
             default -> javaAlg;
         };
-    }
-
-    private String certificateToPem(X509Certificate cert) {
-        try {
-            StringBuilder sb = new StringBuilder();
-            sb.append("-----BEGIN CERTIFICATE-----\n");
-            String b64 = Base64.getMimeEncoder(64, "\n".getBytes(StandardCharsets.US_ASCII)).encodeToString(cert.getEncoded());
-            sb.append(b64);
-            if (!b64.endsWith("\n")) sb.append('\n');
-            sb.append("-----END CERTIFICATE-----\n");
-            return sb.toString();
-        } catch (Exception e) {
-            throw new CertificateCryptoException("Failed to encode certificate to PEM", e);
-        }
-    }
-
-    private String privateKeyToPem(PrivateKey privateKey) {
-        try (StringWriter sw = new StringWriter(); JcaPEMWriter pw = new JcaPEMWriter(sw)) {
-            pw.writeObject(privateKey);
-            pw.flush();
-            return sw.toString();
-        } catch (Exception e) {
-            throw new CertificateCryptoException("Failed to encode private key to PEM", e);
-        }
-    }
-
-    private String crlToPem(X509CRL crl) {
-        try {
-            StringBuilder sb = new StringBuilder();
-            sb.append("-----BEGIN X509 CRL-----\n");
-            String b64 = Base64.getMimeEncoder(64, "\n".getBytes(StandardCharsets.US_ASCII)).encodeToString(crl.getEncoded());
-            sb.append(b64);
-            if (!b64.endsWith("\n")) sb.append('\n');
-            sb.append("-----END X509 CRL-----\n");
-            return sb.toString();
-        } catch (Exception e) {
-            throw new CertificateCryptoException("Failed to encode CRL to PEM", e);
-        }
-    }
-
-    private PrivateKey parsePrivateKey(String pem) throws Exception {
-        try (PEMParser parser = new PEMParser(new StringReader(pem))) {
-            JcaPEMKeyConverter converter = new JcaPEMKeyConverter().setProvider("BC");
-            Object obj;
-            while ((obj = parser.readObject()) != null) {
-                if (obj instanceof PrivateKeyInfo pki) {
-                    return converter.getPrivateKey(pki);
-                }
-                if (obj instanceof PEMKeyPair pkp) {
-                    return converter.getKeyPair(pkp).getPrivate();
-                }
-                if (obj instanceof KeyPair kp) {
-                    return kp.getPrivate();
-                }
-            }
-        }
-        throw new IllegalArgumentException("No private key found in PEM data");
-    }
-
-    private X509Certificate parseCertificate(String pem) throws Exception {
-        try (PEMParser parser = new PEMParser(new StringReader(pem))) {
-            Object obj = parser.readObject();
-            if (obj instanceof X509CertificateHolder holder) {
-                return new JcaX509CertificateConverter().setProvider("BC").getCertificate(holder);
-            }
-            throw new IllegalArgumentException("PEM data is not an X.509 certificate");
-        }
-    }
-
-    private X509CRL parseCrl(String pem) throws Exception {
-        CertificateFactory factory = CertificateFactory.getInstance("X.509", "BC");
-        try (ByteArrayInputStream input = new ByteArrayInputStream(pem.getBytes(StandardCharsets.UTF_8))) {
-            return (X509CRL) factory.generateCRL(input);
-        }
-    }
-
-    private X509CRL parseCrl(byte[] der) throws Exception {
-        CertificateFactory factory = CertificateFactory.getInstance("X.509", "BC");
-        try (ByteArrayInputStream input = new ByteArrayInputStream(der)) {
-            return (X509CRL) factory.generateCRL(input);
-        }
-    }
-
-    private PKCS10CertificationRequest parseCsr(String pem) throws Exception {
-        try (PEMParser parser = new PEMParser(new StringReader(pem))) {
-            Object obj = parser.readObject();
-            if (obj instanceof PKCS10CertificationRequest csr) {
-                return csr;
-            }
-            throw new IllegalArgumentException("PEM data is not a PKCS#10 CSR");
-        }
     }
 
     private void validateCertificateMatchesPrivateKey(X509Certificate certificate, PrivateKey privateKey) throws Exception {
@@ -705,12 +527,6 @@ public class BcCertificateCryptoPort implements CertificateCryptoPort {
             case "AA_COMPROMISE" -> CRLReason.aACompromise;
             default -> CRLReason.unspecified;
         };
-    }
-
-    private String toHex(byte[] bytes) {
-        StringBuilder sb = new StringBuilder();
-        for (byte b : bytes) sb.append(String.format("%02x", b));
-        return sb.toString();
     }
 
     @lombok.Value

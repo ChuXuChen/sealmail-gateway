@@ -34,48 +34,60 @@ import { unwrapApiResponse } from './response';
 
 export const exceptionMailApi = {
   getStats: () =>
-    apiClient.get<ApiResponse<ExceptionMailStats>>('/api/v1/exception-mails/stats'),
+    unwrapApiResponse(apiClient.get<ApiResponse<ExceptionMailStats>>('/api/v1/exception-mails/stats')),
 
   list: (params: { page?: number; size?: number; reason?: string }) =>
-    apiClient.get<ApiResponse<PageResponse<ExceptionMailItem>>>('/api/v1/exception-mails', { params }),
+    unwrapApiResponse(apiClient.get<ApiResponse<PageResponse<ExceptionMailItem>>>(
+      '/api/v1/exception-mails',
+      { params },
+    )),
 
   getById: (id: string) =>
-    apiClient.get<ApiResponse<ExceptionMailItem>>(`/api/v1/exception-mails/${id}`),
+    unwrapApiResponse(apiClient.get<ApiResponse<ExceptionMailItem>>(`/api/v1/exception-mails/${id}`)),
 };
 
 export const dlpQuarantineApi = {
   getStats: () =>
-    apiClient.get<ApiResponse<QuarantineStats>>('/api/v1/dlp/quarantine/stats'),
+    unwrapApiResponse(apiClient.get<ApiResponse<QuarantineStats>>('/api/v1/dlp/quarantine/stats')),
 
   list: (params: { page?: number; size?: number; reason?: string }) =>
-    apiClient.get<ApiResponse<PageResponse<QuarantineItem>>>('/api/v1/dlp/quarantine', { params }),
+    unwrapApiResponse(apiClient.get<ApiResponse<PageResponse<QuarantineItem>>>(
+      '/api/v1/dlp/quarantine',
+      { params },
+    )),
 
   getById: (id: string) =>
-    apiClient.get<ApiResponse<QuarantineItem>>(`/api/v1/dlp/quarantine/${id}`),
+    unwrapApiResponse(apiClient.get<ApiResponse<QuarantineItem>>(`/api/v1/dlp/quarantine/${id}`)),
 
   release: (id: string, data?: { releasedBy?: string; comment?: string; encryptBeforeRelease?: boolean }) =>
-    apiClient.post<ApiResponse<QuarantineItem>>(`/api/v1/dlp/quarantine/${id}/release`, data),
+    unwrapApiResponse(apiClient.post<ApiResponse<QuarantineItem>>(`/api/v1/dlp/quarantine/${id}/release`, data)),
 
   completeRelease: (id: string, data?: { operator?: string; comment?: string }) =>
-    apiClient.post<ApiResponse<QuarantineItem>>(`/api/v1/dlp/quarantine/${id}/release/complete`, data),
+    unwrapApiResponse(apiClient.post<ApiResponse<QuarantineItem>>(
+      `/api/v1/dlp/quarantine/${id}/release/complete`,
+      data,
+    )),
 
   restoreRelease: (id: string, data?: { operator?: string; comment?: string }) =>
-    apiClient.post<ApiResponse<QuarantineItem>>(`/api/v1/dlp/quarantine/${id}/release/restore`, data),
+    unwrapApiResponse(apiClient.post<ApiResponse<QuarantineItem>>(
+      `/api/v1/dlp/quarantine/${id}/release/restore`,
+      data,
+    )),
 
   reject: (id: string, data?: { rejectedBy?: string; comment?: string }) =>
-    apiClient.post<ApiResponse<QuarantineItem>>(`/api/v1/dlp/quarantine/${id}/reject`, data),
+    unwrapApiResponse(apiClient.post<ApiResponse<QuarantineItem>>(`/api/v1/dlp/quarantine/${id}/reject`, data)),
 
   batchRelease: (ids: string[]) =>
-    apiClient.post<ApiResponse<void>>('/api/v1/dlp/quarantine/batch-release', ids),
+    unwrapApiResponse(apiClient.post<ApiResponse<void>>('/api/v1/dlp/quarantine/batch-release', ids)),
 
   batchReject: (ids: string[]) =>
-    apiClient.post<ApiResponse<void>>('/api/v1/dlp/quarantine/batch-reject', ids),
+    unwrapApiResponse(apiClient.post<ApiResponse<void>>('/api/v1/dlp/quarantine/batch-reject', ids)),
 
   evidence: (id: string) =>
-    apiClient.get<ApiResponse<DlpEvidence[]>>(`/api/v1/dlp/quarantine/${id}/evidence`),
+    unwrapApiResponse(apiClient.get<ApiResponse<DlpEvidence[]>>(`/api/v1/dlp/quarantine/${id}/evidence`)),
 
   falsePositive: (id: string, data?: { comment?: string }) =>
-    apiClient.post<ApiResponse<void>>(`/api/v1/dlp/quarantine/${id}/false-positive`, data),
+    unwrapApiResponse(apiClient.post<ApiResponse<void>>(`/api/v1/dlp/quarantine/${id}/false-positive`, data)),
 };
 
 export const dlpApi = {

@@ -64,14 +64,13 @@ const AuditLogs: React.FC = () => {
 
   const loadAllLogs = useCallback(async () => {
     const pageSize = 100;
-    const first = await auditLogApi.list({ page: 1, size: pageSize });
-    const page = first.data.data;
+    const page = await auditLogApi.list({ page: 1, size: pageSize });
     const items = [...page.items];
     const totalPages = Math.ceil(page.total / pageSize);
 
     for (let current = 2; current <= totalPages; current += 1) {
       const response = await auditLogApi.list({ page: current, size: pageSize });
-      items.push(...response.data.data.items);
+      items.push(...response.items);
     }
 
     return items;
@@ -81,14 +80,14 @@ const AuditLogs: React.FC = () => {
     setLoading(true);
     try {
       if (hasProcessingId) {
-        const response = await auditLogApi.getByProcessingId(processingId.trim(), {
+        const page = await auditLogApi.getByProcessingId(processingId.trim(), {
           page: pagination.page,
           size: pagination.size,
         });
-        setData(response.data.data.items);
+        setData(page.items);
         setPagination((prev) => ({
           ...prev,
-          total: response.data.data.total,
+          total: page.total,
         }));
         return;
       }
@@ -105,14 +104,14 @@ const AuditLogs: React.FC = () => {
         return;
       }
 
-      const response = await auditLogApi.list({
+      const page = await auditLogApi.list({
         page: pagination.page,
         size: pagination.size,
       });
-      setData(response.data.data.items);
+      setData(page.items);
       setPagination((prev) => ({
         ...prev,
-        total: response.data.data.total,
+        total: page.total,
       }));
     } catch (error) {
       message.error(getApiErrorMessage(error, '加载审计日志失败'));

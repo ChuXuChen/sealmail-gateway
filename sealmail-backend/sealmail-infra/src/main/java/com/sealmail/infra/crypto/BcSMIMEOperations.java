@@ -33,30 +33,20 @@ import org.bouncycastle.mail.smime.SMIMESigned;
 import org.bouncycastle.mail.smime.SMIMESignedGenerator;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.bouncycastle.mail.smime.util.SharedFileInputStream;
 import org.bouncycastle.operator.OperatorCreationException;
 import org.bouncycastle.operator.OutputEncryptor;
 import org.springframework.stereotype.Component;
 
 import jakarta.activation.CommandMap;
 import jakarta.activation.MailcapCommandMap;
-import jakarta.mail.Header;
-import jakarta.mail.MessagingException;
-import jakarta.mail.internet.InternetHeaders;
 import jakarta.mail.internet.MimeBodyPart;
 import jakarta.mail.internet.MimeMultipart;
-import java.io.ByteArrayInputStream;
-import java.io.ByteArrayOutputStream;
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.OutputStream;
 import java.security.*;
 import java.security.cert.CertificateExpiredException;
 import java.security.cert.CertificateNotYetValidException;
 import java.security.cert.X509Certificate;
 import java.time.Instant;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Date;
 import java.util.List;
 
@@ -101,6 +91,7 @@ public class BcSMIMEOperations implements SMIMEOperations {
     private final SmimeAlgorithmSuites configuredSuites;
     private final SmimeSuitePolicyService smimeSuitePolicyService;
     private final X509CryptoProfileResolver profileResolver;
+    private final SmimeMimeEntityCodec mimeCodec;
     private final SecureRandom secureRandom;
 
     public BcSMIMEOperations(SmimeCryptoProperties cryptoProperties,
@@ -108,6 +99,7 @@ public class BcSMIMEOperations implements SMIMEOperations {
         this.configuredSuites = new SmimeAlgorithmSuites(cryptoProperties);
         this.smimeSuitePolicyService = smimeSuitePolicyService;
         this.profileResolver = new X509CryptoProfileResolver();
+        this.mimeCodec = new SmimeMimeEntityCodec();
         this.secureRandom = new SecureRandom();
     }
 
@@ -145,8 +137,8 @@ public class BcSMIMEOperations implements SMIMEOperations {
                                   CryptoProfile profile) {
         try {
             SmimeAlgorithmSuite algorithmSuite = algorithmSuites().get(profile);
-            RawMimeSections originalMessage = splitMessage(mimeMessage);
-            MimeBodyPart msg = extractMimeEntity(mimeMessage);
+            SmimeMimeEntityCodec.RawMimeSections originalMessage = mimeCodec.splitMessage(mimeMessage);
+            MimeBodyPart msg = mimeCodec.extractMimeEntity(mimeMessage);
             SMIMEEnvelopedGenerator gen = new SMIMEEnvelopedGenerator();
             List<X509Certificate> certificates = new ArrayList<>();
 
@@ -171,7 +163,7 @@ public class BcSMIMEOperations implements SMIMEOperations {
                     algorithmSuite.recipientKeyAlgorithm().getId(),
                     algorithmSuite.contentEncryptionAlgorithm().getId());
             MimeBodyPart encrypted = gen.generate(msg, encryptor);
-            return rebuildMessagePreservingOuterHeaders(originalMessage.outerHeaders(), encrypted);
+            return mimeCodec.rebuildMessagePreservingOuterHeaders(originalMessage.outerHeaders(), encrypted);
         } catch (Exception e) {
             log.error("S/MIME 加密失败详情: ", e);
             throw new CryptoException("S/MIME 加密失败: " + e.getMessage(), e);
@@ -226,8 +218,8 @@ public class BcSMIMEOperations implements SMIMEOperations {
     public byte[] decrypt(byte[] encryptedMessage, String privateKeyPem, String certPem) {
         try {
             PrivateKey privateKey = PemUtils.parsePrivateKey(privateKeyPem);
-            RawMimeSections originalMessage = splitMessage(encryptedMessage);
-            MimeBodyPart encryptedPart = extractMimeEntity(encryptedMessage);
+            SmimeMimeEntityCodec.RawMimeSections originalMessage = mimeCodec.splitMessage(encryptedMessage);
+            MimeBodyPart encryptedPart = mimeCodec.extractMimeEntity(encryptedMessage);
 
             SMIMEEnveloped enveloped = new SMIMEEnveloped(encryptedPart);
             var recipientInfos = enveloped.getRecipientInfos();
@@ -248,9 +240,9 @@ public class BcSMIMEOperations implements SMIMEOperations {
                     } else {
                         continue;
                     }
-                    return rebuildMessagePreservingOuterHeaders(
+                    return mimeCodec.rebuildMessagePreservingOuterHeaders(
                             originalMessage.outerHeaders(),
-                            parseMimeBodyPart(decryptedBytes)
+                            mimeCodec.parseMimeBodyPart(decryptedBytes)
                     );
                 } catch (Exception e) {
                     log.warn("尝试解密失败 ({}): {}", recipientInfo.getClass().getSimpleName(), e.getMessage(), e);
@@ -313,8 +305,8 @@ public class BcSMIMEOperations implements SMIMEOperations {
         try {
             PrivateKey privateKey = PemUtils.parsePrivateKey(privateKeyPem);
             X509Certificate cert = PemUtils.parseCertificate(certPem);
-            RawMimeSections originalMessage = splitMessage(mimeMessage);
-            MimeBodyPart msg = extractMimeEntity(mimeMessage);
+            SmimeMimeEntityCodec.RawMimeSections originalMessage = mimeCodec.splitMessage(mimeMessage);
+            MimeBodyPart msg = mimeCodec.extractMimeEntity(mimeMessage);
 
             SMIMESignedGenerator gen = new SMIMESignedGenerator();
 
@@ -341,7 +333,7 @@ public class BcSMIMEOperations implements SMIMEOperations {
             MimeBodyPart signedWrapper = new MimeBodyPart();
             signedWrapper.setContent(signed);
             signedWrapper.setHeader("Content-Type", signed.getContentType());
-            return rebuildMessagePreservingOuterHeaders(originalMessage.outerHeaders(), signedWrapper);
+            return mimeCodec.rebuildMessagePreservingOuterHeaders(originalMessage.outerHeaders(), signedWrapper);
         } catch (Exception e) {
             throw new CryptoException("S/MIME 签名失败", e);
         }
@@ -351,7 +343,7 @@ public class BcSMIMEOperations implements SMIMEOperations {
     public SignatureValidationResult verifySignatureDetail(byte[] signedMessage, String senderPemCert) {
         try {
             X509Certificate senderCert = PemUtils.parseCertificate(senderPemCert);
-            MimeBodyPart signedPart = extractMimeEntity(signedMessage);
+            MimeBodyPart signedPart = mimeCodec.extractMimeEntity(signedMessage);
             Object content = signedPart.getContent();
             SMIMESigned signed;
             if (content instanceof MimeMultipart multipart) {
@@ -454,8 +446,8 @@ public class BcSMIMEOperations implements SMIMEOperations {
     @Override
     public byte[] extractSignedContent(byte[] signedMessage) {
         try {
-            RawMimeSections originalMessage = splitMessage(signedMessage);
-            MimeBodyPart signedPart = extractMimeEntity(signedMessage);
+            SmimeMimeEntityCodec.RawMimeSections originalMessage = mimeCodec.splitMessage(signedMessage);
+            MimeBodyPart signedPart = mimeCodec.extractMimeEntity(signedMessage);
             Object content = signedPart.getContent();
             SMIMESigned signed;
             if (content instanceof MimeMultipart multipart) {
@@ -464,7 +456,7 @@ public class BcSMIMEOperations implements SMIMEOperations {
                 signed = new SMIMESigned(signedPart);
             }
             MimeBodyPart contentPart = signed.getContent();
-            return rebuildMessagePreservingOuterHeaders(originalMessage.outerHeaders(), contentPart);
+            return mimeCodec.rebuildMessagePreservingOuterHeaders(originalMessage.outerHeaders(), contentPart);
         } catch (Exception e) {
             throw new CryptoException("提取签名邮件内容失败", e);
         }
@@ -473,7 +465,7 @@ public class BcSMIMEOperations implements SMIMEOperations {
     @Override
     public boolean isEncrypted(byte[] message) {
         try {
-            MimeBodyPart part = extractMimeEntity(message);
+            MimeBodyPart part = mimeCodec.extractMimeEntity(message);
             String contentType = part.getContentType();
             return contentType != null && (
                     contentType.contains("application/pkcs7-mime") ||
@@ -488,7 +480,7 @@ public class BcSMIMEOperations implements SMIMEOperations {
     @Override
     public boolean isSigned(byte[] message) {
         try {
-            MimeBodyPart part = extractMimeEntity(message);
+            MimeBodyPart part = mimeCodec.extractMimeEntity(message);
             String contentType = part.getContentType();
             return contentType != null && (
                     contentType.contains("multipart/signed") ||
@@ -542,157 +534,6 @@ public class BcSMIMEOperations implements SMIMEOperations {
         return null;
     }
 
-    private MimeBodyPart parseMimeBodyPart(byte[] data) throws MessagingException, IOException {
-        try (InputStream is = new ByteArrayInputStream(data)) {
-            // 尝试直接解析
-            return new MimeBodyPart(is);
-        } catch (Exception e) {
-            // 如果解析失败，创建一个简单的 body part
-            InternetHeaders headers = new InternetHeaders();
-            headers.addHeader("Content-Type", "application/octet-stream");
-            return new MimeBodyPart(headers, data);
-        }
-    }
-
-    private MimeBodyPart extractMimeEntity(byte[] message) throws Exception {
-        RawMimeSections sections = splitMessage(message);
-        if (sections.contentHeaders().length == 0) {
-            InternetHeaders headers = new InternetHeaders();
-            headers.addHeader("Content-Type", "text/plain; charset=us-ascii");
-            return new MimeBodyPart(headers, sections.body());
-        }
-
-        ByteArrayOutputStream entity = new ByteArrayOutputStream();
-        entity.write(sections.contentHeaders());
-        entity.write("\r\n".getBytes(java.nio.charset.StandardCharsets.ISO_8859_1));
-        entity.write(sections.body());
-        return parseMimeBodyPart(entity.toByteArray());
-    }
-
-    private byte[] rebuildMessagePreservingOuterHeaders(byte[] outerHeaders, MimeBodyPart contentPart) throws Exception {
-        ByteArrayOutputStream out = new ByteArrayOutputStream();
-        out.write(outerHeaders);
-        out.write(serializeMimePart(contentPart));
-        return out.toByteArray();
-    }
-
-    private int findBodyStart(byte[] rawMessage) {
-        for (int i = 0; i < rawMessage.length - 3; i++) {
-            if (rawMessage[i] == '\r' && rawMessage[i + 1] == '\n'
-                    && rawMessage[i + 2] == '\r' && rawMessage[i + 3] == '\n') {
-                return i + 4;
-            }
-        }
-        for (int i = 0; i < rawMessage.length - 1; i++) {
-            if (rawMessage[i] == '\n' && rawMessage[i + 1] == '\n') {
-                return i + 2;
-            }
-        }
-        return rawMessage.length;
-    }
-
-    private RawMimeSections splitMessage(byte[] rawMessage) {
-        int bodyStart = findBodyStart(rawMessage);
-        int headerEnd = Math.max(0, bodyStart - (bodyStart >= 4
-                && rawMessage[bodyStart - 4] == '\r'
-                && rawMessage[bodyStart - 3] == '\n'
-                && rawMessage[bodyStart - 2] == '\r'
-                && rawMessage[bodyStart - 1] == '\n' ? 4 : 2));
-
-        byte[] headerBytes = Arrays.copyOfRange(rawMessage, 0, Math.max(0, headerEnd));
-        byte[] bodyBytes = Arrays.copyOfRange(rawMessage, Math.min(bodyStart, rawMessage.length), rawMessage.length);
-
-        List<String> unfoldedHeaders = unfoldHeaders(new String(headerBytes, java.nio.charset.StandardCharsets.ISO_8859_1));
-        ByteArrayOutputStream outer = new ByteArrayOutputStream();
-        ByteArrayOutputStream content = new ByteArrayOutputStream();
-
-        for (String headerLine : unfoldedHeaders) {
-            int colon = headerLine.indexOf(':');
-            if (colon <= 0) {
-                continue;
-            }
-            String name = headerLine.substring(0, colon).trim();
-            String value = headerLine.substring(colon + 1).trim();
-            if (isContentHeader(name)) {
-                writeHeaderLine(content, name, value);
-            } else if (shouldPreserveOuterHeader(name)) {
-                writeHeaderLine(outer, name, value);
-            }
-        }
-
-        return new RawMimeSections(outer.toByteArray(), content.toByteArray(), bodyBytes);
-    }
-
-    private List<String> unfoldHeaders(String rawHeaders) {
-        String[] physicalLines = rawHeaders.split("\\r?\\n");
-        List<String> logicalLines = new ArrayList<>();
-        StringBuilder current = new StringBuilder();
-
-        for (String line : physicalLines) {
-            if (line.isEmpty()) {
-                continue;
-            }
-            if ((line.startsWith(" ") || line.startsWith("\t")) && current.length() > 0) {
-                current.append(' ').append(line.trim());
-                continue;
-            }
-            if (current.length() > 0) {
-                logicalLines.add(current.toString());
-            }
-            current.setLength(0);
-            current.append(line);
-        }
-
-        if (current.length() > 0) {
-            logicalLines.add(current.toString());
-        }
-
-        return logicalLines;
-    }
-
-    private void writeHeaderLine(OutputStream out, String name, String value) {
-        try {
-            out.write((name + ": " + value + "\r\n").getBytes(java.nio.charset.StandardCharsets.ISO_8859_1));
-        } catch (IOException e) {
-            throw new CryptoException("写入MIME头失败", e);
-        }
-    }
-
-    private boolean shouldPreserveOuterHeader(String name) {
-        return !isContentHeader(name) && !isHiddenRecipientHeader(name);
-    }
-
-    private boolean isContentHeader(String name) {
-        return name != null && (
-                name.regionMatches(true, 0, "Content-", 0, "Content-".length())
-                        || "MIME-Version".equalsIgnoreCase(name)
-        );
-    }
-
-    private boolean isHiddenRecipientHeader(String name) {
-        return "Bcc".equalsIgnoreCase(name) || "Resent-Bcc".equalsIgnoreCase(name);
-    }
-
-    private byte[] serializeMimePart(MimeBodyPart part) throws Exception {
-        ByteArrayOutputStream out = new ByteArrayOutputStream();
-        part.writeTo(out);
-        byte[] raw = out.toByteArray();
-        int start = 0;
-        while (start < raw.length && (raw[start] == '\r' || raw[start] == '\n')) {
-            start++;
-        }
-        return start == 0 ? raw : Arrays.copyOfRange(raw, start, raw.length);
-    }
-
-    private byte[] serializeMultipart(MimeMultipart multipart) throws Exception {
-        // 将 MimeMultipart 包装在 MimeBodyPart 以确保正确的 Content-Type 头包含边界信息
-        MimeBodyPart wrapper = new MimeBodyPart();
-        wrapper.setContent(multipart);
-        // 确保 Content-Type 被正确设置
-        wrapper.setHeader("Content-Type", multipart.getContentType());
-        return serializeMimePart(wrapper);
-    }
-
     /**
      * 加密异常
      */
@@ -704,8 +545,5 @@ public class BcSMIMEOperations implements SMIMEOperations {
         public CryptoException(String message, Throwable cause) {
             super(message, cause);
         }
-    }
-
-    private record RawMimeSections(byte[] outerHeaders, byte[] contentHeaders, byte[] body) {
     }
 }
