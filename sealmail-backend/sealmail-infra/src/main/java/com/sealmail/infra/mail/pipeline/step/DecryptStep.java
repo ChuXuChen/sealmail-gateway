@@ -119,8 +119,7 @@ public class DecryptStep {
     }
 
     private MailProcessingContext context(Message<?> message) {
-        Object value = message.getHeaders().get(MailProcessingHeaders.CONTEXT);
-        return value instanceof MailProcessingContext context ? context : null;
+        return MailProcessingMessages.context(message);
     }
 
     private boolean skipDecryption(Message<?> message) {

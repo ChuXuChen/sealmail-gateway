@@ -30,6 +30,7 @@ import type {
   UpdateDlpSelectionRequest,
 } from '../types';
 import apiClient from './http';
+import { unwrapApiResponse } from './response';
 
 export const exceptionMailApi = {
   getStats: () =>
@@ -79,107 +80,107 @@ export const dlpQuarantineApi = {
 
 export const dlpApi = {
   listPatterns: () =>
-    apiClient.get<ApiResponse<DlpPattern[]>>('/api/v1/dlp/patterns'),
+    unwrapApiResponse(apiClient.get<ApiResponse<DlpPattern[]>>('/api/v1/dlp/patterns')),
 
   createPattern: (data: CreateDlpPatternRequest) =>
-    apiClient.post<ApiResponse<DlpPattern>>('/api/v1/dlp/patterns', data),
+    unwrapApiResponse(apiClient.post<ApiResponse<DlpPattern>>('/api/v1/dlp/patterns', data)),
 
   updatePattern: (id: string, data: UpdateDlpPatternRequest) =>
-    apiClient.put<ApiResponse<DlpPattern>>(`/api/v1/dlp/patterns/${id}`, data),
+    unwrapApiResponse(apiClient.put<ApiResponse<DlpPattern>>(`/api/v1/dlp/patterns/${id}`, data)),
 
   deletePattern: (id: string) =>
-    apiClient.delete<ApiResponse<void>>(`/api/v1/dlp/patterns/${id}`),
+    unwrapApiResponse(apiClient.delete<ApiResponse<void>>(`/api/v1/dlp/patterns/${id}`)),
 
   listSelections: () =>
-    apiClient.get<ApiResponse<DlpSelection[]>>('/api/v1/dlp/selections'),
+    unwrapApiResponse(apiClient.get<ApiResponse<DlpSelection[]>>('/api/v1/dlp/selections')),
 
   createSelection: (data: CreateDlpSelectionRequest) =>
-    apiClient.post<ApiResponse<DlpSelection>>('/api/v1/dlp/selections', data),
+    unwrapApiResponse(apiClient.post<ApiResponse<DlpSelection>>('/api/v1/dlp/selections', data)),
 
   updateSelection: (id: string, data: UpdateDlpSelectionRequest) =>
-    apiClient.put<ApiResponse<DlpSelection>>(`/api/v1/dlp/selections/${id}`, data),
+    unwrapApiResponse(apiClient.put<ApiResponse<DlpSelection>>(`/api/v1/dlp/selections/${id}`, data)),
 
   deleteSelection: (id: string) =>
-    apiClient.delete<ApiResponse<void>>(`/api/v1/dlp/selections/${id}`),
+    unwrapApiResponse(apiClient.delete<ApiResponse<void>>(`/api/v1/dlp/selections/${id}`)),
 
   listRules: () =>
-    apiClient.get<ApiResponse<DlpRule[]>>('/api/v1/dlp/rules'),
+    unwrapApiResponse(apiClient.get<ApiResponse<DlpRule[]>>('/api/v1/dlp/rules')),
 
   createRule: (data: DlpRuleRequest) =>
-    apiClient.post<ApiResponse<DlpRule>>('/api/v1/dlp/rules', data),
+    unwrapApiResponse(apiClient.post<ApiResponse<DlpRule>>('/api/v1/dlp/rules', data)),
 
   updateRule: (id: string, data: Partial<DlpRuleRequest>) =>
-    apiClient.put<ApiResponse<DlpRule>>(`/api/v1/dlp/rules/${id}`, data),
+    unwrapApiResponse(apiClient.put<ApiResponse<DlpRule>>(`/api/v1/dlp/rules/${id}`, data)),
 
   deleteRule: (id: string) =>
-    apiClient.delete<ApiResponse<void>>(`/api/v1/dlp/rules/${id}`),
+    unwrapApiResponse(apiClient.delete<ApiResponse<void>>(`/api/v1/dlp/rules/${id}`)),
 
   listRuleGroups: () =>
-    apiClient.get<ApiResponse<DlpRuleGroup[]>>('/api/v1/dlp/rule-groups'),
+    unwrapApiResponse(apiClient.get<ApiResponse<DlpRuleGroup[]>>('/api/v1/dlp/rule-groups')),
 
   createRuleGroup: (data: DlpRuleGroupRequest) =>
-    apiClient.post<ApiResponse<DlpRuleGroup>>('/api/v1/dlp/rule-groups', data),
+    unwrapApiResponse(apiClient.post<ApiResponse<DlpRuleGroup>>('/api/v1/dlp/rule-groups', data)),
 
   updateRuleGroup: (id: string, data: Partial<DlpRuleGroupRequest>) =>
-    apiClient.put<ApiResponse<DlpRuleGroup>>(`/api/v1/dlp/rule-groups/${id}`, data),
+    unwrapApiResponse(apiClient.put<ApiResponse<DlpRuleGroup>>(`/api/v1/dlp/rule-groups/${id}`, data)),
 
   deleteRuleGroup: (id: string) =>
-    apiClient.delete<ApiResponse<void>>(`/api/v1/dlp/rule-groups/${id}`),
+    unwrapApiResponse(apiClient.delete<ApiResponse<void>>(`/api/v1/dlp/rule-groups/${id}`)),
 
   listPolicies: () =>
-    apiClient.get<ApiResponse<DlpPolicy[]>>('/api/v1/dlp/policies'),
+    unwrapApiResponse(apiClient.get<ApiResponse<DlpPolicy[]>>('/api/v1/dlp/policies')),
 
   createPolicy: (data: DlpPolicyRequest) =>
-    apiClient.post<ApiResponse<DlpPolicy>>('/api/v1/dlp/policies', data),
+    unwrapApiResponse(apiClient.post<ApiResponse<DlpPolicy>>('/api/v1/dlp/policies', data)),
 
   updatePolicy: (id: string, data: Partial<DlpPolicyRequest>) =>
-    apiClient.put<ApiResponse<DlpPolicy>>(`/api/v1/dlp/policies/${id}`, data),
+    unwrapApiResponse(apiClient.put<ApiResponse<DlpPolicy>>(`/api/v1/dlp/policies/${id}`, data)),
 
   deletePolicy: (id: string) =>
-    apiClient.delete<ApiResponse<void>>(`/api/v1/dlp/policies/${id}`),
+    unwrapApiResponse(apiClient.delete<ApiResponse<void>>(`/api/v1/dlp/policies/${id}`)),
 
   test: (data: DlpTestRequest) =>
-    apiClient.post<ApiResponse<DlpEvaluation>>('/api/v1/dlp/test', data),
+    unwrapApiResponse(apiClient.post<ApiResponse<DlpEvaluation>>('/api/v1/dlp/test', data)),
 
   simulatePolicy: (id: string, data: DlpTestRequest) =>
-    apiClient.post<ApiResponse<DlpEvaluation>>(`/api/v1/dlp/policies/${id}/simulate`, data),
+    unwrapApiResponse(apiClient.post<ApiResponse<DlpEvaluation>>(`/api/v1/dlp/policies/${id}/simulate`, data)),
 
   listEvents: (params: { page?: number; size?: number; action?: string; minSeverity?: number; rule?: string; domain?: string }) =>
-    apiClient.get<ApiResponse<PageResponse<DlpEvent>>>('/api/v1/dlp/events', { params }),
+    unwrapApiResponse(apiClient.get<ApiResponse<PageResponse<DlpEvent>>>('/api/v1/dlp/events', { params })),
 
   eventEvidence: (id: string) =>
-    apiClient.get<ApiResponse<DlpEvidence[]>>(`/api/v1/dlp/events/${id}/evidence`),
+    unwrapApiResponse(apiClient.get<ApiResponse<DlpEvidence[]>>(`/api/v1/dlp/events/${id}/evidence`)),
 
   listEdmDatasets: () =>
-    apiClient.get<ApiResponse<DlpEdmDataset[]>>('/api/v1/dlp/edm-datasets'),
+    unwrapApiResponse(apiClient.get<ApiResponse<DlpEdmDataset[]>>('/api/v1/dlp/edm-datasets')),
 
   createEdmDataset: (data: DlpDatasetRequest) =>
-    apiClient.post<ApiResponse<DlpEdmDataset>>('/api/v1/dlp/edm-datasets', data),
+    unwrapApiResponse(apiClient.post<ApiResponse<DlpEdmDataset>>('/api/v1/dlp/edm-datasets', data)),
 
   updateEdmDataset: (id: string, data: DlpDatasetRequest) =>
-    apiClient.put<ApiResponse<DlpEdmDataset>>(`/api/v1/dlp/edm-datasets/${id}`, data),
+    unwrapApiResponse(apiClient.put<ApiResponse<DlpEdmDataset>>(`/api/v1/dlp/edm-datasets/${id}`, data)),
 
   importEdmDataset: (id: string, data: DlpImportValuesRequest) =>
-    apiClient.post<ApiResponse<DlpImportResult>>(`/api/v1/dlp/edm-datasets/${id}/import`, data),
+    unwrapApiResponse(apiClient.post<ApiResponse<DlpImportResult>>(`/api/v1/dlp/edm-datasets/${id}/import`, data)),
 
   deleteEdmDataset: (id: string) =>
-    apiClient.delete<ApiResponse<void>>(`/api/v1/dlp/edm-datasets/${id}`),
+    unwrapApiResponse(apiClient.delete<ApiResponse<void>>(`/api/v1/dlp/edm-datasets/${id}`)),
 
   listFingerprintLibraries: () =>
-    apiClient.get<ApiResponse<DlpFingerprintLibrary[]>>('/api/v1/dlp/fingerprint-libraries'),
+    unwrapApiResponse(apiClient.get<ApiResponse<DlpFingerprintLibrary[]>>('/api/v1/dlp/fingerprint-libraries')),
 
   createFingerprintLibrary: (data: DlpDatasetRequest) =>
-    apiClient.post<ApiResponse<DlpFingerprintLibrary>>('/api/v1/dlp/fingerprint-libraries', data),
+    unwrapApiResponse(apiClient.post<ApiResponse<DlpFingerprintLibrary>>('/api/v1/dlp/fingerprint-libraries', data)),
 
   updateFingerprintLibrary: (id: string, data: DlpDatasetRequest) =>
-    apiClient.put<ApiResponse<DlpFingerprintLibrary>>(`/api/v1/dlp/fingerprint-libraries/${id}`, data),
+    unwrapApiResponse(apiClient.put<ApiResponse<DlpFingerprintLibrary>>(`/api/v1/dlp/fingerprint-libraries/${id}`, data)),
 
   importFingerprintDocument: (id: string, data: DlpFingerprintImportRequest) =>
-    apiClient.post<ApiResponse<DlpImportResult>>(`/api/v1/dlp/fingerprint-libraries/${id}/import`, data),
+    unwrapApiResponse(apiClient.post<ApiResponse<DlpImportResult>>(`/api/v1/dlp/fingerprint-libraries/${id}/import`, data)),
 
   deleteFingerprintLibrary: (id: string) =>
-    apiClient.delete<ApiResponse<void>>(`/api/v1/dlp/fingerprint-libraries/${id}`),
+    unwrapApiResponse(apiClient.delete<ApiResponse<void>>(`/api/v1/dlp/fingerprint-libraries/${id}`)),
 
   listUbaSenderRisks: (params?: { limit?: number }) =>
-    apiClient.get<ApiResponse<DlpUbaSenderRisk[]>>('/api/v1/dlp/uba/senders', { params }),
+    unwrapApiResponse(apiClient.get<ApiResponse<DlpUbaSenderRisk[]>>('/api/v1/dlp/uba/senders', { params })),
 };

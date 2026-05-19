@@ -186,6 +186,32 @@ public record MailProcessingContext(
                 quarantineReleaseId, recordDisposition, mailAuthResults, true, suite, recipients);
     }
 
+    public MailContentSnapshot contentSnapshot() {
+        return new MailContentSnapshot(envelope, originalMailContent, subject, smimeEncrypted, smimeEncryptionSuite);
+    }
+
+    public MailSecurityContext securityContext() {
+        return new MailSecurityContext(
+                cryptoProfile,
+                certificateSelection,
+                decision,
+                mailAuthResults,
+                smimeEncryptedRecipients);
+    }
+
+    public MailDeliveryContext deliveryContext() {
+        return new MailDeliveryContext(
+                direction,
+                routingDecision,
+                relayProfile,
+                recordDisposition,
+                quarantineReleaseId);
+    }
+
+    public MailTraceContext traceContext() {
+        return new MailTraceContext(processingId, auditTrace);
+    }
+
     @Override
     public byte[] originalMailContent() {
         return originalMailContent != null ? originalMailContent.clone() : new byte[0];

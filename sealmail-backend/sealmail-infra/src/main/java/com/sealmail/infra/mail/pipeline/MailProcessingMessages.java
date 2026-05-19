@@ -33,6 +33,22 @@ public final class MailProcessingMessages {
                 .build();
     }
 
+    public static Message<byte[]> asByteMessage(Object message) {
+        if (message instanceof Message<?> typedMessage) {
+            Object payload = typedMessage.getPayload();
+            if (!(payload instanceof byte[] bytes)) {
+                throw new IllegalArgumentException("Mail pipeline payload must be byte[]");
+            }
+            return MessageBuilder.withPayload(bytes)
+                    .copyHeaders(typedMessage.getHeaders())
+                    .build();
+        }
+        if (message instanceof byte[] bytes) {
+            return MessageBuilder.withPayload(bytes).build();
+        }
+        throw new IllegalArgumentException("Mail pipeline message must be a Spring Message<byte[]> or byte[]");
+    }
+
     public static Message<byte[]> quarantine(Message<byte[]> original,
                                              String reason,
                                              String detail,
@@ -53,5 +69,10 @@ public final class MailProcessingMessages {
     public static MailProcessingContext context(Message<?> message) {
         Object value = message.getHeaders().get(MailProcessingHeaders.CONTEXT);
         return value instanceof MailProcessingContext context ? context : null;
+    }
+
+    public static String processingId(Message<?> message) {
+        MailProcessingContext context = context(message);
+        return context != null ? context.processingId() : null;
     }
 }

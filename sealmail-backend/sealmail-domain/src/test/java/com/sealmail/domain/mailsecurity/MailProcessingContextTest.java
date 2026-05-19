@@ -8,6 +8,7 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNotSame;
 
 class MailProcessingContextTest {
 
@@ -33,7 +34,39 @@ class MailProcessingContextTest {
         assertEquals(context.processingId(), context.auditTrace().processingId());
     }
 
+    @Test
+    void exposesStableSubContextsWithoutLeakingMutablePayload() {
+        byte[] body = "body".getBytes();
+        MailProcessingContext context = MailProcessingContext.initial(
+                        envelope(body),
+                        MailDirection.OUTBOUND,
+                "api",
+                body,
+                "subject",
+                "127.0.0.1")
+                .withRelayProfile(new RelayProfile("relay.example", 25, null, null, 1000, null));
+
+        MailContentSnapshot content = context.contentSnapshot();
+        MailSecurityContext security = context.securityContext();
+        MailDeliveryContext delivery = context.deliveryContext();
+        MailTraceContext trace = context.traceContext();
+
+        assertEquals(context.envelope(), content.envelope());
+        assertEquals("subject", content.subject());
+        assertEquals(CryptoProfile.AUTO, security.cryptoProfile());
+        assertEquals(context.decision(), security.decision());
+        assertEquals(MailDirection.OUTBOUND, delivery.direction());
+        assertEquals("relay.example", delivery.relayProfile().host());
+        assertEquals(context.processingId(), trace.processingId());
+        assertEquals(context.auditTrace(), trace.auditTrace());
+        assertNotSame(context.originalMailContent(), content.originalMailContent());
+    }
+
     private static MailEnvelope envelope() {
+        return envelope("body".getBytes());
+    }
+
+    private static MailEnvelope envelope(byte[] body) {
         return new MailEnvelope(
                 "msg-1@example.com",
                 new EmailAddress("sender@example.com"),
@@ -41,6 +74,6 @@ class MailProcessingContextTest {
                 "127.0.0.1",
                 "helo",
                 Instant.now(),
-                "body".getBytes());
+                body);
     }
 }

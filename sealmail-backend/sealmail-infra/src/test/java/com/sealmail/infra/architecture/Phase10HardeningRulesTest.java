@@ -96,6 +96,59 @@ class Phase10HardeningRulesTest {
     }
 
     @Test
+    void pipelineStepsUseTypedMessageContextHelper() throws IOException {
+        Path stepsRoot = BACKEND_ROOT.resolve("sealmail-infra/src/main/java/com/sealmail/infra/mail/pipeline/step");
+        List<Path> violations = productionJavaFiles(stepsRoot).stream()
+                .filter(path -> containsAny(path, "MailProcessingHeaders.CONTEXT"))
+                .toList();
+
+        assertTrue(violations.isEmpty(), () -> "Pipeline step context header violations: " + violations);
+    }
+
+    @Test
+    void mailIntegrationFlowsRemainsChannelAssemblyFacade() throws IOException {
+        Path flowFacade = BACKEND_ROOT.resolve(
+                "sealmail-infra/src/main/java/com/sealmail/infra/mail/pipeline/MailIntegrationFlows.java");
+        List<String> violations = List.of(
+                        "MailProcessingContext",
+                        "MailProcessingException",
+                        "ProcessingResult",
+                        "requiresQuarantine",
+                        "completeProcessing",
+                        "MessageBuilder",
+                        "MailProcessingErrorType")
+                .stream()
+                .filter(needle -> containsAny(flowFacade, needle))
+                .toList();
+
+        assertTrue(violations.isEmpty(), () -> "MailIntegrationFlows owns business state again: " + violations);
+    }
+
+    @Test
+    void productionCodeAndConfigDoNotAllowWildcardCorsOrigins() throws IOException {
+        List<Path> violations = Files.walk(BACKEND_ROOT)
+                .filter(Files::isRegularFile)
+                .filter(path -> {
+                    String normalized = path.normalize().toString().replace('\\', '/');
+                    return (normalized.contains("/src/main/java/") && normalized.endsWith(".java"))
+                            || (normalized.contains("/src/main/resources/") && isConfigPath(path));
+                })
+                .filter(Phase10HardeningRulesTest::containsWildcardCorsOrigin)
+                .toList();
+
+        assertTrue(violations.isEmpty(), () -> "Wildcard CORS origin violations: " + violations);
+    }
+
+    @Test
+    void productionConfigDoesNotExposeHealthDetailsOrSqlOutput() throws IOException {
+        List<Path> violations = mainResourceConfigFiles().stream()
+                .filter(Phase10HardeningRulesTest::containsUnsafeProductionOperationalConfig)
+                .toList();
+
+        assertTrue(violations.isEmpty(), () -> "Unsafe production operational config violations: " + violations);
+    }
+
+    @Test
     void runtimeRelayPolicyDoesNotUseYamlFallback() throws IOException {
         List<Path> codeViolations = productionJavaFiles(BACKEND_ROOT).stream()
                 .filter(path -> containsAny(path,
@@ -176,6 +229,16 @@ class Phase10HardeningRulesTest {
         }
     }
 
+    private static List<Path> mainResourceConfigFiles() throws IOException {
+        try (var stream = Files.walk(BACKEND_ROOT)) {
+            return stream
+                    .filter(Files::isRegularFile)
+                    .filter(path -> path.toString().contains("/src/main/resources/"))
+                    .filter(Phase10HardeningRulesTest::isConfigPath)
+                    .toList();
+        }
+    }
+
     private static List<Path> migrationFiles() throws IOException {
         try (var stream = Files.walk(BACKEND_ROOT)) {
             return stream
@@ -194,10 +257,73 @@ class Phase10HardeningRulesTest {
         return Integer.parseInt(matcher.group(1));
     }
 
+    private static boolean containsWildcardCorsOrigin(Path path) {
+        String content = read(path);
+        String compact = content.replace(" ", "").replace("\t", "");
+        Pattern yamlOrigin = Pattern.compile("allowed-origin(?:s|-patterns):\\s*['\"]?\\*['\"]?");
+        Pattern envFallbackOrigin = Pattern.compile("allowed-origin(?:s|-patterns):\\s*\\$\\{[^}:]+:\\*}");
+        return yamlOrigin.matcher(content).find()
+                || envFallbackOrigin.matcher(content).find()
+                || containsAny(compact,
+                "allowedOrigins=List.of(\"*\")",
+                "setAllowedOrigins(List.of(\"*\")",
+                "addAllowedOrigin(\"*\")",
+                "allowedOriginPatterns=List.of(\"*\")",
+                "setAllowedOriginPatterns(List.of(\"*\")",
+                "addAllowedOriginPattern(\"*\")");
+    }
+
+    private static boolean containsUnsafeProductionOperationalConfig(Path path) {
+        String fileName = path.getFileName().toString();
+        String content = read(path);
+        if (fileName.matches("application-prod\\.(ya?ml|properties)")) {
+            return containsHealthOrSqlExposure(content);
+        }
+        if (fileName.matches("application\\.ya?ml")) {
+            return Pattern.compile("(?m)^---\\s*$")
+                    .splitAsStream(content)
+                    .filter(Phase10HardeningRulesTest::isProductionProfileSection)
+                    .anyMatch(Phase10HardeningRulesTest::containsHealthOrSqlExposure);
+        }
+        return false;
+    }
+
+    private static boolean isProductionProfileSection(String section) {
+        return containsAny(section,
+                "on-profile: prod",
+                "on-profile: \"prod\"",
+                "on-profile: 'prod'",
+                "on-profile=prod");
+    }
+
+    private static boolean containsHealthOrSqlExposure(String content) {
+        String normalized = content.toLowerCase(java.util.Locale.ROOT);
+        return containsAny(normalized,
+                "show-details: always",
+                "show-details=always",
+                "management.endpoint.health.show-details=always",
+                "show-sql: true",
+                "show-sql=true",
+                "hibernate.show_sql: true",
+                "hibernate.show_sql=true",
+                "org.hibernate.sql: debug",
+                "org.hibernate.sql: trace",
+                "org.hibernate.sql=debug",
+                "org.hibernate.sql=trace");
+    }
+
+    private static boolean isConfigPath(Path path) {
+        String normalized = path.normalize().toString().replace('\\', '/');
+        return containsAny(normalized, ".yml", ".yaml", ".properties");
+    }
+
     private static boolean containsAny(Path path, String... needles) {
+        return containsAny(read(path), needles);
+    }
+
+    private static String read(Path path) {
         try {
-            String content = Files.readString(path);
-            return containsAny(content, needles);
+            return Files.readString(path);
         } catch (IOException e) {
             throw new RuntimeException(e);
         }

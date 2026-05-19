@@ -42,6 +42,14 @@ Keep `paper/` outside product repository gates, do not edit historical Flyway
 migrations, and do not commit real secrets, private keys, certificates,
 keystores, or production credentials.
 
+Each larger follow-up phase should land as an independently reviewable commit:
+lock existing behavior with characterization tests first, keep backend flow work,
+frontend page splits, and database changes in separate commits, and record any
+verification commands that could not run. Do not regress the security defaults:
+CORS origins stay allowlisted instead of `*`, production health details stay
+hidden, production SQL logging stays off, and the old custom mail pipeline
+abstractions must not return.
+
 ## Local Docker runtime
 
 For local Docker runs, copy `.env.example` to `.env`, replace all passwords and

@@ -23,7 +23,7 @@ const DlpEvents: React.FC = () => {
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
-      const response = await dlpApi.listEvents({
+      const page = await dlpApi.listEvents({
         page: pagination.page,
         size: pagination.size,
         action,
@@ -31,8 +31,8 @@ const DlpEvents: React.FC = () => {
         rule,
         domain,
       });
-      setData(response.data.data.items);
-      setPagination((prev) => ({ ...prev, total: response.data.data.total }));
+      setData(page.items);
+      setPagination((prev) => ({ ...prev, total: page.total }));
     } catch (error) {
       message.error(getApiErrorMessage(error, '加载 DLP 命中事件失败'));
     } finally {
@@ -43,8 +43,8 @@ const DlpEvents: React.FC = () => {
   const loadRisks = useCallback(async () => {
     setRiskLoading(true);
     try {
-      const response = await dlpApi.listUbaSenderRisks({ limit: 100 });
-      setUbaRisks(response.data.data);
+      const risks = await dlpApi.listUbaSenderRisks({ limit: 100 });
+      setUbaRisks(risks);
     } catch (error) {
       message.error(getApiErrorMessage(error, '加载发件人风险失败'));
     } finally {
@@ -67,8 +67,8 @@ const DlpEvents: React.FC = () => {
   const openDetail = async (record: DlpEvent) => {
     setSelected(record);
     try {
-      const response = await dlpApi.eventEvidence(record.id);
-      setEvidence(response.data.data);
+      const eventEvidence = await dlpApi.eventEvidence(record.id);
+      setEvidence(eventEvidence);
     } catch (error) {
       message.error(getApiErrorMessage(error, '加载证据失败'));
     }

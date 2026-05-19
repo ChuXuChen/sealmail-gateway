@@ -307,6 +307,19 @@ class MailIntegrationFlowsCharacterizationTest {
     }
 
     @Test
+    void flowSourceDelegatesBusinessStateDecisionsToCollaborators() throws Exception {
+        String source = Files.readString(Path.of(
+                "src/main/java/com/sealmail/infra/mail/pipeline/MailIntegrationFlows.java"));
+
+        assertFalse(source.contains("MailProcessingContext"));
+        assertFalse(source.contains("MailProcessingException"));
+        assertFalse(source.contains("ProcessingResult"));
+        assertFalse(source.contains("requiresQuarantine"));
+        assertFalse(source.contains("completeProcessing"));
+        assertFalse(source.contains("MessageBuilder"));
+    }
+
+    @Test
     void mailProcessingHeadersOnlyExposesStronglyTypedContextHeader() {
         List<String> publicConstants = java.util.Arrays.stream(MailProcessingHeaders.class.getDeclaredFields())
                 .filter(field -> Modifier.isPublic(field.getModifiers()))
@@ -612,19 +625,20 @@ class MailIntegrationFlowsCharacterizationTest {
                                                   DkimSignStep dkimSignStep,
                                                   RoutingService routingService,
                                                   MailProcessingTracker tracker) {
+            MailFlowStepRunner stepRunner = new MailFlowStepRunner(tracker);
+            MailRoutingStep routingStep = new MailRoutingStep(routingService);
+            MailFlowRouteDecider routeDecider = new MailFlowRouteDecider(tracker);
+            QuarantineReleaseGuard releaseGuard = new QuarantineReleaseGuard(tracker);
+            MailFlowCompletionService completionService = new MailFlowCompletionService(tracker, null);
             return new MailIntegrationFlows(
-                    decryptStep,
-                    verifyStep,
-                    signStep,
-                    encryptStep,
-                    quarantineStep,
-                    relayStep,
-                    dlpStep,
-                    mailAuthenticationStep,
-                    dkimSignStep,
-                    routingService,
-                    tracker,
-                    null);
+                    new InboundMailFlowAssembler(routingStep, stepRunner, routeDecider,
+                            mailAuthenticationStep, decryptStep, verifyStep, dlpStep),
+                    new OutboundMailFlowAssembler(routingStep, stepRunner, routeDecider,
+                            dlpStep, signStep, encryptStep, dkimSignStep),
+                    new QuarantineMailFlowAssembler(stepRunner, quarantineStep),
+                    new RelayMailFlowAssembler(stepRunner, routeDecider, completionService, relayStep),
+                    new QuarantineReleaseFlowAssembler(routingStep, stepRunner, routeDecider,
+                            releaseGuard, completionService, signStep, encryptStep, dkimSignStep, relayStep));
         }
 
         @Bean

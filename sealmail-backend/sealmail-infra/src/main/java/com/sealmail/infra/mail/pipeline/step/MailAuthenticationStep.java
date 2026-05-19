@@ -12,7 +12,6 @@ import com.sealmail.domain.mailsecurity.MailProcessingContext;
 import com.sealmail.domain.mailsecurity.MailProcessingErrorType;
 import com.sealmail.domain.mailsecurity.MailProcessingException;
 import com.sealmail.domain.mailsecurity.MailRecordDisposition;
-import com.sealmail.infra.mail.pipeline.MailProcessingHeaders;
 import com.sealmail.infra.mail.pipeline.MailProcessingMessages;
 import com.sealmail.infra.mailauth.AuthenticationResultsHeaderWriter;
 import org.springframework.messaging.Message;
@@ -114,7 +113,6 @@ public class MailAuthenticationStep {
     }
 
     private MailProcessingContext context(Message<?> message) {
-        Object value = message.getHeaders().get(MailProcessingHeaders.CONTEXT);
-        return value instanceof MailProcessingContext context ? context : null;
+        return MailProcessingMessages.context(message);
     }
 }

@@ -9,24 +9,41 @@ import type {
 import apiClient from './http';
 
 export const userApi = {
-  list: (status: UserStatusFilter = 'active') =>
-    apiClient.get<ApiResponse<UserAccount[]>>('/api/v1/users', { params: { status } }),
+  list: async (status: UserStatusFilter = 'active') => {
+    const response = await apiClient.get<ApiResponse<UserAccount[]>>('/api/v1/users', { params: { status } });
+    return response.data.data;
+  },
 
-  create: (data: CreateUserRequest) =>
-    apiClient.post<ApiResponse<UserAccount>>('/api/v1/users', data),
+  create: async (data: CreateUserRequest) => {
+    const response = await apiClient.post<ApiResponse<UserAccount>>('/api/v1/users', data);
+    return response.data.data;
+  },
 
-  update: (userId: string, data: UpdateUserRequest) =>
-    apiClient.put<ApiResponse<UserAccount>>(`/api/v1/users/${encodeURIComponent(userId)}`, data),
+  update: async (userId: string, data: UpdateUserRequest) => {
+    const response = await apiClient.put<ApiResponse<UserAccount>>(`/api/v1/users/${encodeURIComponent(userId)}`, data);
+    return response.data.data;
+  },
 
-  disable: (userId: string) =>
-    apiClient.post<ApiResponse<UserAccount>>(`/api/v1/users/${encodeURIComponent(userId)}/disable`),
+  disable: async (userId: string) => {
+    const response = await apiClient.post<ApiResponse<UserAccount>>(`/api/v1/users/${encodeURIComponent(userId)}/disable`);
+    return response.data.data;
+  },
 
-  enable: (userId: string) =>
-    apiClient.post<ApiResponse<UserAccount>>(`/api/v1/users/${encodeURIComponent(userId)}/enable`),
+  enable: async (userId: string) => {
+    const response = await apiClient.post<ApiResponse<UserAccount>>(`/api/v1/users/${encodeURIComponent(userId)}/enable`);
+    return response.data.data;
+  },
 
-  unlock: (userId: string) =>
-    apiClient.post<ApiResponse<UserAccount>>(`/api/v1/users/${encodeURIComponent(userId)}/unlock`),
+  unlock: async (userId: string) => {
+    const response = await apiClient.post<ApiResponse<UserAccount>>(`/api/v1/users/${encodeURIComponent(userId)}/unlock`);
+    return response.data.data;
+  },
 
-  resetPassword: (userId: string, data: ResetPasswordRequest) =>
-    apiClient.post<ApiResponse<UserAccount>>(`/api/v1/users/${encodeURIComponent(userId)}/reset-password`, data),
+  resetPassword: async (userId: string, data: ResetPasswordRequest) => {
+    const response = await apiClient.post<ApiResponse<UserAccount>>(
+      `/api/v1/users/${encodeURIComponent(userId)}/reset-password`,
+      data,
+    );
+    return response.data.data;
+  },
 };

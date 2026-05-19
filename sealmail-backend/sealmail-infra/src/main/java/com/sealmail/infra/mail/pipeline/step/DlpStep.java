@@ -10,7 +10,6 @@ import com.sealmail.domain.mailsecurity.MailProcessingException;
 import com.sealmail.domain.mailsecurity.MailRecordDisposition;
 import com.sealmail.domain.dlp.spi.DlpEvaluationPort;
 import com.sealmail.infra.events.DomainEventPublisher;
-import com.sealmail.infra.mail.pipeline.MailProcessingHeaders;
 import com.sealmail.infra.mail.pipeline.MailProcessingAuditEvents;
 import com.sealmail.infra.mail.pipeline.MailProcessingMessages;
 import lombok.extern.slf4j.Slf4j;
@@ -163,7 +162,6 @@ public class DlpStep {
     }
 
     private MailProcessingContext context(Message<?> message) {
-        Object value = message.getHeaders().get(MailProcessingHeaders.CONTEXT);
-        return value instanceof MailProcessingContext context ? context : null;
+        return MailProcessingMessages.context(message);
     }
 }

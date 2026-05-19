@@ -12,7 +12,6 @@ import com.sealmail.domain.mailsecurity.MailRecordDisposition;
 import com.sealmail.domain.mailsecurity.event.MailEncrypted;
 import com.sealmail.domain.shared.model.EmailAddress;
 import com.sealmail.infra.events.DomainEventPublisher;
-import com.sealmail.infra.mail.pipeline.MailProcessingHeaders;
 import com.sealmail.infra.mail.pipeline.MailProcessingAuditEvents;
 import com.sealmail.infra.mail.pipeline.MailProcessingMessages;
 import org.slf4j.Logger;
@@ -131,8 +130,7 @@ public class EncryptStep {
     }
 
     private MailProcessingContext context(Message<?> message) {
-        Object value = message.getHeaders().get(MailProcessingHeaders.CONTEXT);
-        return value instanceof MailProcessingContext context ? context : null;
+        return MailProcessingMessages.context(message);
     }
 
     private EncryptionPlan buildEncryptionPlan(MailProcessingContext context) {

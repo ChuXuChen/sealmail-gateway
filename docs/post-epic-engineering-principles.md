@@ -126,17 +126,24 @@ payload 只表达邮件内容或稳定消息对象；headers 只放 Spring Integ
 - 每项较大变更只处理一类变化，数据库、后端编排、前端页面不要混入同一个无边界提交。
 - 每个提交应可编译、可评审、可回滚，不混入无关删除、格式化或跨主题重构。
 - 重要变更必须说明测试结果；无法运行时说明原因。
+- 禁止放宽已经收紧的安全和运维默认值：CORS 不允许回退到 `*`，生产 health details 不允许 `always`，生产 SQL 输出保持关闭，旧自定义邮件 pipeline 抽象不得重新成为主链路。
+- 禁止提交真实 secret、keystore、证书、私钥或生产凭据；数据库结构只通过新增 Flyway migration 演进，不修改已发布 migration。
 
 推荐验收命令：
 
 ```bash
-MAVEN_USER_HOME=/tmp/m2 ./mvnw -Dmaven.repo.local=/tmp/m2/repository -f sealmail-backend/pom.xml test
+MAVEN_USER_HOME=/tmp/sealmail-m2 ./mvnw -Dmaven.repo.local=/tmp/sealmail-m2/repository -f sealmail-backend/pom.xml test
 ```
 
 ```bash
 cd sealmail-frontend
 npm run lint
 npm run build
+```
+
+```bash
+./ops/scan-sensitive-material.sh
+git status --short
 ```
 
 后续 DKIM/SPF/DMARC、DLP 扩展、MTA/SMTP 产品化、部署交付和前端重组，都必须在上述边界内重新制定清晰计划，不机械复活旧史诗阶段。
