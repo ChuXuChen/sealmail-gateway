@@ -2,18 +2,24 @@ package com.sealmail.infra.mail.relay;
 
 import com.sealmail.domain.mail.spi.SmtpRelayProbe;
 import com.sealmail.domain.policy.DeliveryTransportProfile;
+import com.sealmail.infra.config.properties.StandardTlsProperties;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
+import javax.net.ssl.SSLContext;
 import javax.net.ssl.SSLPeerUnverifiedException;
 import javax.net.ssl.SSLSession;
 import javax.net.ssl.SSLSocket;
 import javax.net.ssl.SSLSocketFactory;
+import javax.net.ssl.TrustManager;
+import javax.net.ssl.TrustManagerFactory;
+import javax.net.ssl.X509TrustManager;
 import java.io.BufferedInputStream;
 import java.io.BufferedOutputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.EOFException;
+import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -23,6 +29,8 @@ import java.net.Socket;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.security.KeyStore;
+import java.security.SecureRandom;
 import java.security.cert.CertificateEncodingException;
 import java.security.cert.X509Certificate;
 import java.util.ArrayList;
@@ -39,6 +47,16 @@ import java.util.Set;
 public class SmtpRelayClient implements SmtpRelayProbe {
 
     private static final Logger log = LoggerFactory.getLogger(SmtpRelayClient.class);
+
+    private final StandardTlsProperties standardTlsProperties;
+    private final SSLSocketFactory sslSocketFactory;
+
+    public SmtpRelayClient(StandardTlsProperties standardTlsProperties) {
+        this.standardTlsProperties = standardTlsProperties != null
+                ? standardTlsProperties
+                : new StandardTlsProperties();
+        this.sslSocketFactory = createSslSocketFactory(this.standardTlsProperties);
+    }
 
     public void send(SmtpRelayRequest request) throws SmtpRelayException {
         try (SmtpSession session = openSession(request.connection(), null)) {
@@ -433,11 +451,11 @@ public class SmtpRelayClient implements SmtpRelayProbe {
         }
 
         private TlsInfo upgradeToTls(String host, int port) throws IOException {
-            SSLSocketFactory factory = (SSLSocketFactory) SSLSocketFactory.getDefault();
-            SSLSocket sslSocket = (SSLSocket) factory
+            SSLSocket sslSocket = (SSLSocket) sslSocketFactory
                     .createSocket(socket, host, port, true);
             sslSocket.setUseClientMode(true);
             sslSocket.setSoTimeout(socket.getSoTimeout());
+            configureStandardTlsSocket(sslSocket);
             sslSocket.startHandshake();
             replaceSocket(sslSocket);
             return tlsInfo(sslSocket.getSession());
@@ -564,6 +582,62 @@ public class SmtpRelayClient implements SmtpRelayProbe {
         @Override
         public void close() throws IOException {
             socket.close();
+        }
+    }
+
+    private void configureStandardTlsSocket(SSLSocket sslSocket) {
+        List<String> protocols = standardTlsProperties.getProtocols();
+        if (protocols != null && !protocols.isEmpty()) {
+            sslSocket.setEnabledProtocols(protocols.toArray(String[]::new));
+        }
+        List<String> cipherSuites = standardTlsProperties.getCipherSuites();
+        if (cipherSuites != null && !cipherSuites.isEmpty()) {
+            sslSocket.setEnabledCipherSuites(cipherSuites.toArray(String[]::new));
+        }
+    }
+
+    private static SSLSocketFactory createSslSocketFactory(StandardTlsProperties properties) {
+        try {
+            SSLContext context = SSLContext.getInstance("TLS");
+            context.init(null, trustManagers(properties), new SecureRandom());
+            return context.getSocketFactory();
+        } catch (Exception e) {
+            throw new IllegalStateException("Failed to initialize standard TLS context: " + e.getMessage(), e);
+        }
+    }
+
+    private static TrustManager[] trustManagers(StandardTlsProperties properties) throws Exception {
+        if (!properties.isVerifyPeerCertificate() || properties.isTrustAll()) {
+            return new TrustManager[]{new TrustAllManager()};
+        }
+        String trustStorePath = properties.getTrustStorePath();
+        if (trustStorePath == null || trustStorePath.isBlank()) {
+            TrustManagerFactory factory = TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm());
+            factory.init((KeyStore) null);
+            return factory.getTrustManagers();
+        }
+
+        KeyStore trustStore = KeyStore.getInstance(properties.getTrustStoreType());
+        try (InputStream input = new FileInputStream(trustStorePath)) {
+            trustStore.load(input, properties.getTrustStorePassword().toCharArray());
+        }
+        TrustManagerFactory factory = TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm());
+        factory.init(trustStore);
+        return factory.getTrustManagers();
+    }
+
+    private static final class TrustAllManager implements X509TrustManager {
+        @Override
+        public void checkClientTrusted(X509Certificate[] chain, String authType) {
+        }
+
+        @Override
+        public void checkServerTrusted(X509Certificate[] chain, String authType) {
+        }
+
+        @Override
+        public X509Certificate[] getAcceptedIssuers() {
+            return new X509Certificate[0];
         }
     }
 }

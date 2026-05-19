@@ -48,6 +48,24 @@ class DecryptStepTest {
     }
 
     @Test
+    void skipsDecryptionWhenPassthroughHeaderIsSet() {
+        SMIMEOperations smimeOperations = mock(SMIMEOperations.class);
+        DecryptStep decryptStep = new DecryptStep(
+                smimeOperations,
+                mock(KeyManagementPort.class),
+                mock(DomainEventPublisher.class)
+        );
+        byte[] payload = "cipher-text".getBytes();
+
+        Message<byte[]> result = decryptStep.execute(MessageBuilder.fromMessage(message(payload))
+                .setHeader(MailProcessingHeaders.SKIP_DECRYPTION, true)
+                .build());
+
+        assertArrayEquals(payload, result.getPayload());
+        verifyNoMoreInteractions(smimeOperations);
+    }
+
+    @Test
     void encryptedMailWithoutDecryptionMaterialEntersUnifiedErrorFlow() {
         SMIMEOperations smimeOperations = mock(SMIMEOperations.class);
         KeyManagementPort keyManagementPort = mock(KeyManagementPort.class);

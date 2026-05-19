@@ -90,6 +90,17 @@ sealmail:
       default-standard-suite: STANDARD_AES_256_CBC
       default-gm-suite: GM_SM4_CBC
 
+  standard-tls:
+    protocols:
+      - TLSv1.3
+      - TLSv1.2
+    cipher-suites: []
+    verify-peer-certificate: ${SEALMAIL_STANDARD_TLS_VERIFY_PEER_CERTIFICATE:true}
+    trust-all: ${SEALMAIL_STANDARD_TLS_TRUST_ALL:false}
+    trust-store-path: ${SEALMAIL_STANDARD_TLS_TRUST_STORE_PATH:}
+    trust-store-password: ${SEALMAIL_STANDARD_TLS_TRUST_STORE_PASSWORD:}
+    trust-store-type: ${SEALMAIL_STANDARD_TLS_TRUST_STORE_TYPE:PKCS12}
+
   # Internal CA Settings
   ca:
     # Prefix for CRL Distribution Point URLs embedded in issued certs.

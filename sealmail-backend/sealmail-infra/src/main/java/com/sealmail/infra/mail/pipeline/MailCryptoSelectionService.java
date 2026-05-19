@@ -44,13 +44,19 @@ public class MailCryptoSelectionService {
 
     public InboundCryptoSelection prepareInbound(CertificateSelection currentCertificates,
                                                  MailEnvelope envelope) {
+        return prepareInbound(currentCertificates, envelope, false);
+    }
+
+    public InboundCryptoSelection prepareInbound(CertificateSelection currentCertificates,
+                                                 MailEnvelope envelope,
+                                                 boolean skipDecryption) {
         CertificateSelection certificates = currentCertificates != null
                 ? currentCertificates
                 : CertificateSelection.empty();
         boolean decryptionRequired = false;
         boolean verificationRequired = false;
 
-        if (!hasText(certificates.recipientCertificatePem())) {
+        if (!skipDecryption && !hasText(certificates.recipientCertificatePem())) {
             Certificate decryptionCert = selectInboundDecryptionCertificate(envelope.getRecipients());
             if (decryptionCert != null) {
                 certificates = certificates.withRecipientCertificate(

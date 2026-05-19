@@ -50,6 +50,10 @@ public class DecryptStep {
         }
 
         try {
+            if (skipDecryption(message)) {
+                return message;
+            }
+
             if (!smimeOperations.isEncrypted(message.getPayload())) {
                 return message;
             }
@@ -117,6 +121,10 @@ public class DecryptStep {
     private MailProcessingContext context(Message<?> message) {
         Object value = message.getHeaders().get(MailProcessingHeaders.CONTEXT);
         return value instanceof MailProcessingContext context ? context : null;
+    }
+
+    private boolean skipDecryption(Message<?> message) {
+        return Boolean.TRUE.equals(message.getHeaders().get(MailProcessingHeaders.SKIP_DECRYPTION));
     }
 
     private String missingKeyMessage(MailEnvelope envelope) {

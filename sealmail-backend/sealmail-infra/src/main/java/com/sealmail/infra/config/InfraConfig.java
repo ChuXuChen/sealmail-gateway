@@ -13,6 +13,7 @@ import com.sealmail.infra.config.properties.PostfixProperties;
 import com.sealmail.infra.config.properties.SecurityProperties;
 import com.sealmail.infra.config.properties.SmimeCryptoProperties;
 import com.sealmail.infra.config.properties.SmtpServerProperties;
+import com.sealmail.infra.config.properties.StandardTlsProperties;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
@@ -27,7 +28,8 @@ import org.springframework.context.annotation.Configuration;
         SecurityProperties.class,
         MailAuthProperties.class,
         AuthProperties.class,
-        SmimeCryptoProperties.class
+        SmimeCryptoProperties.class,
+        StandardTlsProperties.class
 })
 public class InfraConfig {
 

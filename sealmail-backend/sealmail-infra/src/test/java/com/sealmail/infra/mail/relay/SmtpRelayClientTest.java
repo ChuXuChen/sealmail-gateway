@@ -1,5 +1,6 @@
 package com.sealmail.infra.mail.relay;
 
+import com.sealmail.infra.config.properties.StandardTlsProperties;
 import org.junit.jupiter.api.Test;
 
 import java.io.BufferedReader;
@@ -27,7 +28,7 @@ class SmtpRelayClientTest {
         try (FakeSmtpServer fakeServer = new FakeSmtpServer()) {
             fakeServer.start();
 
-            SmtpRelayClient smtpRelayClient = new SmtpRelayClient();
+            SmtpRelayClient smtpRelayClient = new SmtpRelayClient(new StandardTlsProperties());
             byte[] message = "Subject: Test\n\n.leading line\nsecond line".getBytes(StandardCharsets.UTF_8);
 
             smtpRelayClient.send(new SmtpRelayRequest(
@@ -53,7 +54,7 @@ class SmtpRelayClientTest {
         try (FakeSmtpServer fakeServer = new FakeSmtpServer()) {
             fakeServer.start();
 
-            SmtpRelayClient smtpRelayClient = new SmtpRelayClient();
+            SmtpRelayClient smtpRelayClient = new SmtpRelayClient(new StandardTlsProperties());
             SmtpRelayException error = assertThrows(SmtpRelayException.class, () -> smtpRelayClient.send(new SmtpRelayRequest(
                     new SmtpRelayConnectionSettings("127.0.0.1", fakeServer.port(),
                             "relay@example.com", "secret", 5000),

@@ -27,6 +27,7 @@ import com.sealmail.domain.mailsecurity.MailProcessingRepository;
 import com.sealmail.domain.mailsecurity.MailRecordDisposition;
 import com.sealmail.domain.mailsecurity.MailRouter;
 import com.sealmail.domain.mailsecurity.RoutingDecision;
+import com.sealmail.domain.policy.DecryptionMode;
 import com.sealmail.domain.policy.DeliveryTransportProfile;
 import com.sealmail.domain.policy.DomainConfig;
 import com.sealmail.domain.policy.DomainConfigRepository;
@@ -169,6 +170,55 @@ class RoutingServiceTest {
     }
 
     @Test
+    void routeInboundSkipsDecryptionWhenDomainUsesEndToEndPassthrough() {
+        MailRouter mailRouter = mock(MailRouter.class);
+        DomainConfigRepository domainConfigRepository = mock(DomainConfigRepository.class);
+        CertificateRepository certificateRepository = mock(CertificateRepository.class);
+        MailProcessingRepository mailProcessingRepository = mock(MailProcessingRepository.class);
+        RoutingService routingService = new RoutingService(
+                mailRouter,
+                domainConfigRepository,
+                cryptoSelectionService(certificateRepository),
+                mailProcessingRepository,
+                postfixProperties(),
+                null,
+                null,
+                relayPolicy(true),
+                null
+        );
+
+        EmailAddress sender = new EmailAddress("sender@example.com");
+        EmailAddress recipient = new EmailAddress("local@example.com");
+        MailEnvelope envelope = envelope(sender, recipient);
+        Certificate senderCert = certificate(sender, EnumSet.of(KeyUsage.SIGNING), true, false, "RSA");
+        Certificate recipientCert = certificate(recipient, EnumSet.of(KeyUsage.ENCRYPTION), true, true, "RSA");
+
+        DomainConfig config = DomainConfig.create("domain-1", "example.com", true);
+        config.changeDecryptionMode(DecryptionMode.END_TO_END_PASSTHROUGH);
+        when(domainConfigRepository.findByDomain("example.com")).thenReturn(Optional.of(config));
+        when(mailRouter.route(any(), any(), any(), any(), any(), any(), any()))
+                .thenReturn(new RoutingDecision.PassThrough());
+        when(certificateRepository.findTrustedForSigning(sender)).thenReturn(List.of(senderCert));
+        when(certificateRepository.findTrustedForEncryption(recipient)).thenReturn(List.of(recipientCert));
+        when(mailProcessingRepository.save(any(MailProcessing.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        Message<byte[]> message = MessageBuilder.withPayload("ciphertext".getBytes())
+                .setHeader(MailProcessingHeaders.CONTEXT, MailProcessingContext.create(envelope))
+                .build();
+
+        Message<byte[]> routed = routingService.routeInbound(message);
+
+        MailProcessingContext context = (MailProcessingContext) routed.getHeaders().get(MailProcessingHeaders.CONTEXT);
+        assertNotNull(context);
+        assertEquals(MailDirection.INBOUND, context.direction());
+        assertTrue(context.decision().verificationRequired());
+        assertEquals(false, context.decision().decryptionRequired());
+        assertEquals(senderCert.getPemContent(), context.certificateSelection().senderCertificatePem());
+        assertEquals(null, context.certificateSelection().recipientCertificatePem());
+        assertEquals(true, routed.getHeaders().get(MailProcessingHeaders.SKIP_DECRYPTION));
+    }
+
+    @Test
     void routeOutboundUsesDomainPreferredAlgorithmAsCryptoProfile() {
         MailRouter mailRouter = mock(MailRouter.class);
         DomainConfigRepository domainConfigRepository = mock(DomainConfigRepository.class);
@@ -243,6 +293,48 @@ class RoutingServiceTest {
         MailProcessingContext context = (MailProcessingContext) routed.getHeaders().get(MailProcessingHeaders.CONTEXT);
         assertEquals("192.0.2.20", context.relayProfile().host());
         assertEquals(587, context.relayProfile().port());
+        assertEquals(DeliveryTransportProfile.SMTP_CLEAR, context.relayProfile().transportProfile());
+        assertEquals("mailer@example.com", context.relayProfile().envelopeFrom());
+    }
+
+    @Test
+    void routeOutboundSendsGmDomainDeliveryRouteToEdgeSmartHost() {
+        MailRouter mailRouter = mock(MailRouter.class);
+        DomainConfigRepository domainConfigRepository = mock(DomainConfigRepository.class);
+        CertificateRepository certificateRepository = mock(CertificateRepository.class);
+        MailProcessingRepository mailProcessingRepository = mock(MailProcessingRepository.class);
+        RoutingService routingService = new RoutingService(
+                mailRouter,
+                domainConfigRepository,
+                cryptoSelectionService(certificateRepository),
+                mailProcessingRepository,
+                postfixProperties(),
+                null,
+                null,
+                relayPolicy(true),
+                null
+        );
+
+        EmailAddress sender = new EmailAddress("alice@example.com");
+        EmailAddress recipient = new EmailAddress("bob@partner.test");
+        MailEnvelope envelope = envelope(sender, recipient);
+        DomainConfig local = DomainConfig.create("domain-1", "example.com", true);
+        DomainConfig remote = DomainConfig.create("domain-2", "partner.test", false);
+        remote.configureDeliveryRoute("gm.partner.test", DeliveryTransportProfile.SMTP_IMPLICIT_TLS_GM, 2465);
+
+        when(domainConfigRepository.findByDomain("example.com")).thenReturn(Optional.of(local));
+        when(domainConfigRepository.findByDomain("partner.test")).thenReturn(Optional.of(remote));
+        when(mailRouter.route(any(), any(), any(), any(), any(), any(), any()))
+                .thenReturn(new RoutingDecision.PassThrough());
+        when(mailProcessingRepository.save(any(MailProcessing.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        Message<byte[]> routed = routingService.routeOutbound(MessageBuilder.withPayload("hello".getBytes())
+                .setHeader(MailProcessingHeaders.CONTEXT, MailProcessingContext.create(envelope))
+                .build());
+
+        MailProcessingContext context = (MailProcessingContext) routed.getHeaders().get(MailProcessingHeaders.CONTEXT);
+        assertEquals("127.0.0.1", context.relayProfile().host());
+        assertEquals(2526, context.relayProfile().port());
         assertEquals(DeliveryTransportProfile.SMTP_CLEAR, context.relayProfile().transportProfile());
         assertEquals("mailer@example.com", context.relayProfile().envelopeFrom());
     }

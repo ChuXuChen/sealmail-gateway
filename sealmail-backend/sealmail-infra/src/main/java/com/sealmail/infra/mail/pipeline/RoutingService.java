@@ -4,12 +4,15 @@ import com.sealmail.domain.certificate.Certificate;
 import com.sealmail.domain.config.RelayPolicyPort;
 import com.sealmail.domain.mailauth.MailAuthPolicyRepository;
 import com.sealmail.domain.mailsecurity.*;
+import com.sealmail.domain.policy.DecryptionMode;
+import com.sealmail.domain.policy.DeliveryTransportProfile;
 import com.sealmail.domain.policy.DomainConfig;
 import com.sealmail.domain.policy.DomainConfigRepository;
 import com.sealmail.domain.quarantine.QuarantineReason;
 import com.sealmail.domain.shared.model.EmailAddress;
 import com.sealmail.infra.config.properties.PostfixProperties;
 import com.sealmail.infra.events.DomainEventPublisher;
+import org.springframework.beans.factory.annotation.Value;
 import org.slf4j.Logger;
 import org.springframework.messaging.Message;
 import org.springframework.messaging.support.MessageBuilder;
@@ -33,6 +36,12 @@ public class RoutingService {
     private final DomainEventPublisher domainEventPublisher;
     private final RelayPolicyPort relayPolicyPort;
     private final DeliveryRouteResolver deliveryRouteResolver;
+
+    @Value("${sealmail.gm-edge.outbound-host:${SEALMAIL_GM_EDGE_OUTBOUND_HOST:127.0.0.1}}")
+    private String gmEdgeOutboundHost = "127.0.0.1";
+
+    @Value("${sealmail.gm-edge.outbound-port:${SEALMAIL_GM_EDGE_OUTBOUND_PORT:2526}}")
+    private int gmEdgeOutboundPort = 2526;
 
     public RoutingService(MailRouter mailRouter,
 	                           DomainConfigRepository domainConfigRepository,
@@ -309,9 +318,10 @@ public class RoutingService {
             cryptoProfile = outboundCrypto.cryptoProfile();
         }
 
+        boolean skipDecryption = direction == MailDirection.INBOUND && passthroughDecryption(domainConfig);
         if (direction == MailDirection.INBOUND) {
             MailCryptoSelectionService.InboundCryptoSelection inboundCrypto =
-                    cryptoSelectionService.prepareInbound(certificates, envelope);
+                    cryptoSelectionService.prepareInbound(certificates, envelope, skipDecryption);
             certificates = inboundCrypto.certificates();
             processingDecision = processingDecision
                     .withDecryptionRequired(inboundCrypto.decryptionRequired())
@@ -340,7 +350,13 @@ public class RoutingService {
         recordCertificateSelectionAudit(context);
         return MessageBuilder.withPayload(message.getPayload())
                 .setHeader(MailProcessingHeaders.CONTEXT, context)
+                .setHeader(MailProcessingHeaders.SKIP_DECRYPTION, skipDecryption)
                 .build();
+    }
+
+    private boolean passthroughDecryption(DomainConfig domainConfig) {
+        return domainConfig != null
+                && domainConfig.getDecryptionMode() == DecryptionMode.END_TO_END_PASSTHROUGH;
     }
 
     private MailProcessingContext routedContext(MailProcessingContext baseContext,
@@ -453,14 +469,38 @@ public class RoutingService {
         }
 
         return deliveryRouteResolver.resolve(envelope.getRecipients())
-                .map(route -> new RelayProfile(
+                .map(this::relayProfileForDeliveryRoute);
+    }
+
+    private RelayProfile relayProfileForDeliveryRoute(DeliveryRoute route) {
+        if (route.transportProfile().usesGmTls()) {
+            return new RelayProfile(
+                    gmEdgeRelayHost(),
+                    gmEdgeRelayPort(),
+                    "",
+                    "",
+                    postfixProperties.getTimeout(),
+                    postfixProperties.getEnvelopeFrom(),
+                    DeliveryTransportProfile.SMTP_CLEAR);
+        }
+        return new RelayProfile(
                 route.host(),
                 route.port(),
                 "",
                 "",
                 postfixProperties.getTimeout(),
                 postfixProperties.getEnvelopeFrom(),
-                route.transportProfile()));
+                route.transportProfile());
+    }
+
+    private String gmEdgeRelayHost() {
+        return gmEdgeOutboundHost != null && !gmEdgeOutboundHost.isBlank()
+                ? gmEdgeOutboundHost.trim()
+                : "127.0.0.1";
+    }
+
+    private int gmEdgeRelayPort() {
+        return gmEdgeOutboundPort > 0 ? gmEdgeOutboundPort : 2526;
     }
 
 }

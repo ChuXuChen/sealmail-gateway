@@ -38,5 +38,6 @@ fi
 site="$(awk -F= '$1 == "SEALMAIL_SITE" {print substr($0, index($0, "=") + 1)}' "$ENV_FILE" | tail -n 1)"
 site="${site:-node}"
 mkdir -p "runtime/$site/edge-secrets"
+mkdir -p "runtime/$site/standard-tls"
 
 exec docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" up -d --build
