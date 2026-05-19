@@ -15,6 +15,7 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class QuarantinedMailMapperTest {
 
@@ -72,5 +73,32 @@ class QuarantinedMailMapperTest {
 
         assertNull(entity.getRawContentId());
         assertEquals(null, entity.getDirection());
+    }
+
+    @Test
+    void toDomainWithRawContentMarkerPreservesHasRawContentWithoutLoadingMailBody() {
+        QuarantinedMailEntity entity = entity(QuarantineStatus.QUARANTINED);
+        entity.setRawContentId("raw-1");
+
+        QuarantinedMail mail = mapper.toDomainWithRawContentMarker(entity);
+
+        assertTrue(mail.hasRawContent());
+        assertEquals(1, mail.getRawContent().length);
+    }
+
+    private static QuarantinedMailEntity entity(QuarantineStatus status) {
+        QuarantinedMailEntity entity = new QuarantinedMailEntity();
+        entity.setId("q-1");
+        entity.setMessageId("msg-1");
+        entity.setSubject("subject");
+        entity.setSenderEmail("sender@example.com");
+        entity.setRecipients("[\"recipient@example.com\"]");
+        entity.setDirection(MailDirection.OUTBOUND.name());
+        entity.setRemoteAddress("127.0.0.1");
+        entity.setReason(QuarantineReason.EMAIL_AUTH_FAILED.name());
+        entity.setDetail("detail");
+        entity.setStatus(status.name());
+        entity.setCreatedAt(Instant.parse("2026-05-14T08:00:00Z"));
+        return entity;
     }
 }

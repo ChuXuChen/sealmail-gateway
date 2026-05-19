@@ -14,6 +14,8 @@ import java.net.Socket;
 import java.nio.file.Files;
 import java.security.GeneralSecurityException;
 import java.security.KeyStore;
+import java.security.Provider;
+import java.security.Security;
 import java.security.SecureRandom;
 import java.security.cert.X509Certificate;
 import java.util.ArrayList;
@@ -136,11 +138,22 @@ public final class EdgeTlsContextFactory {
 
     private static KeyStore loadStore(java.nio.file.Path path, String type, String password)
             throws GeneralSecurityException, IOException {
-        KeyStore store = KeyStore.getInstance(type);
+        KeyStore store = keyStore(type);
         try (InputStream input = Files.newInputStream(path)) {
             store.load(input, password.toCharArray());
         }
         return store;
+    }
+
+    private static KeyStore keyStore(String type) throws GeneralSecurityException {
+        String normalizedType = type == null || type.isBlank() ? "PKCS12" : type;
+        for (String providerName : List.of("Kona", "KonaPKIX")) {
+            Provider provider = Security.getProvider(providerName);
+            if (provider != null && provider.getService("KeyStore", normalizedType) != null) {
+                return KeyStore.getInstance(normalizedType, provider);
+            }
+        }
+        return KeyStore.getInstance(normalizedType);
     }
 
     private static final class TrustAllManager implements X509TrustManager {

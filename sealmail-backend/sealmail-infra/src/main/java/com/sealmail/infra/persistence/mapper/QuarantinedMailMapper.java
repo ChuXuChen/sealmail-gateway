@@ -51,6 +51,13 @@ public class QuarantinedMailMapper {
         return toDomain(entity, new byte[0]);
     }
 
+    public QuarantinedMail toDomainWithRawContentMarker(QuarantinedMailEntity entity) {
+        byte[] rawContentMarker = entity.getRawContentId() == null || entity.getRawContentId().isBlank()
+                ? new byte[0]
+                : new byte[] {1};
+        return toDomain(entity, rawContentMarker);
+    }
+
     public QuarantinedMail toDomain(QuarantinedMailEntity entity, byte[] rawContent) {
         List<EmailAddress> recipients = deserializeRecipients(entity.getRecipients());
         EmailAddress sender = new EmailAddress(entity.getSenderEmail());

@@ -141,6 +141,45 @@ EDGE_TLS_TRUST_STORE_PASSWORD=...
 For a quick trust-only lab, `EDGE_TLS_TRUST_ALL=true` can be used, but do not use
 that setting outside an isolated test.
 
+To simplify local two-node setup, generate the Edge SM2 TLS material with:
+
+```bash
+EDGE_STORE_PASS='<strong-password>' \
+  ops/gm-edge-keystore.sh init \
+  --site alpha \
+  --dns mx-alpha.sealmail.top \
+  --dns alpha.sealmail.top \
+  --ip <alpha-public-ip>
+
+EDGE_STORE_PASS='<strong-password>' \
+  ops/gm-edge-keystore.sh init \
+  --site beta \
+  --dns mx-beta.sealmail.top \
+  --dns beta.sealmail.top \
+  --ip <beta-public-ip>
+```
+
+Then exchange only the public `*-edge.crt` files. Do not copy
+`sealmail-gm-edge.p12` or `*-edge-sm2.key` between nodes. Import the peer
+certificate into each node's truststore:
+
+```bash
+EDGE_STORE_PASS='<strong-password>' \
+  ops/gm-edge-keystore.sh trust \
+  --site alpha \
+  --peer beta \
+  --cert runtime/alpha/edge-secrets/beta-edge.crt
+
+EDGE_STORE_PASS='<strong-password>' \
+  ops/gm-edge-keystore.sh trust \
+  --site beta \
+  --peer alpha \
+  --cert runtime/beta/edge-secrets/alpha-edge.crt
+```
+
+Each node's keystore must be different. The truststore is how the nodes trust
+each other.
+
 PostgreSQL data, the backend S/MIME keystore, Postfix TLS files, and Mailpit
 data use Docker named volumes. This avoids first-run host UID/GID write
 failures. Back up these volumes before deleting the stack:

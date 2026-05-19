@@ -71,7 +71,7 @@ public class QuarantineRepositoryImpl implements QuarantineRepository {
                 QuarantinedMailEntity.class
         );
         query.setParameter("status", status.name());
-        return query.getResultList().stream().map(mapper::toDomain).toList();
+        return query.getResultList().stream().map(mapper::toDomainWithRawContentMarker).toList();
     }
 
     @Override
@@ -82,7 +82,7 @@ public class QuarantineRepositoryImpl implements QuarantineRepository {
                 QuarantinedMailEntity.class
         );
         query.setParameter("messageId", messageId);
-        return query.getResultList().stream().map(mapper::toDomain).toList();
+        return query.getResultList().stream().map(mapper::toDomainWithRawContentMarker).toList();
     }
 
     @Override
@@ -94,7 +94,7 @@ public class QuarantineRepositoryImpl implements QuarantineRepository {
         );
         query.setFirstResult(offset);
         query.setMaxResults(limit);
-        return query.getResultList().stream().map(mapper::toDomain).toList();
+        return query.getResultList().stream().map(mapper::toDomainWithRawContentMarker).toList();
     }
 
     @Override
@@ -107,7 +107,7 @@ public class QuarantineRepositoryImpl implements QuarantineRepository {
         query.setParameter("status", status.name());
         query.setFirstResult(offset);
         query.setMaxResults(limit);
-        return query.getResultList().stream().map(mapper::toDomain).toList();
+        return query.getResultList().stream().map(mapper::toDomainWithRawContentMarker).toList();
     }
 
     @Override
@@ -120,7 +120,7 @@ public class QuarantineRepositoryImpl implements QuarantineRepository {
         query.setParameter("statuses", statusNames(statuses));
         query.setFirstResult(offset);
         query.setMaxResults(limit);
-        return query.getResultList().stream().map(mapper::toDomain).toList();
+        return query.getResultList().stream().map(mapper::toDomainWithRawContentMarker).toList();
     }
 
     @Override
@@ -133,7 +133,7 @@ public class QuarantineRepositoryImpl implements QuarantineRepository {
         query.setParameter("reason", reason.name());
         query.setFirstResult(offset);
         query.setMaxResults(limit);
-        return query.getResultList().stream().map(mapper::toDomain).toList();
+        return query.getResultList().stream().map(mapper::toDomainWithRawContentMarker).toList();
     }
 
     @Override
@@ -147,7 +147,7 @@ public class QuarantineRepositoryImpl implements QuarantineRepository {
         query.setParameter("reason", reason.name());
         query.setFirstResult(offset);
         query.setMaxResults(limit);
-        return query.getResultList().stream().map(mapper::toDomain).toList();
+        return query.getResultList().stream().map(mapper::toDomainWithRawContentMarker).toList();
     }
 
     @Override
@@ -161,7 +161,7 @@ public class QuarantineRepositoryImpl implements QuarantineRepository {
         query.setParameter("reason", reason.name());
         query.setFirstResult(offset);
         query.setMaxResults(limit);
-        return query.getResultList().stream().map(mapper::toDomain).toList();
+        return query.getResultList().stream().map(mapper::toDomainWithRawContentMarker).toList();
     }
 
     @Override

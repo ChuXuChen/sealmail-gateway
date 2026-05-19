@@ -9,6 +9,7 @@ import jakarta.mail.BodyPart;
 import jakarta.mail.Multipart;
 import jakarta.mail.Part;
 import jakarta.mail.Session;
+import jakarta.mail.internet.ContentType;
 import jakarta.mail.internet.MimeMessage;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.pdfbox.Loader;
@@ -19,6 +20,7 @@ import org.springframework.stereotype.Component;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
+import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
@@ -129,8 +131,17 @@ public class MimeContentExtractor implements DlpContentExtractor {
             return;
         }
         try {
-            Object content = mailPart.getContent();
-            if (content instanceof Multipart multipart) {
+            String rawContentType = mailPart.getContentType();
+            String contentType = safeContentType(rawContentType);
+            String lowerType = contentType.toLowerCase(Locale.ROOT);
+            String fileName = mailPart.getFileName();
+
+            if (mailPart.isMimeType("multipart/*")) {
+                Object content = mailPart.getContent();
+                if (!(content instanceof Multipart multipart)) {
+                    warnings.add("MIME multipart content was not readable at " + partId);
+                    return;
+                }
                 int count = multipart.getCount();
                 for (int i = 0; i < count; i++) {
                     extractPart(multipart.getBodyPart(i), partId + "." + i, parts, warnings, depth + 1);
@@ -138,12 +149,12 @@ public class MimeContentExtractor implements DlpContentExtractor {
                 return;
             }
 
-            String contentType = safeContentType(mailPart.getContentType());
-            String fileName = mailPart.getFileName();
-            if (content instanceof String text) {
-                DlpContentKind kind = contentType.toLowerCase(Locale.ROOT).contains("html")
+            if (isInlineTextPart(lowerType)) {
+                byte[] bytes = readPartBytes(mailPart, warnings, partId);
+                DlpContentKind kind = lowerType.contains("html")
                         ? DlpContentKind.BODY_HTML
                         : DlpContentKind.BODY_TEXT;
+                String text = decodeText(bytes, rawContentType);
                 String extracted = kind == DlpContentKind.BODY_HTML ? Jsoup.parse(text).text() : text;
                 parts.add(part(partId, kind, fileName, contentType, extracted, extracted.length() > MAX_PART_CHARS, List.of()));
                 return;
@@ -155,13 +166,12 @@ public class MimeContentExtractor implements DlpContentExtractor {
 
             byte[] bytes = readPartBytes(mailPart, warnings, partId);
             String lowerName = fileName != null ? fileName.toLowerCase(Locale.ROOT) : "";
-            String lowerType = contentType.toLowerCase(Locale.ROOT);
             if (lowerType.contains("pdf") || lowerName.endsWith(".pdf")) {
                 parts.add(pdfPart(partId, fileName, contentType, bytes));
             } else if (lowerType.contains("zip") || lowerName.endsWith(".zip")) {
                 extractZip(partId, fileName, contentType, bytes, parts, warnings);
             } else if (isTextAttachment(lowerName, lowerType)) {
-                String text = new String(bytes, StandardCharsets.UTF_8);
+                String text = decodeText(bytes, rawContentType);
                 parts.add(part(partId, DlpContentKind.ATTACHMENT_TEXT, fileName, contentType, text, text.length() > MAX_PART_CHARS, List.of()));
             } else if (fileName != null) {
                 parts.add(part(partId, DlpContentKind.ATTACHMENT_METADATA, fileName, contentType, fileName, false,
@@ -305,6 +315,25 @@ public class MimeContentExtractor implements DlpContentExtractor {
                 || lowerName.endsWith(".md")
                 || lowerName.endsWith(".yaml")
                 || lowerName.endsWith(".yml");
+    }
+
+    private boolean isInlineTextPart(String lowerType) {
+        return lowerType.startsWith("text/");
+    }
+
+    private String decodeText(byte[] bytes, String rawContentType) {
+        Charset charset = StandardCharsets.UTF_8;
+        try {
+            if (rawContentType != null && !rawContentType.isBlank()) {
+                String charsetName = new ContentType(rawContentType).getParameter("charset");
+                if (charsetName != null && !charsetName.isBlank()) {
+                    charset = Charset.forName(charsetName.trim());
+                }
+            }
+        } catch (Exception e) {
+            log.debug("Failed to resolve MIME charset from '{}': {}", rawContentType, e.getMessage());
+        }
+        return new String(bytes != null ? bytes : new byte[0], charset);
     }
 
     private String safeContentType(String contentType) {

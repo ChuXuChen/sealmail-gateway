@@ -315,8 +315,9 @@ class MailIntegrationFlowsCharacterizationTest {
                 .map(java.lang.reflect.Field::getName)
                 .toList();
 
-        assertEquals(List.of("CONTEXT"), publicConstants);
+        assertEquals(List.of("CONTEXT", "SKIP_DECRYPTION"), publicConstants);
         assertEquals("mailProcessingContext", MailProcessingHeaders.CONTEXT);
+        assertEquals("mailProcessingSkipDecryption", MailProcessingHeaders.SKIP_DECRYPTION);
     }
 
     @Test
