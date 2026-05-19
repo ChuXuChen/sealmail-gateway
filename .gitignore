@@ -37,3 +37,5 @@ runtime/
 .env.*
 !.env.example
 !.env.gateway.example
+
+paper/

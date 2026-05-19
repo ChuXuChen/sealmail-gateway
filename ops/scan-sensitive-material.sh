@@ -38,9 +38,12 @@ scan_pem_blocks() {
     if [[ ! -f "$ROOT/$file" ]]; then
       continue
     fi
+    if [[ ! -s "$ROOT/$file" ]]; then
+      continue
+    fi
 
     case "$file" in
-      ops/scan-sensitive-material.sh|*.png|*.jpg|*.jpeg|*.gif|*.ico|*.woff|*.woff2)
+      paper/*|ops/scan-sensitive-material.sh|*.png|*.jpg|*.jpeg|*.gif|*.ico|*.woff|*.woff2)
         continue
         ;;
     esac

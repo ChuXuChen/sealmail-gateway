@@ -5,15 +5,11 @@ import com.sealmail.domain.config.RelayPolicyPort;
 import com.sealmail.domain.mailauth.MailAuthPolicyRepository;
 import com.sealmail.domain.mailsecurity.*;
 import com.sealmail.domain.policy.DecryptionMode;
-import com.sealmail.domain.policy.DeliveryTransportProfile;
 import com.sealmail.domain.policy.DomainConfig;
 import com.sealmail.domain.policy.DomainConfigRepository;
 import com.sealmail.domain.quarantine.QuarantineReason;
-import com.sealmail.domain.shared.model.EmailAddress;
 import com.sealmail.infra.config.properties.PostfixProperties;
-import com.sealmail.infra.events.DomainEventPublisher;
-import org.springframework.beans.factory.annotation.Value;
-import org.slf4j.Logger;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.messaging.Message;
 import org.springframework.messaging.support.MessageBuilder;
 import org.springframework.stereotype.Service;
@@ -25,44 +21,54 @@ import java.util.Optional;
 @Service
 public class RoutingService {
 
-    private static final Logger log = org.slf4j.LoggerFactory.getLogger(RoutingService.class);
-
     private final MailRouter mailRouter;
-    private final DomainConfigRepository domainConfigRepository;
+    private final DomainRoutingPolicyResolver domainRoutingPolicyResolver;
     private final MailCryptoSelectionService cryptoSelectionService;
     private final MailProcessingRepository mailProcessingRepository;
-    private final PostfixProperties postfixProperties;
     private final MailAuthPolicyRepository mailAuthPolicyRepository;
-    private final DomainEventPublisher domainEventPublisher;
-    private final RelayPolicyPort relayPolicyPort;
-    private final DeliveryRouteResolver deliveryRouteResolver;
+    private final RelayProfileResolver relayProfileResolver;
+    private final RoutingAuditPublisher routingAuditPublisher;
 
-    @Value("${sealmail.gm-edge.outbound-host:${SEALMAIL_GM_EDGE_OUTBOUND_HOST:127.0.0.1}}")
-    private String gmEdgeOutboundHost = "127.0.0.1";
-
-    @Value("${sealmail.gm-edge.outbound-port:${SEALMAIL_GM_EDGE_OUTBOUND_PORT:2526}}")
-    private int gmEdgeOutboundPort = 2526;
-
+    @Autowired
     public RoutingService(MailRouter mailRouter,
-	                           DomainConfigRepository domainConfigRepository,
+	                           DomainRoutingPolicyResolver domainRoutingPolicyResolver,
 	                           MailCryptoSelectionService cryptoSelectionService,
 	                           MailProcessingRepository mailProcessingRepository,
-	                           PostfixProperties postfixProperties,
 	                           MailAuthPolicyRepository mailAuthPolicyRepository,
-	                           DomainEventPublisher domainEventPublisher,
-	                           RelayPolicyPort relayPolicyPort,
-	                           DeliveryRouteResolver deliveryRouteResolver) {
+	                           RelayProfileResolver relayProfileResolver,
+	                           RoutingAuditPublisher routingAuditPublisher) {
         this.mailRouter = mailRouter;
-        this.domainConfigRepository = domainConfigRepository;
+        this.domainRoutingPolicyResolver = domainRoutingPolicyResolver;
         this.cryptoSelectionService = cryptoSelectionService;
         this.mailProcessingRepository = mailProcessingRepository;
-        this.postfixProperties = postfixProperties;
         this.mailAuthPolicyRepository = mailAuthPolicyRepository;
-        this.domainEventPublisher = domainEventPublisher;
-        this.relayPolicyPort = relayPolicyPort;
-        this.deliveryRouteResolver = deliveryRouteResolver != null
-                ? deliveryRouteResolver
-                : new DomainDeliveryRouteResolver(domainConfigRepository);
+        this.relayProfileResolver = relayProfileResolver;
+        this.routingAuditPublisher = routingAuditPublisher;
+    }
+
+    RoutingService(MailRouter mailRouter,
+                   DomainConfigRepository domainConfigRepository,
+                   MailCryptoSelectionService cryptoSelectionService,
+                   MailProcessingRepository mailProcessingRepository,
+                   PostfixProperties postfixProperties,
+                   MailAuthPolicyRepository mailAuthPolicyRepository,
+                   com.sealmail.infra.events.DomainEventPublisher domainEventPublisher,
+                   RelayPolicyPort relayPolicyPort,
+                   DeliveryRouteResolver deliveryRouteResolver) {
+        this(
+                mailRouter,
+                new DomainRoutingPolicyResolver(domainConfigRepository, relayPolicyPort),
+                cryptoSelectionService,
+                mailProcessingRepository,
+                mailAuthPolicyRepository,
+                new RelayProfileResolver(
+                        postfixProperties,
+                        deliveryRouteResolver != null
+                                ? deliveryRouteResolver
+                                : new DomainDeliveryRouteResolver(domainConfigRepository),
+                        "127.0.0.1",
+                        2526),
+                new RoutingAuditPublisher(domainEventPublisher));
     }
 
     @Transactional
@@ -73,7 +79,7 @@ public class RoutingService {
             return message;
         }
 
-        Optional<DomainConfig> domainConfig = findFirstActiveLocalRecipientDomain(envelope);
+        Optional<DomainConfig> domainConfig = domainRoutingPolicyResolver.firstActiveLocalRecipientDomain(envelope);
         if (domainConfig.isEmpty()) {
             return exceptionByDomainPolicy(
                     message,
@@ -122,7 +128,7 @@ public class RoutingService {
 
         String senderDomain = envelope.getSender().getDomain();
 
-        Optional<DomainConfig> domainConfig = findActiveLocalDomainConfig(senderDomain);
+        Optional<DomainConfig> domainConfig = domainRoutingPolicyResolver.activeLocalDomain(senderDomain);
         if (domainConfig.isEmpty()) {
             return exceptionByDomainPolicy(
                     message,
@@ -173,32 +179,9 @@ public class RoutingService {
         );
     }
 
-    private Optional<DomainConfig> findActiveDomainConfig(String domain) {
-        return domainConfigRepository.findByDomain(domain)
-                .filter(DomainConfig::isActive);
-    }
-
-    private Optional<DomainConfig> findActiveLocalDomainConfig(String domain) {
-        return findActiveDomainConfig(domain)
-                .filter(DomainConfig::isLocalDomain);
-    }
-
-    private Optional<DomainConfig> findFirstActiveLocalRecipientDomain(MailEnvelope envelope) {
-        return envelope.getRecipients().stream()
-                .map(EmailAddress::getDomain)
-                .map(this::findActiveLocalDomainConfig)
-                .flatMap(Optional::stream)
-                .findFirst();
-    }
-
     private Optional<Message<byte[]>> rejectUnconfiguredExternalRecipients(Message<byte[]> message,
                                                                            MailEnvelope envelope) {
-        boolean allowUnconfiguredExternalRecipientDomains = allowUnconfiguredExternalRecipientDomains();
-        List<String> unconfiguredDomains = envelope.getRecipients().stream()
-                .map(EmailAddress::getDomain)
-                .distinct()
-                .filter(domain -> recipientDomainNotAllowed(domain, allowUnconfiguredExternalRecipientDomains))
-                .toList();
+        List<String> unconfiguredDomains = domainRoutingPolicyResolver.unconfiguredExternalRecipientDomains(envelope);
         if (unconfiguredDomains.isEmpty()) {
             return Optional.empty();
         }
@@ -208,26 +191,6 @@ public class RoutingService {
                 MailDirection.OUTBOUND,
                 "Recipient domain is not configured and enabled for outbound delivery: "
                         + String.join(", ", unconfiguredDomains)));
-    }
-
-    private boolean recipientDomainNotAllowed(String domain, boolean allowUnconfiguredExternalRecipientDomains) {
-        Optional<DomainConfig> configured = domainConfigRepository.findByDomain(domain);
-        if (configured.isPresent()) {
-            return !configured.get().isActive();
-        }
-        return !allowUnconfiguredExternalRecipientDomains;
-    }
-
-    private boolean allowUnconfiguredExternalRecipientDomains() {
-        if (relayPolicyPort == null) {
-            return false;
-        }
-        try {
-            return relayPolicyPort.getSettings().allowUnconfiguredExternalRecipientDomains();
-        } catch (Exception e) {
-            log.warn("Cannot read relay recipient domain scope setting, using secure default: {}", e.getMessage());
-            return false;
-        }
     }
 
     private Message<byte[]> quarantineByRoutingPolicy(Message<byte[]> message,
@@ -281,7 +244,7 @@ public class RoutingService {
         CryptoProfile cryptoProfile = resolveCryptoProfile(baseContext, domainConfig);
         MailProcessingDecision processingDecision = baseContext.decision();
         CertificateSelection certificates = baseContext.certificateSelection();
-        RelayProfile relayProfile = relayProfile(direction, envelope);
+        RelayProfile relayProfile = relayProfileResolver.resolve(direction, envelope);
 
         if (isOutboundCryptoProfileFailure(direction, decision)) {
             MailProcessingContext failedContext = routedContext(
@@ -293,8 +256,8 @@ public class RoutingService {
                     processingDecision,
                     certificates,
                     relayProfile);
-            recordRoutingAudit(failedContext, decision);
-            recordCertificateSelectionAudit(failedContext);
+            routingAuditPublisher.publishRouting(failedContext, decision);
+            routingAuditPublisher.publishCertificateSelection(failedContext);
             throw new MailProcessingException(
                     MailProcessingErrorType.ENCRYPTION,
                     ((RoutingDecision.Quarantine) decision).getDetail(),
@@ -346,8 +309,8 @@ public class RoutingService {
                 processingDecision,
                 certificates,
                 relayProfile);
-        recordRoutingAudit(context, decision);
-        recordCertificateSelectionAudit(context);
+        routingAuditPublisher.publishRouting(context, decision);
+        routingAuditPublisher.publishCertificateSelection(context);
         return MessageBuilder.withPayload(message.getPayload())
                 .setHeader(MailProcessingHeaders.CONTEXT, context)
                 .setHeader(MailProcessingHeaders.SKIP_DECRYPTION, skipDecryption)
@@ -387,27 +350,6 @@ public class RoutingService {
         return context;
     }
 
-    private void recordRoutingAudit(MailProcessingContext context, RoutingDecision decision) {
-        String action = decision instanceof RoutingDecision.Quarantine ? "MAIL_ROUTE_QUARANTINE" : "MAIL_ROUTE";
-        boolean success = !(decision instanceof RoutingDecision.Quarantine);
-        MailProcessingAuditEvents.publish(
-                domainEventPublisher,
-                com.sealmail.domain.audit.AuditLogType.EMAIL_ROUTED,
-                context,
-                action,
-                MailProcessingAuditEvents.routeDecisionSummary(decision),
-                success);
-    }
-
-    private void recordCertificateSelectionAudit(MailProcessingContext context) {
-        MailProcessingAuditEvents.publish(
-                domainEventPublisher,
-                com.sealmail.domain.audit.AuditLogType.EMAIL_CERTIFICATE_SELECTED,
-                context,
-                "MAIL_CERTIFICATE_SELECTION",
-                MailProcessingAuditEvents.certificateSelectionSummary(context.certificateSelection()));
-    }
-
     private CryptoProfile resolveCryptoProfile(MailProcessingContext context, DomainConfig domainConfig) {
         if (context.cryptoProfile() != null && context.cryptoProfile().isConcrete()) {
             return context.cryptoProfile();
@@ -439,68 +381,6 @@ public class RoutingService {
         return context != null && context.processingId() != null && !context.processingId().isBlank()
                 ? context.processingId()
                 : java.util.UUID.randomUUID().toString();
-    }
-
-    private RelayProfile relayProfile(MailDirection direction, MailEnvelope envelope) {
-        if (direction == MailDirection.OUTBOUND) {
-            Optional<RelayProfile> deliveryRoute = outboundDeliveryRoute(envelope);
-            if (deliveryRoute.isPresent()) {
-                return deliveryRoute.get();
-            }
-        }
-        if (!postfixProperties.isEnabled()) {
-            return null;
-        }
-        int port = direction == MailDirection.INBOUND
-                ? postfixProperties.getAfterFilterPort()
-                : postfixProperties.getOutboundPort();
-        return new RelayProfile(
-                postfixProperties.getHost(),
-                port,
-                "",
-                "",
-                postfixProperties.getTimeout(),
-                postfixProperties.getEnvelopeFrom());
-    }
-
-    private Optional<RelayProfile> outboundDeliveryRoute(MailEnvelope envelope) {
-        if (envelope == null || envelope.getRecipients().isEmpty()) {
-            return Optional.empty();
-        }
-
-        return deliveryRouteResolver.resolve(envelope.getRecipients())
-                .map(this::relayProfileForDeliveryRoute);
-    }
-
-    private RelayProfile relayProfileForDeliveryRoute(DeliveryRoute route) {
-        if (route.transportProfile().usesGmTls()) {
-            return new RelayProfile(
-                    gmEdgeRelayHost(),
-                    gmEdgeRelayPort(),
-                    "",
-                    "",
-                    postfixProperties.getTimeout(),
-                    postfixProperties.getEnvelopeFrom(),
-                    DeliveryTransportProfile.SMTP_CLEAR);
-        }
-        return new RelayProfile(
-                route.host(),
-                route.port(),
-                "",
-                "",
-                postfixProperties.getTimeout(),
-                postfixProperties.getEnvelopeFrom(),
-                route.transportProfile());
-    }
-
-    private String gmEdgeRelayHost() {
-        return gmEdgeOutboundHost != null && !gmEdgeOutboundHost.isBlank()
-                ? gmEdgeOutboundHost.trim()
-                : "127.0.0.1";
-    }
-
-    private int gmEdgeRelayPort() {
-        return gmEdgeOutboundPort > 0 ? gmEdgeOutboundPort : 2526;
     }
 
 }

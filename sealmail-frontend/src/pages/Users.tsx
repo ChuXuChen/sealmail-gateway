@@ -265,19 +265,22 @@ const Users: React.FC = () => {
   }, [status]);
 
   useEffect(() => {
-    void loadData();
+    const timeout = window.setTimeout(() => {
+      void loadData();
+    }, 0);
+    return () => window.clearTimeout(timeout);
   }, [loadData]);
 
-  const openCreate = () => {
+  const openCreate = useCallback(() => {
     createForm.resetFields();
     createForm.setFieldsValue({
       roles: ['USER'],
       managedDomains: [],
     });
     setCreateOpen(true);
-  };
+  }, [createForm]);
 
-  const openEdit = (account: UserAccount) => {
+  const openEdit = useCallback((account: UserAccount) => {
     setSelectedUser(account);
     editForm.setFieldsValue({
       username: account.username,
@@ -286,13 +289,13 @@ const Users: React.FC = () => {
       managedDomains: account.managedDomains,
     });
     setEditOpen(true);
-  };
+  }, [editForm]);
 
-  const openReset = (account: UserAccount) => {
+  const openReset = useCallback((account: UserAccount) => {
     setSelectedUser(account);
     resetForm.resetFields();
     setResetOpen(true);
-  };
+  }, [resetForm]);
 
   const handleCreate = async (values: UserFormValues) => {
     setSaving(true);
@@ -345,7 +348,7 @@ const Users: React.FC = () => {
     }
   };
 
-  const handleDisable = (account: UserAccount) => {
+  const handleDisable = useCallback((account: UserAccount) => {
     if (account.userId === currentUserId) {
       message.error('不能停用当前登录用户');
       return;
@@ -365,9 +368,9 @@ const Users: React.FC = () => {
         }
       },
     });
-  };
+  }, [currentUserId, loadData]);
 
-  const handleEnable = (account: UserAccount) => {
+  const handleEnable = useCallback((account: UserAccount) => {
     confirmAction({
       title: '启用用户',
       content: `启用 ${account.username} 后该用户可以重新登录。`,
@@ -382,9 +385,9 @@ const Users: React.FC = () => {
         }
       },
     });
-  };
+  }, [loadData]);
 
-  const handleUnlock = (account: UserAccount) => {
+  const handleUnlock = useCallback((account: UserAccount) => {
     confirmAction({
       title: '解锁用户',
       content: `清除 ${account.username} 的锁定状态和失败次数。`,
@@ -399,7 +402,7 @@ const Users: React.FC = () => {
         }
       },
     });
-  };
+  }, [loadData]);
 
   const handleResetPassword = async (values: ResetPasswordValues) => {
     if (!selectedUser) return;
@@ -527,7 +530,7 @@ const Users: React.FC = () => {
         );
       },
     },
-  ], [currentUserId, loadData]);
+  ], [currentUserId, handleDisable, handleEnable, handleUnlock, openEdit, openReset]);
 
   return (
     <PageShell>

@@ -20,24 +20,24 @@
 
 当前代码已经具备部分重构基础：
 
-- 后端是 Maven 多模块结构：`sealmail-domain`、`sealmail-app`、`sealmail-infra`、`sealmail-web`。
+- 后端是 Maven 多模块结构：`sealmail-domain`、`sealmail-app`、`sealmail-infra`、`sealmail-edge`、`sealmail-web`、`sealmail-boot`。
+- `sealmail-boot` 已作为 composition root 存在，启动类位于 `sealmail-boot/src/main/java/com/sealmail/boot/SealMailGatewayApplication.java`。
 - Spring Integration 已存在于 `sealmail-infra/src/main/java/com/sealmail/infra/config/IntegrationConfig.java`。
-- 邮件处理主流程已集中在 `sealmail-infra/src/main/java/com/sealmail/infra/mail/pipeline/MailPipelineFlow.java`。
+- 邮件处理主流程已迁移到 `sealmail-infra/src/main/java/com/sealmail/infra/mail/pipeline/MailIntegrationFlows.java`，旧 `MailPipelineFlow`、`MailPipelineStep`、`PipelineResult`、`PipelineStepTracker` 已不在生产代码中。
+- 邮件链路已经使用 `MailProcessingContext`、`MailProcessingHeaders`、`MailProcessingDecision`、`MailProcessingErrorType`、`CryptoProfile`、`RelayProfile` 等强类型上下文。
 - PostgreSQL、Hibernate/JPA、Flyway 已经是主要持久化和 schema 演进机制。
-- 现有测试覆盖了部分 domain、app、infra、crypto、DLP、SMTP、pipeline step 和 repository 行为。
-- 敏感材料治理已有文档：`docs/security-local-material.md`。
+- 现有测试覆盖了部分 domain、app、infra、crypto、DLP、SMTP、pipeline step、integration flow characterization 和 repository 行为。
+- 敏感材料治理已有文档和脚本：`docs/security-local-material.md`、`ops/scan-sensitive-material.sh`。
 
 当前主要架构债务：
 
-- Maven 依赖方向与目标端口适配器边界不完全一致；当前存在 `web -> infra` 等直接耦合，启动装配职责也尚未与业务职责完全隔离。
-- Spring Integration 已经存在，但核心编排仍依赖 `MailPipelineFlow`、`MailPipelineStep` 和 `PipelineResult` 的旧 Pipeline 语义。
-- `PipelineStepTracker` 仍使用全局静态集合做步骤去重，属于必须废弃的状态控制方式。
-- 多个步骤通过 `PipelineResult.success/failure/quarantine` 表达流程分支，错误和隔离决策未完全进入统一错误流。
-- 邮件消息依赖大量字符串 header，例如 `mailEnvelope`、`processingId`、`preferredAlgorithm`、`mustEncrypt`、`quarantineRequired`、`relayHost`。
-- `RoutingService` 同时承担路由、证书选择、算法判断、relay header 写入和处理记录创建，职责过重。
+- Maven 依赖方向仍需要持续防回退；当前 `web` 已不直接依赖 `infra`，`infra` 已不直接依赖 `app`。
+- Spring Integration 已经承担主编排，但 `MailIntegrationFlows` 仍包含较多业务分支判断，后续应继续瘦身为通道装配类。
+- 错误处理已有 `MailErrorDecisionHandler`、`DeadLetterHandler` 等集中入口，但仍需继续补齐 release 失败、证书缺失、DLP must-encrypt 失败、SMTP relay 失败等分类断言。
+- `RoutingService` 仍承担路由决策、域策略校验、处理记录创建、审计发布和上下文组装等职责，虽已抽出 crypto selection、delivery route resolver、relay profile resolver，仍需继续瘦身为薄门面。
 - 密码算法 profile 尚未成为稳定领域概念，RSA/SM2/AES/SM4 等判断仍散落在多个实现类中。
-- YAML 中仍有本地默认账号/密码占位、DKIM 私钥 PEM 字段、运行时业务策略默认值等需要治理的内容。
-- 前端和部分测试接口仍暴露底层 pipeline/crypto 概念，需要在后期收敛。
+- YAML 中仍有 DKIM 私钥 path/secret ref 入口和部分部署级默认值，需要继续确认运行时业务配置是否全部沉入 PostgreSQL。
+- 前端仍有较大页面和集中类型文件，例如 `Users.tsx`、`DlpPatterns.tsx`、`DlpSelection.tsx`、`types/index.ts`，需要拆分以降低维护和 lint 风险。
 
 ## 3. 总体执行规则
 
@@ -214,19 +214,23 @@ git diff -- docs/refactoring-principles.md docs/epic-refactoring-plan.md
 
 当前模块依赖边界与目标边界的不一致：
 
-- `sealmail-infra` 当前仍依赖 `sealmail-app`，与目标 `infra` 只依赖 `domain` 并实现 `domain` 端口不一致。
-- `sealmail-web` 当前仍依赖 `sealmail-infra`，与目标 `web` 只依赖 `app` 暴露 API 不一致。
-- 当前尚未独立 `boot` 模块，启动装配职责仍需要在后续阶段收敛为 composition root。
-- `sealmail-infra` 当前引入 `spring-boot-starter-web`，需要在模块边界治理阶段确认是否属于装配/测试遗留依赖。
+- `sealmail-boot` 已独立承担 composition root，并依赖 `web`、`app`、`infra`。
+- `sealmail-infra` 当前只依赖 `sealmail-domain` 和基础设施库，不应重新依赖 `sealmail-app` 或 `sealmail-web`。
+- `sealmail-web` 当前只依赖 `sealmail-app` 和 presentation/security 库，不应重新依赖 `sealmail-infra` 或 `sealmail-domain`。
+- `sealmail-app` 当前不应依赖 `sealmail-infra` 或 `sealmail-web`。
 
 现有旧 Pipeline 组件清单：
 
-- `MailPipelineFlow`
-- `MailPipelineStep`
-- `PipelineResult`
-- `PipelineStepTracker`
-- `SMIMEProcessor`
+- 旧 Pipeline 组件 `MailPipelineFlow`、`MailPipelineStep`、`PipelineResult`、`PipelineStepTracker`、`SMIMEProcessor` 已不在生产代码中；架构测试禁止回归。
+- 当前仍在生产代码中的邮件链路组件包括：
+- `MailIntegrationFlows`
+- `MailProcessingTracker`
+- `MailErrorDecisionHandler`
 - `DeadLetterHandler`
+- `RoutingService`
+- `MailCryptoSelectionService`
+- `DomainDeliveryRouteResolver`
+- `RelayProfileResolver`
 - `DecryptStep`
 - `VerifyStep`
 - `MailAuthenticationStep`
@@ -241,12 +245,9 @@ git diff -- docs/refactoring-principles.md docs/epic-refactoring-plan.md
 
 ```bash
 git status --short
-mvn -pl sealmail-backend/sealmail-domain -am test
-mvn -pl sealmail-backend/sealmail-app -am test
-mvn -pl sealmail-backend/sealmail-infra -am test
-mvn -pl sealmail-backend/sealmail-web -am test
-cd sealmail-frontend && npm run build && npm run lint
-git diff -- docs/refactoring-principles.md docs/epic-refactoring-plan.md
+MAVEN_USER_HOME=/tmp/sealmail-m2 ./mvnw -Dmaven.repo.local=/tmp/sealmail-m2/repository -f sealmail-backend/pom.xml test
+cd sealmail-frontend && npm run lint && npm run build
+./ops/scan-sensitive-material.sh
 ```
 
 阶段提交规则：

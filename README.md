@@ -10,8 +10,37 @@ the same Maven baseline:
 ./mvnw -f sealmail-backend/pom.xml -DskipTests package
 ```
 
+In restricted or disposable environments, keep Maven's user home and local
+repository under `/tmp`:
+
+```bash
+MAVEN_USER_HOME=/tmp/sealmail-m2 \
+./mvnw -Dmaven.repo.local=/tmp/sealmail-m2/repository -f sealmail-backend/pom.xml test
+```
+
 The backend build enforces Java 21, Maven 3.8.7 or newer, and dependency
 convergence during `validate`.
+
+## Local acceptance
+
+Run these checks before handing off a refactoring phase:
+
+```bash
+MAVEN_USER_HOME=/tmp/sealmail-m2 \
+./mvnw -Dmaven.repo.local=/tmp/sealmail-m2/repository -f sealmail-backend/pom.xml test
+
+cd sealmail-frontend
+npm run lint
+npm run build
+
+cd ..
+./ops/scan-sensitive-material.sh
+git status --short
+```
+
+Keep `paper/` outside product repository gates, do not edit historical Flyway
+migrations, and do not commit real secrets, private keys, certificates,
+keystores, or production credentials.
 
 ## Local Docker runtime
 
