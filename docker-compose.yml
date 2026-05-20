@@ -26,7 +26,7 @@ services:
       postgres:
         condition: service_healthy
     environment:
-      SPRING_PROFILES_ACTIVE: postgres
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-postgres}
       SEALMAIL_DB_URL: jdbc:postgresql://postgres:5432/${SEALMAIL_DB_NAME:-sealmail}
       SEALMAIL_DB_USERNAME: ${SEALMAIL_DB_USERNAME:-sealmail}
       SEALMAIL_DB_PASSWORD: ${SEALMAIL_DB_PASSWORD:?Set SEALMAIL_DB_PASSWORD in .env}
@@ -40,6 +40,12 @@ services:
       - "127.0.0.1:${SEALMAIL_SMTP_PORT:-10025}:10025"
     volumes:
       - ./runtime/keystore:/var/lib/sealmail/keystore
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8080/actuator/health | grep -q '\"status\":\"UP\"'"]
+      interval: 15s
+      timeout: 5s
+      retries: 20
+      start_period: 60s
 
 volumes:
   postgres-data:

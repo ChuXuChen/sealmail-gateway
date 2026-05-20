@@ -8,8 +8,6 @@ services:
       POSTGRES_DB: ${SEALMAIL_DB_NAME:-sealmail}
       POSTGRES_USER: ${SEALMAIL_DB_USERNAME:-sealmail}
       POSTGRES_PASSWORD: ${SEALMAIL_DB_PASSWORD:?Set SEALMAIL_DB_PASSWORD}
-    ports:
-      - "127.0.0.1:${SEALMAIL_DB_HOST_PORT:-5433}:5432"
     volumes:
       - postgres-data:/var/lib/postgresql/data
     healthcheck:
@@ -28,11 +26,13 @@ services:
         condition: service_healthy
     environment:
       JAVA_TOOL_OPTIONS: ${SEALMAIL_JAVA_TOOL_OPTIONS:--Xms256m -Xmx1024m}
-      SPRING_PROFILES_ACTIVE: postgres
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-postgres}
+      SEALMAIL_CORS_ALLOWED_ORIGINS: ${SEALMAIL_CORS_ALLOWED_ORIGINS:-http://localhost:8088,http://127.0.0.1:8088}
       SEALMAIL_DB_URL: jdbc:postgresql://postgres:5432/${SEALMAIL_DB_NAME:-sealmail}
       SEALMAIL_DB_USERNAME: ${SEALMAIL_DB_USERNAME:-sealmail}
       SEALMAIL_DB_PASSWORD: ${SEALMAIL_DB_PASSWORD:?Set SEALMAIL_DB_PASSWORD}
       SEALMAIL_JWT_SECRET: ${SEALMAIL_JWT_SECRET:?Set SEALMAIL_JWT_SECRET}
+      SEALMAIL_JWT_TOKEN_VALIDITY_SECONDS: ${SEALMAIL_JWT_TOKEN_VALIDITY_SECONDS:-3600}
       SEALMAIL_KEYSTORE_PATH: /var/lib/sealmail/keystore/sealmail-cert-keys.p12
       SEALMAIL_KEYSTORE_PASSWORD: ${SEALMAIL_KEYSTORE_PASSWORD:?Set SEALMAIL_KEYSTORE_PASSWORD}
       SEALMAIL_RAW_CONTENT_ENCRYPTION_KEY: ${SEALMAIL_RAW_CONTENT_ENCRYPTION_KEY:?Set SEALMAIL_RAW_CONTENT_ENCRYPTION_KEY}
@@ -58,12 +58,15 @@ services:
       SEALMAIL_ADMIN_PASSWORD: ${SEALMAIL_ADMIN_PASSWORD:?Set SEALMAIL_ADMIN_PASSWORD}
       SEALMAIL_AUTH_USERS_0_ROLES_0: SUPER_ADMIN
       SEALMAIL_AUTH_USERS_0_MANAGED_DOMAINS_0: ${LOCAL_DOMAIN:?Set LOCAL_DOMAIN}
-    ports:
-      - "127.0.0.1:${SEALMAIL_BACKEND_HTTP_PORT:-8080}:8080"
-      - "127.0.0.1:${SEALMAIL_SMTP_DEBUG_PORT:-10025}:10025"
     volumes:
       - backend-keystore:/var/lib/sealmail/keystore
       - ./runtime/${SEALMAIL_SITE:-node}/standard-tls:/run/secrets/standard-tls:ro
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8080/actuator/health | grep -q '\"status\":\"UP\"'"]
+      interval: 15s
+      timeout: 5s
+      retries: 20
+      start_period: 60s
 
   frontend:
     build:
@@ -71,12 +74,19 @@ services:
       dockerfile: docker/frontend/Dockerfile
     restart: unless-stopped
     depends_on:
-      - sealmail-backend
+      sealmail-backend:
+        condition: service_healthy
     environment:
       BACKEND_UPSTREAM: http://sealmail-backend:8080
       NGINX_ENVSUBST_FILTER: ^BACKEND_UPSTREAM$
     ports:
       - "${SEALMAIL_FRONTEND_BIND:-127.0.0.1}:${SEALMAIL_FRONTEND_HTTP_PORT:-8088}:80"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1/"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
 
   postfix:
     build:
@@ -84,17 +94,30 @@ services:
       dockerfile: docker/postfix/Dockerfile
     restart: unless-stopped
     depends_on:
-      - sealmail-backend
-      - mailpit
+      sealmail-backend:
+        condition: service_healthy
     environment:
       LOCAL_DOMAIN: ${LOCAL_DOMAIN:?Set LOCAL_DOMAIN}
       REMOTE_DOMAIN: ${REMOTE_DOMAIN:-}
       REMOTE_ROUTE_MODE: ${REMOTE_ROUTE_MODE:-standard}
       REMOTE_STANDARD_HOST: ${REMOTE_STANDARD_HOST:-}
-      REMOTE_STANDARD_PORT: ${REMOTE_STANDARD_PORT:-587}
+      REMOTE_STANDARD_PORT: ${REMOTE_STANDARD_PORT:-2527}
+      SEALMAIL_DEPLOYMENT_MODE: ${SEALMAIL_DEPLOYMENT_MODE:-debug}
+      LOCAL_DELIVERY_MODE: ${LOCAL_DELIVERY_MODE:-mailpit}
+      LOCAL_DELIVERY_HOST: ${LOCAL_DELIVERY_HOST:-mailpit}
+      LOCAL_DELIVERY_PORT: ${LOCAL_DELIVERY_PORT:-1025}
+      LOCAL_DELIVERY_TRANSPORT: ${LOCAL_DELIVERY_TRANSPORT:-smtp-clear}
       POSTFIX_HOSTNAME: ${POSTFIX_HOSTNAME:-mail.local}
       POSTFIX_SMTPD_TLS_SECURITY_LEVEL: ${POSTFIX_SMTPD_TLS_SECURITY_LEVEL:-may}
       POSTFIX_REMOTE_TLS_SECURITY_LEVEL: ${POSTFIX_REMOTE_TLS_SECURITY_LEVEL:-encrypt}
+      POSTFIX_REMOTE_TLS_CA_FILE: ${POSTFIX_REMOTE_TLS_CA_FILE:-}
+      POSTFIX_REMOTE_TLS_FINGERPRINT_DIGEST: ${POSTFIX_REMOTE_TLS_FINGERPRINT_DIGEST:-sha256}
+      POSTFIX_REMOTE_TLS_POLICY_LEVEL: ${POSTFIX_REMOTE_TLS_POLICY_LEVEL:-}
+      POSTFIX_REMOTE_TLS_POLICY_MATCH: ${POSTFIX_REMOTE_TLS_POLICY_MATCH:-}
+      POSTFIX_REMOTE_TLS_POLICY_FINGERPRINT: ${POSTFIX_REMOTE_TLS_POLICY_FINGERPRINT:-}
+      POSTFIX_REMOTE_TLS_POLICY_PROTOCOLS: ${POSTFIX_REMOTE_TLS_POLICY_PROTOCOLS:-}
+      POSTFIX_REMOTE_TLS_POLICY_CIPHERS: ${POSTFIX_REMOTE_TLS_POLICY_CIPHERS:-}
+      POSTFIX_PUBLIC_RELAY_REMOTE_DOMAIN: ${POSTFIX_PUBLIC_RELAY_REMOTE_DOMAIN:-}
       POSTFIX_EXTRA_MYNETWORKS: ${POSTFIX_EXTRA_MYNETWORKS:-}
       SEALMAIL_HOST: sealmail-backend
       SEALMAIL_PORT: 10025
@@ -106,17 +129,27 @@ services:
       POSTFIX_OUTBOUND_PORT: 10027
       EDGE_INBOUND_POSTFIX_PORT: 2530
     ports:
-      - "${POSTFIX_PUBLIC_SMTP_PORT:-587}:25"
+      - "${POSTFIX_PUBLIC_SMTP_PORT:-2527}:25"
     volumes:
       - postfix-tls:/etc/postfix/tls
+      - ./runtime/${SEALMAIL_SITE:-node}/standard-tls:/run/secrets/standard-tls:ro
+    healthcheck:
+      test: ["CMD-SHELL", "postfix status >/dev/null 2>&1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
 
   sealmail-edge:
     build:
       context: .
       dockerfile: docker/sealmail-edge/Dockerfile
     restart: unless-stopped
+    profiles:
+      - gm
     depends_on:
-      - postfix
+      postfix:
+        condition: service_healthy
     environment:
       JAVA_TOOL_OPTIONS: ${EDGE_JAVA_TOOL_OPTIONS:--Xms128m -Xmx512m}
       EDGE_POSTFIX_HOST: postfix
@@ -131,16 +164,68 @@ services:
       EDGE_TLS_TRUST_STORE_PASSWORD: ${EDGE_TLS_TRUST_STORE_PASSWORD:-}
       EDGE_TLS_TRUST_ALL: ${EDGE_TLS_TRUST_ALL:-false}
       EDGE_OUTBOUND_ROUTES: ${EDGE_OUTBOUND_ROUTES:-}
-    ports:
-      - "${EDGE_STARTTLS_PUBLIC_PORT:-2525}:2525"
-      - "${EDGE_IMPLICIT_TLS_PUBLIC_PORT:-2465}:2465"
-      - "127.0.0.1:${EDGE_ADMIN_HOST_PORT:-2727}:2727"
     volumes:
       - ./runtime/${SEALMAIL_SITE:-node}/edge-secrets:/run/secrets/edge:ro
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:2727/health | grep -q '\"ready\":true'"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+  edge-starttls-public:
+    image: alpine/socat:latest
+    restart: unless-stopped
+    profiles:
+      - gm
+    entrypoint: ["socat"]
+    depends_on:
+      sealmail-edge:
+        condition: service_healthy
+    command:
+      - TCP-LISTEN:2525,fork,reuseaddr
+      - TCP:sealmail-edge:2525
+    ports:
+      - "${EDGE_STARTTLS_PUBLIC_PORT:-2525}:2525"
+
+  edge-implicit-tls-public:
+    image: alpine/socat:latest
+    restart: unless-stopped
+    profiles:
+      - gm
+    entrypoint: ["socat"]
+    depends_on:
+      sealmail-edge:
+        condition: service_healthy
+    command:
+      - TCP-LISTEN:2465,fork,reuseaddr
+      - TCP:sealmail-edge:2465
+    ports:
+      - "${EDGE_IMPLICIT_TLS_PUBLIC_PORT:-2465}:2465"
+
+  gateway-https:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    profiles:
+      - https
+    depends_on:
+      frontend:
+        condition: service_healthy
+    environment:
+      SEALMAIL_PUBLIC_HOST: ${SEALMAIL_PUBLIC_HOST:-}
+    ports:
+      - "${SEALMAIL_HTTPS_HTTP_PORT:-80}:80"
+      - "${SEALMAIL_HTTPS_HTTPS_PORT:-443}:443"
+    volumes:
+      - ./docker/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
 
   mailpit:
     image: axllent/mailpit:latest
     restart: unless-stopped
+    profiles:
+      - debug
     ports:
       - "127.0.0.1:${MAILPIT_SMTP_DEBUG_PORT:-1025}:1025"
       - "127.0.0.1:${MAILPIT_UI_HOST_PORT:-8025}:8025"
@@ -149,8 +234,70 @@ services:
     environment:
       MP_DATABASE: /data/mailpit.db
 
+  postgres-debug:
+    image: alpine/socat:latest
+    restart: unless-stopped
+    profiles:
+      - debug
+    entrypoint: ["socat"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command:
+      - TCP-LISTEN:5432,fork,reuseaddr
+      - TCP:postgres:5432
+    ports:
+      - "127.0.0.1:${SEALMAIL_DB_HOST_PORT:-5433}:5432"
+
+  backend-http-debug:
+    image: alpine/socat:latest
+    restart: unless-stopped
+    profiles:
+      - debug
+    entrypoint: ["socat"]
+    depends_on:
+      sealmail-backend:
+        condition: service_healthy
+    command:
+      - TCP-LISTEN:8080,fork,reuseaddr
+      - TCP:sealmail-backend:8080
+    ports:
+      - "127.0.0.1:${SEALMAIL_BACKEND_HTTP_PORT:-8080}:8080"
+
+  backend-smtp-debug:
+    image: alpine/socat:latest
+    restart: unless-stopped
+    profiles:
+      - debug
+    entrypoint: ["socat"]
+    depends_on:
+      sealmail-backend:
+        condition: service_healthy
+    command:
+      - TCP-LISTEN:10025,fork,reuseaddr
+      - TCP:sealmail-backend:10025
+    ports:
+      - "127.0.0.1:${SEALMAIL_SMTP_DEBUG_PORT:-10025}:10025"
+
+  edge-admin-debug:
+    image: alpine/socat:latest
+    restart: unless-stopped
+    profiles:
+      - gm-debug
+    entrypoint: ["socat"]
+    depends_on:
+      sealmail-edge:
+        condition: service_healthy
+    command:
+      - TCP-LISTEN:2727,fork,reuseaddr
+      - TCP:sealmail-edge:2727
+    ports:
+      - "127.0.0.1:${EDGE_ADMIN_HOST_PORT:-2727}:2727"
+
 volumes:
   postgres-data:
   backend-keystore:
   postfix-tls:
   mailpit-data:
+  caddy-data:
+  caddy-config:

@@ -52,19 +52,33 @@ abstractions must not return.
 
 ## Local Docker runtime
 
-For local Docker runs, copy `.env.example` to `.env`, replace all passwords and
-secrets, then create the host keystore directory:
+For local Docker runs, use the local wrapper so placeholder secrets are not
+accepted accidentally:
 
 ```bash
-mkdir -p runtime/keystore
-chmod 700 runtime/keystore
-# Set SEALMAIL_UID=$(id -u) and SEALMAIL_GID=$(id -g) in .env.
-docker compose up --build
+ops/local-stack-up.sh
 ```
 
 The backend stores certificate private keys in
 `runtime/keystore/sealmail-cert-keys.p12` through a container bind mount. Back up
 that file together with PostgreSQL. See `docs/docker-local-keystore.md`.
+
+## Gateway Docker deployment
+
+For the two-node gateway stack, use the one-entry deployment script instead of
+calling Compose directly:
+
+```bash
+ops/gateway-stack-up.sh \
+  --site alpha \
+  --local-domain alpha.sealmail.top \
+  --remote-domain beta.sealmail.top \
+  --remote-host <peer-public-ip-or-hostname>
+```
+
+The script creates `.env.gateway`, fills generated secrets, prepares
+`runtime/<site>/...`, validates Docker/ports/configuration, and runs
+`docker compose up -d --build`. See `docs/docker-gateway-stack.md`.
 
 ## Flyway migrations
 

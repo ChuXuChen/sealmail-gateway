@@ -26,7 +26,10 @@ RUN --mount=type=cache,target=/root/.m2 \
 
 FROM eclipse-temurin:21-jre
 
-RUN useradd --system --uid 10002 --create-home --home-dir /home/sealmail-edge sealmail-edge \
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends curl \
+    && rm -rf /var/lib/apt/lists/* \
+    && useradd --system --uid 10002 --create-home --home-dir /home/sealmail-edge sealmail-edge \
     && mkdir -p /app /run/secrets/edge \
     && chown -R sealmail-edge:sealmail-edge /app /run/secrets/edge
 

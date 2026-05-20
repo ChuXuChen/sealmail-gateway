@@ -23,7 +23,10 @@ RUN --mount=type=cache,target=/root/.m2 \
 
 FROM eclipse-temurin:21-jre
 
-RUN useradd --system --uid 10001 --create-home --home-dir /home/sealmail sealmail \
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends curl \
+    && rm -rf /var/lib/apt/lists/* \
+    && useradd --system --uid 10001 --create-home --home-dir /home/sealmail sealmail \
     && mkdir -p /var/lib/sealmail/keystore \
     && chown -R sealmail:sealmail /var/lib/sealmail
 
