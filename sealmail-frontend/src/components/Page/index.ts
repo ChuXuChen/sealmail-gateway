@@ -21,6 +21,7 @@ export {
   CertificateRoleTag,
   CertificateStateTags,
   DlpActionTag,
+  DlpRiskTag,
   EnabledTag,
   ReasonTag,
   QuarantineStatusTag,

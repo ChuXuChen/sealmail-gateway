@@ -32,13 +32,19 @@ export const canViewAuditLogs = (user: UserContext | null): boolean =>
   canManageCa(user) || hasRole(user, 'AUDITOR');
 
 export const canViewSystemStatus = (user: UserContext | null): boolean =>
-  canManageCa(user) || canViewAuditLogs(user);
+  canManageCa(user) || canViewAuditLogs(user) || hasRole(user, 'SYSTEM_VIEWER');
 
 export const canManageDomains = (user: UserContext | null): boolean =>
   canManageCa(user);
 
 export const canManageMailAuth = (user: UserContext | null): boolean =>
   canManageDomains(user);
+
+export const canManageRuntimePolicy = (user: UserContext | null): boolean =>
+  canManageCa(user) || hasRole(user, 'RUNTIME_POLICY_ADMIN');
+
+export const canOperateMailTools = (user: UserContext | null): boolean =>
+  canManageCa(user) || hasRole(user, 'MAIL_OPERATOR');
 
 export const getPermissionSummary = (user: UserContext | null): string[] => {
   const summary = [
@@ -48,6 +54,8 @@ export const getPermissionSummary = (user: UserContext | null): string[] => {
     canManageDlp(user) ? 'DLP 管理' : null,
     canManageDomains(user) ? '域名配置' : null,
     canManageMailAuth(user) ? '邮件认证' : null,
+    canManageRuntimePolicy(user) ? '运行策略' : null,
+    canOperateMailTools(user) ? '邮件工具' : null,
     canViewQuarantine(user) ? '隔离查看' : null,
     canViewAuditLogs(user) ? '审计查看' : null,
     canViewSystemStatus(user) ? '状态查看' : null,

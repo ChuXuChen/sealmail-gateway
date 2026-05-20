@@ -1,9 +1,9 @@
 package com.sealmail.app.usecase.config;
 
 import com.sealmail.app.dto.response.SystemSettingsResponse;
-import com.sealmail.app.exception.BusinessException;
 import com.sealmail.app.security.UserContext;
 import com.sealmail.domain.system.SystemSettingsProvider;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -16,11 +16,9 @@ public class QuerySystemSettingsUseCase {
         this.systemSettingsProvider = systemSettingsProvider;
     }
 
+    @PreAuthorize("@appPermissionAuthorizer.canViewSystemSettings(#user)")
     @Transactional(readOnly = true)
     public SystemSettingsResponse getSettings(UserContext user) {
-        if (user == null || !user.isAdmin()) {
-            throw BusinessException.forbidden("只有管理员可以查看系统设置");
-        }
         return toResponse(systemSettingsProvider.snapshot());
     }
 

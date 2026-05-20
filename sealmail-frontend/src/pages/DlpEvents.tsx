@@ -1,11 +1,13 @@
-import React, { useCallback, useEffect, useState } from 'react';
-import { Button, Descriptions, Drawer, Input, InputNumber, Select, Space, Table, Tabs, Tag, message } from 'antd';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { Button, Descriptions, Drawer, Input, InputNumber, Select, Space, Table, Tabs, Tag, Typography, message } from 'antd';
 import { ReloadOutlined } from '@ant-design/icons';
 import type { TableColumnsType } from 'antd';
 import { dlpApi } from '../api/client';
 import { getApiErrorMessage } from '../api/errors';
 import type { DlpEvent, DlpEvidence, DlpUbaSenderRisk } from '../types';
-import { DataTable, DlpActionTag, FilterBar, PageHeader, PageShell, formatDateTime } from '../components/Page';
+import { DataTable, DlpActionTag, DlpRiskTag, FilterBar, PageHeader, PageShell, StatusSummary, formatDateTime } from '../components/Page';
+
+const { Text } = Typography;
 
 const DlpEvents: React.FC = () => {
   const [data, setData] = useState<DlpEvent[]>([]);
@@ -19,6 +21,15 @@ const DlpEvents: React.FC = () => {
   const [rule, setRule] = useState<string | undefined>();
   const [domain, setDomain] = useState<string | undefined>();
   const [selected, setSelected] = useState<DlpEvent | null>(null);
+  const [activeTab, setActiveTab] = useState('events');
+
+  const riskSummary = useMemo(() => {
+    const high = ubaRisks.filter((risk) => risk.riskLevel === 'HIGH').length;
+    const medium = ubaRisks.filter((risk) => risk.riskLevel === 'MEDIUM').length;
+    const dlpHits = ubaRisks.reduce((sum, risk) => sum + risk.dlpHitCount, 0);
+    const externalDomains = ubaRisks.reduce((sum, risk) => sum + risk.externalDomainCount, 0);
+    return { dlpHits, externalDomains, high, medium };
+  }, [ubaRisks]);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -82,6 +93,15 @@ const DlpEvents: React.FC = () => {
     setPagination((prev) => ({ ...prev, page: 1 }));
   };
 
+  const filterEventsBySenderDomain = useCallback((senderEmail: string) => {
+    const atIndex = senderEmail.lastIndexOf('@');
+    if (atIndex >= 0 && atIndex < senderEmail.length - 1) {
+      setDomain(senderEmail.slice(atIndex + 1));
+      setPagination((prev) => ({ ...prev, page: 1 }));
+      setActiveTab('events');
+    }
+  }, []);
+
   const columns: TableColumnsType<DlpEvent> = [
     { title: '时间', dataIndex: 'createdAt', key: 'createdAt', width: 170, render: (value: string) => formatDateTime(value) },
     { title: '动作', dataIndex: 'action', key: 'action', width: 110, render: (value: string) => <DlpActionTag action={value} /> },
@@ -90,19 +110,38 @@ const DlpEvents: React.FC = () => {
     { title: '发件人', dataIndex: 'senderEmail', key: 'senderEmail', width: 190, ellipsis: true },
     { title: '主题', dataIndex: 'subject', key: 'subject', width: 240, ellipsis: true },
     { title: '模式', dataIndex: 'monitorMode', key: 'monitorMode', width: 90, render: (value: boolean) => value ? <Tag color="blue">监控</Tag> : <Tag color="red">执行</Tag> },
-    { title: 'UBA', dataIndex: 'ubaRiskLevel', key: 'ubaRiskLevel', width: 80, render: (value?: string) => value || 'LOW' },
+    { title: 'UBA', dataIndex: 'ubaRiskLevel', key: 'ubaRiskLevel', width: 80, render: (value?: string) => <DlpRiskTag risk={value} /> },
     { title: '误报', dataIndex: 'falsePositive', key: 'falsePositive', width: 80, render: (value: boolean) => value ? <Tag color="green">是</Tag> : '-' },
     { title: '操作', key: 'actions', width: 90, fixed: 'right', render: (_: unknown, record) => <Button type="link" size="small" onClick={() => openDetail(record)}>查看</Button> },
   ];
 
   const riskColumns: TableColumnsType<DlpUbaSenderRisk> = [
-    { title: '发件人', dataIndex: 'senderEmail', key: 'senderEmail', width: 220, ellipsis: true },
-    { title: '风险', dataIndex: 'riskLevel', key: 'riskLevel', width: 90, render: (value: string) => <Tag color={value === 'HIGH' ? 'red' : value === 'MEDIUM' ? 'orange' : 'green'}>{value}</Tag> },
+    {
+      title: '发件人',
+      dataIndex: 'senderEmail',
+      key: 'senderEmail',
+      width: 240,
+      ellipsis: true,
+      render: (value: string) => <Button type="link" size="small" onClick={() => filterEventsBySenderDomain(value)}>{value}</Button>,
+    },
+    { title: '风险', dataIndex: 'riskLevel', key: 'riskLevel', width: 90, render: (value: string) => <DlpRiskTag risk={value} /> },
+    { title: '总量', dataIndex: 'totalMessages', key: 'totalMessages', width: 80 },
     { title: '外发', dataIndex: 'outboundMessages', key: 'outboundMessages', width: 90 },
     { title: '外部域', dataIndex: 'externalDomainCount', key: 'externalDomainCount', width: 90 },
     { title: 'DLP 命中', dataIndex: 'dlpHitCount', key: 'dlpHitCount', width: 100 },
     { title: '高风险', dataIndex: 'highRiskCount', key: 'highRiskCount', width: 90 },
-    { title: '原因', dataIndex: 'lastReasons', key: 'lastReasons', ellipsis: true, render: (values: string[]) => values.join('；') || '-' },
+    {
+      title: '原因',
+      dataIndex: 'lastReasons',
+      key: 'lastReasons',
+      ellipsis: true,
+      render: (values: string[]) => values.length > 0 ? (
+        <Space size={[0, 4]} wrap>
+          {values.slice(0, 3).map((value) => <Tag key={value}>{value}</Tag>)}
+          {values.length > 3 ? <Text type="secondary">+{values.length - 3}</Text> : null}
+        </Space>
+      ) : '-',
+    },
     { title: '最近活动', dataIndex: 'lastSeenAt', key: 'lastSeenAt', width: 170, render: formatDateTime },
   ];
 
@@ -120,6 +159,8 @@ const DlpEvents: React.FC = () => {
 
       <Tabs
         className="config-tabs"
+        activeKey={activeTab}
+        onChange={setActiveTab}
         items={[
           {
             key: 'events',
@@ -159,14 +200,24 @@ const DlpEvents: React.FC = () => {
             key: 'sender-risks',
             label: '发件人风险',
             children: (
-              <DataTable<DlpUbaSenderRisk>
-                rowKey="senderEmail"
-                loading={riskLoading}
-                dataSource={ubaRisks}
-                columns={riskColumns}
-                scroll={{ x: 1040 }}
-                pagination={{ pageSize: 20, total: ubaRisks.length }}
-              />
+              <div className="config-section-stack">
+                <StatusSummary
+                  items={[
+                    { key: 'high', label: '高风险发件人', value: riskSummary.high, description: '需优先复核', tone: riskSummary.high > 0 ? 'danger' : 'success' },
+                    { key: 'medium', label: '中风险发件人', value: riskSummary.medium, description: '持续观察', tone: riskSummary.medium > 0 ? 'warning' : 'success' },
+                    { key: 'hits', label: 'DLP 命中', value: riskSummary.dlpHits, description: '发件人累计命中' },
+                    { key: 'domains', label: '外部域覆盖', value: riskSummary.externalDomains, description: '发件人累计外部域' },
+                  ]}
+                />
+                <DataTable<DlpUbaSenderRisk>
+                  rowKey="senderEmail"
+                  loading={riskLoading}
+                  dataSource={ubaRisks}
+                  columns={riskColumns}
+                  scroll={{ x: 1180 }}
+                  pagination={{ pageSize: 20, total: ubaRisks.length }}
+                />
+              </div>
             ),
           },
         ]}
@@ -181,7 +232,7 @@ const DlpEvents: React.FC = () => {
               <Descriptions.Item label="策略">{selected.policyIds.join(', ') || '-'}</Descriptions.Item>
               <Descriptions.Item label="规则组">{selected.ruleGroupIds.join(', ') || '-'}</Descriptions.Item>
               <Descriptions.Item label="抽取 Warning">{selected.extractionWarnings.join('; ') || '-'}</Descriptions.Item>
-              <Descriptions.Item label="UBA 风险">{selected.ubaRiskLevel || 'LOW'}</Descriptions.Item>
+              <Descriptions.Item label="UBA 风险"><DlpRiskTag risk={selected.ubaRiskLevel} /></Descriptions.Item>
               <Descriptions.Item label="UBA 升级">{selected.ubaActionUpgraded ? '是' : '否'}</Descriptions.Item>
               <Descriptions.Item label="UBA 原因">{selected.ubaRiskReasons?.join('; ') || '-'}</Descriptions.Item>
               <Descriptions.Item label="关联隔离">{selected.quarantineId || '-'}</Descriptions.Item>

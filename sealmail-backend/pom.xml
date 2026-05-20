@@ -187,6 +187,19 @@
         </dependencies>
     </dependencyManagement>
 
+    <dependencies>
+        <!--
+            Surefire starts Mockito as a Java agent in every child module. Keep
+            mockito-core as an inherited test dependency so a clean local Maven
+            repository resolves the agent jar before surefire evaluates argLine.
+        -->
+        <dependency>
+            <groupId>org.mockito</groupId>
+            <artifactId>mockito-core</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
     <build>
         <plugins>
             <plugin>
@@ -243,6 +256,7 @@
                     <version>3.13.0</version>
                     <configuration>
                         <release>${java.version}</release>
+                        <parameters>true</parameters>
                         <annotationProcessorPaths>
                             <path>
                                 <groupId>org.projectlombok</groupId>

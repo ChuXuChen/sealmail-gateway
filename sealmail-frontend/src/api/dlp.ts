@@ -1,5 +1,6 @@
 import type {
   ApiResponse,
+  BatchOperationResult,
   CreateDlpPatternRequest,
   CreateDlpSelectionRequest,
   DlpDatasetRequest,
@@ -78,7 +79,7 @@ export const dlpQuarantineApi = {
     unwrapApiResponse(apiClient.post<ApiResponse<QuarantineItem>>(`/api/v1/dlp/quarantine/${id}/reject`, data)),
 
   batchRelease: (ids: string[]) =>
-    unwrapApiResponse(apiClient.post<ApiResponse<void>>('/api/v1/dlp/quarantine/batch-release', ids)),
+    unwrapApiResponse(apiClient.post<ApiResponse<BatchOperationResult>>('/api/v1/dlp/quarantine/batch-release', ids)),
 
   batchReject: (ids: string[]) =>
     unwrapApiResponse(apiClient.post<ApiResponse<void>>('/api/v1/dlp/quarantine/batch-reject', ids)),

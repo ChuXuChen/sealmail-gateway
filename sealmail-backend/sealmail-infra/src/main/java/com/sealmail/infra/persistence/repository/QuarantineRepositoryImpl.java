@@ -14,7 +14,6 @@ import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
-import java.util.Base64;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -26,13 +25,16 @@ public class QuarantineRepositoryImpl implements QuarantineRepository {
     private final EntityManager entityManager;
     private final QuarantinedMailMapper mapper;
     private final DomainEventPublisher domainEventPublisher;
+    private final MailRawContentCodec rawContentCodec;
 
     public QuarantineRepositoryImpl(EntityManager entityManager,
                                     QuarantinedMailMapper mapper,
-                                    DomainEventPublisher domainEventPublisher) {
+                                    DomainEventPublisher domainEventPublisher,
+                                    MailRawContentCodec rawContentCodec) {
         this.entityManager = entityManager;
         this.mapper = mapper;
         this.domainEventPublisher = domainEventPublisher;
+        this.rawContentCodec = rawContentCodec;
     }
 
     @Override
@@ -261,12 +263,13 @@ public class QuarantineRepositoryImpl implements QuarantineRepository {
     }
 
     private String persistRawContent(byte[] rawContent) {
+        MailRawContentCodec.EncodedRawContent encoded = rawContentCodec.encode(rawContent);
         MailRawContentEntity raw = new MailRawContentEntity();
         raw.setId(UUID.randomUUID().toString());
-        raw.setContent(Base64.getEncoder().encodeToString(rawContent));
-        raw.setSha256(sha256(rawContent));
-        raw.setSizeBytes(rawContent.length);
-        raw.setContentType("message/rfc822;base64");
+        raw.setContent(encoded.content());
+        raw.setSha256(encoded.sha256());
+        raw.setSizeBytes(encoded.sizeBytes());
+        raw.setContentType(encoded.contentType());
         raw.setCreatedAt(Instant.now());
         entityManager.persist(raw);
         return raw.getId();
@@ -280,7 +283,7 @@ public class QuarantineRepositoryImpl implements QuarantineRepository {
         if (raw == null || raw.getContent() == null || raw.getContent().isBlank()) {
             return new byte[0];
         }
-        return Base64.getDecoder().decode(raw.getContent());
+        return rawContentCodec.decode(raw.getContent());
     }
 
     private void deleteRawContent(String rawContentId) {
@@ -290,19 +293,6 @@ public class QuarantineRepositoryImpl implements QuarantineRepository {
         MailRawContentEntity raw = entityManager.find(MailRawContentEntity.class, rawContentId);
         if (raw != null) {
             entityManager.remove(raw);
-        }
-    }
-
-    private String sha256(byte[] bytes) {
-        try {
-            byte[] digest = java.security.MessageDigest.getInstance("SHA-256").digest(bytes);
-            StringBuilder builder = new StringBuilder(digest.length * 2);
-            for (byte b : digest) {
-                builder.append(String.format("%02x", b));
-            }
-            return builder.toString();
-        } catch (java.security.NoSuchAlgorithmException e) {
-            throw new IllegalStateException("SHA-256 digest is not available", e);
         }
     }
 

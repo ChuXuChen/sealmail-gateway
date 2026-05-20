@@ -10,6 +10,7 @@ import com.sealmail.domain.mailsecurity.MailRouter;
 import com.sealmail.infra.config.properties.AuthProperties;
 import com.sealmail.infra.config.properties.MailAuthProperties;
 import com.sealmail.infra.config.properties.PostfixProperties;
+import com.sealmail.infra.config.properties.RawContentStorageProperties;
 import com.sealmail.infra.config.properties.SecurityProperties;
 import com.sealmail.infra.config.properties.SmimeCryptoProperties;
 import com.sealmail.infra.config.properties.SmtpServerProperties;
@@ -29,7 +30,8 @@ import org.springframework.context.annotation.Configuration;
         MailAuthProperties.class,
         AuthProperties.class,
         SmimeCryptoProperties.class,
-        StandardTlsProperties.class
+        StandardTlsProperties.class,
+        RawContentStorageProperties.class
 })
 public class InfraConfig {
 

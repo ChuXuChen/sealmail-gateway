@@ -67,6 +67,12 @@ sealmail:
       enabled: true
       timeout: 10000
 
+  storage:
+    raw-content:
+      encryption:
+        enabled: ${SEALMAIL_RAW_CONTENT_ENCRYPTION_ENABLED:true}
+        key-ref: ${SEALMAIL_RAW_CONTENT_ENCRYPTION_KEY_REF:env:SEALMAIL_RAW_CONTENT_ENCRYPTION_KEY}
+
   # Postfix integration: Postfix receives on 25, sends through content_filter to 10025,
   # app processes mail, then reinjects back to Postfix on 10026/10027.
   postfix:

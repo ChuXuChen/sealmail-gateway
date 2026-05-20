@@ -30,7 +30,9 @@ import {
   canManageDlp,
   canManageDomains,
   canManageMailAuth,
+  canManageRuntimePolicy,
   canManageUsers,
+  canOperateMailTools,
   canViewAuditLogs,
   canViewCrl,
   canViewQuarantine,
@@ -102,22 +104,22 @@ const MainLayout: React.FC = () => {
       icon: <PartitionOutlined />,
       label: 'DLP 策略集',
     } : null,
-    canManageCa(user) ? {
+    canManageRuntimePolicy(user) ? {
       key: ROUTES.policiesGmEdge,
       icon: <SafetyOutlined />,
       label: '国密 Edge',
     } : null,
-    canManageCa(user) ? {
+    canManageRuntimePolicy(user) ? {
       key: ROUTES.policiesSmimeSuite,
       icon: <FileProtectOutlined />,
       label: 'S/MIME 套件',
     } : null,
-    canManageCa(user) ? {
+    canManageRuntimePolicy(user) ? {
       key: ROUTES.policiesRelay,
       icon: <MailOutlined />,
       label: 'Relay 策略',
     } : null,
-    canManageCa(user) ? {
+    canManageRuntimePolicy(user) ? {
       key: ROUTES.policiesQuarantine,
       icon: <InboxOutlined />,
       label: '隔离策略',
@@ -148,12 +150,12 @@ const MainLayout: React.FC = () => {
       icon: <UserOutlined />,
       label: '用户管理',
     } : null,
-    canManageCa(user) ? {
+    canOperateMailTools(user) ? {
       key: ROUTES.opsSmtpProbe,
       icon: <ThunderboltOutlined />,
       label: 'SMTP 探测',
     } : null,
-    canManageCa(user) ? {
+    canOperateMailTools(user) ? {
       key: ROUTES.opsProtectedTestMail,
       icon: <SendOutlined />,
       label: '测试邮件',

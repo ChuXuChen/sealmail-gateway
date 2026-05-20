@@ -25,6 +25,7 @@ import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.doThrow;
@@ -138,10 +139,47 @@ class ReleaseQuarantineUseCaseTest {
         verify(releaseRelay, never()).relay(org.mockito.ArgumentMatchers.any(QuarantinedMail.class), anyBoolean());
     }
 
+    @Test
+    void batchReleaseReturnsPerItemResultsWhenSomeItemsFail() {
+        QuarantinedMail releasable = mail("q-1", "raw".getBytes());
+        QuarantinedMail missingContent = mail("q-2", new byte[0]);
+        when(repository.findById("q-1")).thenReturn(Optional.of(releasable));
+        when(repository.findById("q-2")).thenReturn(Optional.of(missingContent));
+
+        var response = useCase.batchRelease(List.of("q-1", "q-2"), new ReleaseQuarantineRequest(), admin());
+
+        assertEquals(2, response.requestedCount());
+        assertEquals(1, response.successCount());
+        assertEquals(1, response.failureCount());
+        assertTrue(response.items().get(0).success());
+        assertEquals("q-1", response.items().get(0).id());
+        assertEquals("q-2", response.items().get(1).id());
+        assertEquals("QUARANTINE_CONTENT_MISSING", response.items().get(1).errorCode());
+        verify(releaseRelay).relay(releasable, false);
+        verify(releaseRelay, never()).relay(missingContent, false);
+    }
+
+    @Test
+    void batchReleasePropagatesAuthorizationFailure() {
+        UserContext auditor = UserContext.builder()
+                .userId("auditor-1")
+                .username("auditor")
+                .roles(Set.of("AUDITOR"))
+                .build();
+
+        assertThrows(com.sealmail.app.exception.SecurityException.class,
+                () -> useCase.batchRelease(List.of("q-1"), new ReleaseQuarantineRequest(), auditor));
+        verify(releaseRelay, never()).relay(org.mockito.ArgumentMatchers.any(QuarantinedMail.class), anyBoolean());
+    }
+
     private static QuarantinedMail mail(byte[] rawContent) {
+        return mail("q-1", rawContent);
+    }
+
+    private static QuarantinedMail mail(String id, byte[] rawContent) {
         return QuarantinedMail.create(
-                "q-1",
-                "msg-1",
+                id,
+                "msg-" + id,
                 "subject",
                 new EmailAddress("sender@example.com"),
                 List.of(new EmailAddress("recipient@example.com")),

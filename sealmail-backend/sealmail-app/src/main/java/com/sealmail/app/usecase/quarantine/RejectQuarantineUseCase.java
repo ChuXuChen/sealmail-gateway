@@ -16,6 +16,8 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.List;
+
 @Service
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
@@ -28,24 +30,57 @@ public class RejectQuarantineUseCase {
     private final PermissionChecker permissionChecker;
 
     @Transactional
+    public void batchReject(
+            List<String> ids,
+            RejectQuarantineRequest request,
+            UserContext user) {
+
+        permissionChecker.checkCanManageQuarantine(user);
+        RejectQuarantineRequest effectiveRequest = request != null
+                ? request
+                : new RejectQuarantineRequest();
+        List<QuarantinedMail> mails = ids.stream()
+                .map(this::findRejectable)
+                .toList();
+
+        for (QuarantinedMail mail : mails) {
+            reject(mail, effectiveRequest, user);
+        }
+    }
+
+    @Transactional
     public QuarantineItemResponse execute(
             String id,
             RejectQuarantineRequest request,
             UserContext user) {
 
         permissionChecker.checkCanManageQuarantine(user);
+        RejectQuarantineRequest effectiveRequest = request != null
+                ? request
+                : new RejectQuarantineRequest();
+        QuarantinedMail mail = findRejectable(id);
 
+        reject(mail, effectiveRequest, user);
+
+        log.info("User [{}] rejected quarantined mail: {}", user.getUserId(), id);
+
+        return mapper.toResponse(mail);
+    }
+
+    private QuarantinedMail findRejectable(String id) {
         QuarantinedMail mail = quarantineRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("QuarantinedMail", id));
 
-        // Validate state
         if (mail.getStatus() == QuarantineStatus.REJECTED) {
             throw QuarantineStateException.alreadyRejected(id);
         }
-        if (mail.getStatus() == QuarantineStatus.RELEASED) {
+        if (mail.getStatus() != QuarantineStatus.QUARANTINED) {
             throw QuarantineStateException.invalidStateForOperation(id, "reject");
         }
+        return mail;
+    }
 
+    private void reject(QuarantinedMail mail, RejectQuarantineRequest request, UserContext user) {
         String rejectedBy = request.getRejectedBy() != null
                 ? request.getRejectedBy()
                 : user.getUserId();
@@ -55,9 +90,5 @@ public class RejectQuarantineUseCase {
 
         mail.reject(rejectedBy, request.getComment());
         quarantineRepository.save(mail);
-
-        log.info("User [{}] rejected quarantined mail: {}", user.getUserId(), id);
-
-        return mapper.toResponse(mail);
     }
 }

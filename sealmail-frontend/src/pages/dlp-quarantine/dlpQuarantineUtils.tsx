@@ -31,6 +31,9 @@ export const isDlpQuarantineActionKey = (key: string): key is DlpQuarantineActio
 export const canRelease = (record: QuarantineItem) =>
   record.status === 'QUARANTINED' && record.canRelease !== false;
 
+export const canReject = (record: QuarantineItem) =>
+  record.status === 'QUARANTINED';
+
 export const getActionItems = (
   record: QuarantineItem,
   releaseDisabled: boolean,

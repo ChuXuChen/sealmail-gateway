@@ -1,7 +1,10 @@
 package com.sealmail.app.usecase.quarantine;
 
 import com.sealmail.app.dto.request.ReleaseQuarantineRequest;
+import com.sealmail.app.dto.response.BatchOperationItemResponse;
+import com.sealmail.app.dto.response.BatchOperationResponse;
 import com.sealmail.app.dto.response.QuarantineItemResponse;
+import com.sealmail.app.exception.AppException;
 import com.sealmail.app.exception.QuarantineStateException;
 import com.sealmail.app.exception.ResourceNotFoundException;
 import com.sealmail.app.mapper.QuarantineDtoMapper;
@@ -23,6 +26,7 @@ import org.springframework.transaction.support.TransactionOperations;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.Instant;
+import java.util.List;
 
 @Service
 @Transactional(readOnly = true)
@@ -58,6 +62,22 @@ public class ReleaseQuarantineUseCase {
     }
 
     @Transactional(propagation = Propagation.NOT_SUPPORTED)
+    public BatchOperationResponse batchRelease(
+            List<String> ids,
+            ReleaseQuarantineRequest request,
+            UserContext user) {
+
+        permissionChecker.checkCanManageQuarantine(user);
+        ReleaseQuarantineRequest effectiveRequest = request != null
+                ? request
+                : new ReleaseQuarantineRequest();
+        List<String> requestedIds = ids != null ? ids : List.of();
+        return BatchOperationResponse.of(requestedIds.stream()
+                .map(id -> releaseOne(id, effectiveRequest, user))
+                .toList());
+    }
+
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
     public QuarantineItemResponse execute(
             String id,
             ReleaseQuarantineRequest request,
@@ -84,6 +104,26 @@ public class ReleaseQuarantineUseCase {
         log.info("User [{}] released quarantined mail: {}", user.getUserId(), id);
 
         return mapper.toResponse(released);
+    }
+
+    private BatchOperationItemResponse releaseOne(String id,
+                                                  ReleaseQuarantineRequest request,
+                                                  UserContext user) {
+        try {
+            execute(id, request, user);
+            return BatchOperationItemResponse.success(id);
+        } catch (AppException e) {
+            if (isAuthorizationFailure(e)) {
+                throw e;
+            }
+            return BatchOperationItemResponse.failure(id, e.getCode(), e.getMessage());
+        } catch (RuntimeException e) {
+            return BatchOperationItemResponse.failure(id, "INTERNAL_ERROR", e.getMessage());
+        }
+    }
+
+    private boolean isAuthorizationFailure(AppException e) {
+        return "ACCESS_DENIED".equals(e.getCode()) || "UNAUTHORIZED".equals(e.getCode());
     }
 
     private PendingRelease beginRelease(String id, ReleaseQuarantineRequest effectiveRequest, UserContext user) {

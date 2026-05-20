@@ -8,12 +8,12 @@ import com.sealmail.app.dto.response.GmEdgePolicyResponse;
 import com.sealmail.app.dto.response.QuarantinePolicyResponse;
 import com.sealmail.app.dto.response.RelayPolicyResponse;
 import com.sealmail.app.dto.response.SmimeSuitePolicyResponse;
-import com.sealmail.app.exception.BusinessException;
 import com.sealmail.app.security.UserContext;
 import com.sealmail.domain.config.GmEdgePolicyPort;
 import com.sealmail.domain.config.QuarantinePolicyPort;
 import com.sealmail.domain.config.RelayPolicyPort;
 import com.sealmail.domain.config.SmimeSuitePolicyPort;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -37,51 +37,51 @@ public class ManageRuntimePolicyUseCase {
         this.smimeSuitePolicyPort = smimeSuitePolicyPort;
     }
 
+    @PreAuthorize("@appPermissionAuthorizer.canManageRuntimePolicy(#user)")
     @Transactional(readOnly = true)
     public RelayPolicyResponse getRelayPolicy(UserContext user) {
-        requireAdmin(user, "只有管理员可以查看 Relay 策略");
         return toRelayResponse(relayPolicyPort.getSettings());
     }
 
+    @PreAuthorize("@appPermissionAuthorizer.canManageRuntimePolicy(#user)")
     @Transactional
     public RelayPolicyResponse updateRelayPolicy(RelayPolicyRequest request, UserContext user) {
-        requireAdmin(user, "只有管理员可以更新 Relay 策略");
         return toRelayResponse(relayPolicyPort.updateSettings(toRelayUpdate(request)));
     }
 
+    @PreAuthorize("@appPermissionAuthorizer.canManageRuntimePolicy(#user)")
     @Transactional(readOnly = true)
     public QuarantinePolicyResponse getQuarantinePolicy(UserContext user) {
-        requireAdmin(user, "只有管理员可以查看隔离策略");
         return toQuarantineResponse(quarantinePolicyPort.getSettings());
     }
 
+    @PreAuthorize("@appPermissionAuthorizer.canManageRuntimePolicy(#user)")
     @Transactional
     public QuarantinePolicyResponse updateQuarantinePolicy(QuarantinePolicyRequest request, UserContext user) {
-        requireAdmin(user, "只有管理员可以更新隔离策略");
         return toQuarantineResponse(quarantinePolicyPort.updateSettings(toQuarantineUpdate(request)));
     }
 
+    @PreAuthorize("@appPermissionAuthorizer.canManageRuntimePolicy(#user)")
     @Transactional(readOnly = true)
     public GmEdgePolicyResponse getGmEdgePolicy(UserContext user) {
-        requireAdmin(user, "只有管理员可以查看国密 Edge 策略");
         return toGmEdgeResponse(gmEdgePolicyPort.getSettings());
     }
 
+    @PreAuthorize("@appPermissionAuthorizer.canManageRuntimePolicy(#user)")
     @Transactional
     public GmEdgePolicyResponse updateGmEdgePolicy(GmEdgePolicyRequest request, UserContext user) {
-        requireAdmin(user, "只有管理员可以更新国密 Edge 策略");
         return toGmEdgeResponse(gmEdgePolicyPort.updateSettings(toGmEdgeUpdate(request)));
     }
 
+    @PreAuthorize("@appPermissionAuthorizer.canManageRuntimePolicy(#user)")
     @Transactional(readOnly = true)
     public SmimeSuitePolicyResponse getSmimeSuitePolicy(UserContext user) {
-        requireAdmin(user, "只有管理员可以查看 S/MIME 套件策略");
         return toSmimeSuiteResponse(smimeSuitePolicyPort.getSettings());
     }
 
+    @PreAuthorize("@appPermissionAuthorizer.canManageRuntimePolicy(#user)")
     @Transactional
     public SmimeSuitePolicyResponse updateSmimeSuitePolicy(SmimeSuitePolicyRequest request, UserContext user) {
-        requireAdmin(user, "只有管理员可以更新 S/MIME 套件策略");
         return toSmimeSuiteResponse(smimeSuitePolicyPort.updateSettings(toSmimeSuiteUpdate(request)));
     }
 
@@ -260,12 +260,6 @@ public class ManageRuntimePolicyUseCase {
                 option.id(),
                 option.displayName(),
                 option.profile());
-    }
-
-    private void requireAdmin(UserContext user, String message) {
-        if (user == null || !user.isAdmin()) {
-            throw BusinessException.forbidden(message);
-        }
     }
 
     private boolean hasText(String value) {

@@ -15,7 +15,10 @@ import {
   SectionPanel,
   StatusSummary,
 } from '../components/Page';
-import { DlpSelectionModals } from './dlp-selection/DlpSelectionForms';
+import {
+  DlpPolicySimulationPanel,
+  DlpSelectionModals,
+} from './dlp-selection/DlpSelectionForms';
 import {
   DlpLegacySelectionTable,
   DlpPolicyTable,
@@ -59,6 +62,13 @@ const DlpSelection: React.FC = () => {
           onEdit={dlp.showEditPolicy}
           onRemove={dlp.removePolicy}
         />
+      </SectionPanel>
+
+      <SectionPanel
+        title="策略仿真"
+        description="用样本邮件验证单条策略的适用范围、规则组命中和最终执行动作。"
+      >
+        <DlpPolicySimulationPanel dlp={dlp} />
       </SectionPanel>
 
       <SectionPanel

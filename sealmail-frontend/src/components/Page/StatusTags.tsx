@@ -1,7 +1,7 @@
 import React from 'react';
 import { CheckCircleOutlined, CloseCircleOutlined } from '@ant-design/icons';
 import { Space, Tag } from 'antd';
-import type { Certificate, DlpAction, QuarantineItem } from '../../types';
+import type { Certificate, DlpAction, DlpUbaSenderRisk, QuarantineItem } from '../../types';
 
 const reasonColors: Record<string, string> = {
   POLICY_VIOLATION: 'error',
@@ -55,6 +55,18 @@ const quarantineStatusLabels: Record<QuarantineItem['status'], string> = {
   REJECTED: '已拒绝',
 };
 
+const dlpRiskColors: Record<DlpUbaSenderRisk['riskLevel'], string> = {
+  LOW: 'success',
+  MEDIUM: 'warning',
+  HIGH: 'error',
+};
+
+const dlpRiskLabels: Record<DlpUbaSenderRisk['riskLevel'], string> = {
+  LOW: '低',
+  MEDIUM: '中',
+  HIGH: '高',
+};
+
 export const ReasonTag: React.FC<{ reason?: string }> = ({ reason }) => (
   <Tag color={reason ? reasonColors[reason] || 'default' : 'default'}>
     {reason ? reasonLabels[reason] || reason : '未知'}
@@ -70,6 +82,12 @@ export const QuarantineStatusTag: React.FC<{ status: QuarantineItem['status'] }>
 export const DlpActionTag: React.FC<{ action: string }> = ({ action }) => (
   <Tag color={dlpActionColors[action as DlpAction] || 'default'}>
     {dlpActionLabels[action as DlpAction] || action}
+  </Tag>
+);
+
+export const DlpRiskTag: React.FC<{ risk?: DlpUbaSenderRisk['riskLevel'] | string }> = ({ risk }) => (
+  <Tag color={risk ? dlpRiskColors[risk as DlpUbaSenderRisk['riskLevel']] || 'default' : 'default'}>
+    {risk ? dlpRiskLabels[risk as DlpUbaSenderRisk['riskLevel']] || risk : '低'}
   </Tag>
 );
 

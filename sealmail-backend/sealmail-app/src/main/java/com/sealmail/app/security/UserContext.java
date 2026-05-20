@@ -43,6 +43,26 @@ public class UserContext {
         return isAdmin() || isAuditor();
     }
 
+    public boolean canManageQuarantine() {
+        return isAdmin();
+    }
+
+    public boolean canViewQuarantine() {
+        return isAdmin() || isAuditor();
+    }
+
+    public boolean canManageRuntimePolicy() {
+        return isAdmin() || hasRole("RUNTIME_POLICY_ADMIN");
+    }
+
+    public boolean canOperateMailTools() {
+        return isAdmin() || hasRole("MAIL_OPERATOR");
+    }
+
+    public boolean canViewSystemSettings() {
+        return isAdmin() || hasRole("SYSTEM_VIEWER");
+    }
+
     public boolean canManageDomain(String domain) {
         if (isAdmin()) {
             return true;

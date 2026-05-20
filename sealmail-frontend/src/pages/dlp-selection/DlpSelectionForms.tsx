@@ -13,10 +13,15 @@ import {
 } from 'antd';
 import {
   AdvancedSection,
+  DlpActionTag,
   FieldHint,
   SectionPanel,
+  StatusSummary,
 } from '../../components/Page';
+import { DlpEvidenceTable } from '../dlp-patterns/DlpPatternTables';
 import type { useDlpSelection } from './useDlpSelection';
+
+const { TextArea } = Input;
 
 type DlpSelectionViewModel = ReturnType<typeof useDlpSelection>;
 
@@ -107,6 +112,65 @@ export const DlpLegacySelectionModal: React.FC<DlpSelectionFormsProps> = ({ dlp 
       <Form.Item className="form-actions"><Space><Button onClick={dlp.closeLegacy}>取消</Button><Button type="primary" htmlType="submit">保存</Button></Space></Form.Item>
     </Form>
   </Modal>
+);
+
+export const DlpPolicySimulationPanel: React.FC<DlpSelectionFormsProps> = ({ dlp }) => (
+  <div className="split-grid">
+    <Form
+      form={dlp.simulationForm}
+      layout="vertical"
+      onFinish={dlp.simulatePolicy}
+      initialValues={{ direction: 'OUTBOUND' }}
+    >
+      <Form.Item name="policyId" label="策略" rules={[{ required: true, message: '请选择策略' }]}>
+        <Select options={dlp.policyOptions} placeholder="选择策略" />
+      </Form.Item>
+      <div className="split-grid">
+        <Form.Item name="direction" label="方向" rules={[{ required: true }]}>
+          <Select options={[{ value: 'OUTBOUND', label: '出站' }, { value: 'INBOUND', label: '入站' }]} />
+        </Form.Item>
+        <Form.Item name="sender" label="发件人">
+          <Input placeholder="sender@example.com" />
+        </Form.Item>
+      </div>
+      <Form.Item name="recipients" label="收件人">
+        <Input placeholder="a@example.com,b@example.net" />
+      </Form.Item>
+      <Form.Item name="subject" label="主题">
+        <Input />
+      </Form.Item>
+      <Form.Item name="body" label="正文">
+        <TextArea rows={7} />
+      </Form.Item>
+      <Form.Item className="form-actions">
+        <Space>
+          <Button onClick={dlp.clearSimulation}>清空</Button>
+          <Button type="primary" htmlType="submit" loading={dlp.simulationRunning} disabled={dlp.policies.length === 0}>运行仿真</Button>
+        </Space>
+      </Form.Item>
+    </Form>
+
+    <div className="flow-stack">
+      {dlp.simulationResult ? (
+        <>
+          <StatusSummary
+            items={[
+              { key: 'matches', label: '命中', value: dlp.simulationResult.matchCount, description: '证据条数', tone: dlp.simulationResult.matchCount > 0 ? 'warning' : 'success' },
+              { key: 'severity', label: '最高级别', value: dlp.simulationResult.maxSeverity, description: '规则严重度' },
+              { key: 'action', label: '执行动作', value: <DlpActionTag action={dlp.simulationResult.action} />, description: dlp.simulationResult.monitorMode ? '监控模式' : '执行模式', tone: dlp.simulationResult.matchCount > 0 ? 'danger' : 'success' },
+              { key: 'duration', label: '扫描耗时', value: `${dlp.simulationResult.scanDurationMs}`, description: '毫秒' },
+            ]}
+          />
+          {dlp.simulationResult.warnings.length > 0 ? (
+            <Alert type="warning" showIcon message="仿真警告" description={dlp.simulationResult.warnings.join('；')} />
+          ) : null}
+          <DlpEvidenceTable data={dlp.simulationResult.evidence} />
+        </>
+      ) : (
+        <Alert message="选择策略并输入样本邮件后运行仿真，结果会显示策略命中、执行动作和脱敏证据。" showIcon type="info" />
+      )}
+    </div>
+  </div>
 );
 
 export const DlpSelectionModals: React.FC<DlpSelectionFormsProps> = ({ dlp }) => (

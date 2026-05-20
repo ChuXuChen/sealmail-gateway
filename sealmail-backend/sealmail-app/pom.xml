@@ -30,6 +30,12 @@
             <artifactId>spring-boot-starter</artifactId>
         </dependency>
 
+        <!-- Method-security annotations live with use cases. -->
+        <dependency>
+            <groupId>org.springframework.security</groupId>
+            <artifactId>spring-security-core</artifactId>
+        </dependency>
+
         <!-- Validation -->
         <dependency>
             <groupId>org.springframework.boot</groupId>

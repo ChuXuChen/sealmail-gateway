@@ -16,13 +16,13 @@ public record SmtpRelayRequest(
         if (connection == null) {
             throw new IllegalArgumentException("SMTP relay connection settings must not be null");
         }
-        if (envelopeFrom == null || envelopeFrom.isBlank()) {
-            throw new IllegalArgumentException("SMTP envelope sender must not be blank");
-        }
+        envelopeFrom = SmtpEnvelopeAddress.requireValid(envelopeFrom, "SMTP envelope sender");
         if (recipients == null || recipients.isEmpty()) {
             throw new IllegalArgumentException("SMTP recipients must not be empty");
         }
-        recipients = List.copyOf(recipients);
+        recipients = recipients.stream()
+                .map(recipient -> SmtpEnvelopeAddress.requireValid(recipient, "SMTP recipient"))
+                .toList();
         if (messageData == null || messageData.length == 0) {
             throw new IllegalArgumentException("SMTP message payload must not be empty");
         }

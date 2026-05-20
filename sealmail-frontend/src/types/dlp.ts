@@ -197,6 +197,20 @@ export interface DlpUbaSenderRisk {
   updatedAt?: string;
 }
 
+export interface BatchOperationItem {
+  id: string;
+  success: boolean;
+  errorCode?: string;
+  message?: string;
+}
+
+export interface BatchOperationResult {
+  requestedCount: number;
+  successCount: number;
+  failureCount: number;
+  items: BatchOperationItem[];
+}
+
 export type CreateDlpPatternRequest = Omit<DlpPattern, 'id' | 'createdAt' | 'updatedAt'>;
 export type UpdateDlpPatternRequest = Partial<CreateDlpPatternRequest>;
 

@@ -16,6 +16,7 @@ import com.sealmail.domain.mailsecurity.MailEnvelope;
 import com.sealmail.domain.policy.DeliveryTransportProfile;
 import com.sealmail.domain.shared.model.EmailAddress;
 import com.sealmail.domain.system.SystemSettingsProvider;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -53,9 +54,9 @@ public class MailTestUseCase {
         this.deliveryRouteResolver = deliveryRouteResolver;
     }
 
+    @PreAuthorize("@appPermissionAuthorizer.canOperateMailTools(#user)")
     @Transactional(readOnly = true)
     public String sendConfigured(SendMailRequest request, UserContext user) {
-        requireAdmin(user);
         try {
             OutboundMailSubmitter.PlainOutboundMailSubmission submission = plainSubmission(request);
             outboundMailSubmitter.submitPlain(submission);
@@ -65,6 +66,7 @@ public class MailTestUseCase {
         }
     }
 
+    @PreAuthorize("@appPermissionAuthorizer.canOperateMailTools(#user)")
     public String sendPlain(SendMailRequest request, UserContext user) {
         return sendConfigured(request, user);
     }
@@ -78,9 +80,9 @@ public class MailTestUseCase {
         );
     }
 
+    @PreAuthorize("@appPermissionAuthorizer.canOperateMailTools(#user)")
     @Transactional(readOnly = true)
     public String sendProtected(SendMailRequest request, UserContext user) {
-        requireAdmin(user);
         try {
             byte[] mailContent = mailMessageComposer.composeText(draft(request));
 
@@ -139,9 +141,9 @@ public class MailTestUseCase {
         }
     }
 
+    @PreAuthorize("@appPermissionAuthorizer.canOperateMailTools(#user)")
     @Transactional(readOnly = true)
     public String testSmtpConfig(UserContext user) {
-        requireAdmin(user);
         SystemSettingsProvider.SystemSettingsSnapshot settings = systemSettingsProvider.snapshot();
         StringBuilder result = new StringBuilder();
         if (settings.delivery().postfix().enabled()) {
@@ -180,9 +182,9 @@ public class MailTestUseCase {
 	        return "SMTP配置测试结果:\n" + result;
 	    }
 
+    @PreAuthorize("@appPermissionAuthorizer.canOperateMailTools(#user)")
     @Transactional(readOnly = true)
     public String probeCurrentRoute(SendMailRequest request, UserContext user) {
-        requireAdmin(user);
         List<EmailAddress> recipients = request.to().stream().map(EmailAddress::new).toList();
         return deliveryRouteResolver.resolve(recipients)
                 .map(route -> {
@@ -205,12 +207,6 @@ public class MailTestUseCase {
                 request.to().stream().map(EmailAddress::new).toList(),
                 request.subject(),
                 request.content());
-    }
-
-    private void requireAdmin(UserContext user) {
-        if (user == null || !user.isAdmin()) {
-            throw BusinessException.forbidden("只有管理员可以使用邮件测试工具");
-        }
     }
 
     private void appendProbeResult(StringBuilder result, String label, SmtpRelayProbe.SmtpConnectionSettings connection) {

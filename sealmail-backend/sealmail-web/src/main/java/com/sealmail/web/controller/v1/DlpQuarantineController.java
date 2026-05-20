@@ -6,6 +6,7 @@ import com.sealmail.app.dto.request.DlpFalsePositiveRequest;
 import com.sealmail.app.dto.request.RejectQuarantineRequest;
 import com.sealmail.app.dto.request.RepairQuarantineReleaseRequest;
 import com.sealmail.app.dto.request.ReleaseQuarantineRequest;
+import com.sealmail.app.dto.response.BatchOperationResponse;
 import com.sealmail.app.dto.response.DlpEvidenceResponse;
 import com.sealmail.app.dto.response.QuarantineItemResponse;
 import com.sealmail.app.dto.response.QuarantineStatsResponse;
@@ -150,14 +151,14 @@ public class DlpQuarantineController {
 
     @PostMapping("/batch-release")
     @Operation(summary = "批量放行 DLP 隔离队列邮件")
-    public ApiResponse<Void> batchRelease(
+    public ApiResponse<BatchOperationResponse> batchRelease(
             @RequestBody List<String> ids,
             @AuthenticationPrincipal UserContext user) {
 
-        for (String id : ids) {
-            releaseQuarantineUseCase.execute(id, new ReleaseQuarantineRequest(), user);
-        }
-        return ApiResponse.ok();
+        return ApiResponse.ok(releaseQuarantineUseCase.batchRelease(
+                ids,
+                new ReleaseQuarantineRequest(),
+                user));
     }
 
     @PostMapping("/batch-reject")
@@ -166,10 +167,7 @@ public class DlpQuarantineController {
             @RequestBody List<String> ids,
             @AuthenticationPrincipal UserContext user) {
 
-        RejectQuarantineRequest request = new RejectQuarantineRequest();
-        for (String id : ids) {
-            rejectQuarantineUseCase.execute(id, request, user);
-        }
+        rejectQuarantineUseCase.batchReject(ids, new RejectQuarantineRequest(), user);
         return ApiResponse.ok();
     }
 }

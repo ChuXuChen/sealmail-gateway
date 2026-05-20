@@ -1,44 +1,19 @@
 package com.sealmail.infra.mail.relay;
 
 import com.sealmail.domain.mail.spi.SmtpRelayProbe;
-import com.sealmail.domain.policy.DeliveryTransportProfile;
 import com.sealmail.infra.config.properties.StandardTlsProperties;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
-import javax.net.ssl.SSLContext;
-import javax.net.ssl.SSLPeerUnverifiedException;
-import javax.net.ssl.SSLSession;
-import javax.net.ssl.SSLSocket;
-import javax.net.ssl.SSLSocketFactory;
-import javax.net.ssl.TrustManager;
-import javax.net.ssl.TrustManagerFactory;
-import javax.net.ssl.X509TrustManager;
-import java.io.BufferedInputStream;
-import java.io.BufferedOutputStream;
-import java.io.ByteArrayOutputStream;
-import java.io.EOFException;
-import java.io.FileInputStream;
 import java.io.IOException;
-import java.io.InputStream;
-import java.io.OutputStream;
-import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.Socket;
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
-import java.security.KeyStore;
-import java.security.SecureRandom;
-import java.security.cert.CertificateEncodingException;
-import java.security.cert.X509Certificate;
-import java.util.ArrayList;
-import java.util.Base64;
-import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Locale;
-import java.util.Set;
+
+import static com.sealmail.infra.mail.relay.SmtpProtocolSupport.ensureExpected;
+import static com.sealmail.infra.mail.relay.SmtpProtocolSupport.resolveClientName;
+import static com.sealmail.infra.mail.relay.SmtpProtocolSupport.supportsCapability;
 
 /**
  * Minimal SMTP relay client that avoids Jakarta Mail runtime dependencies.
@@ -48,14 +23,12 @@ public class SmtpRelayClient implements SmtpRelayProbe {
 
     private static final Logger log = LoggerFactory.getLogger(SmtpRelayClient.class);
 
-    private final StandardTlsProperties standardTlsProperties;
-    private final SSLSocketFactory sslSocketFactory;
+    private final SmtpTlsSupport tlsSupport;
+    private final SmtpAuthHandler authHandler;
 
     public SmtpRelayClient(StandardTlsProperties standardTlsProperties) {
-        this.standardTlsProperties = standardTlsProperties != null
-                ? standardTlsProperties
-                : new StandardTlsProperties();
-        this.sslSocketFactory = createSslSocketFactory(this.standardTlsProperties);
+        this.tlsSupport = new SmtpTlsSupport(standardTlsProperties);
+        this.authHandler = new SmtpAuthHandler();
     }
 
     public void send(SmtpRelayRequest request) throws SmtpRelayException {
@@ -149,7 +122,7 @@ public class SmtpRelayClient implements SmtpRelayProbe {
                 throw new SmtpRelayException("SMTP AUTH requires an established TLS/TLCP channel");
             }
             stage(probe, "AUTH");
-            authenticate(session, connection, capabilities);
+            authHandler.authenticate(session, connection, capabilities);
             authenticated = true;
         }
         if (probe != null) {
@@ -188,7 +161,7 @@ public class SmtpRelayClient implements SmtpRelayProbe {
         if (connection.transportProfile().usesGmTls()) {
             throw new SmtpRelayException("GM STARTTLS/TLCP probing requires SealMail Edge/Kona");
         }
-        TlsInfo tlsInfo = session.upgradeToTls(connection.host(), connection.port());
+        SmtpTlsInfo tlsInfo = session.upgradeToTls(connection.host(), connection.port(), tlsSupport);
         markTls(probe, tlsInfo);
 
         stage(probe, "EHLO_AFTER_TLS");
@@ -199,61 +172,6 @@ public class SmtpRelayClient implements SmtpRelayProbe {
             probe.capabilities = tlsCapabilities;
         }
         return tlsCapabilities;
-    }
-
-    private void authenticate(SmtpSession session,
-                              SmtpRelayConnectionSettings connection,
-                              List<String> capabilities)
-            throws IOException, SmtpRelayException {
-        Set<String> authMechanisms = advertisedAuthMechanisms(capabilities);
-        SmtpRelayException loginFailure = null;
-
-        if (authMechanisms.isEmpty() || authMechanisms.contains("LOGIN")) {
-            try {
-                authenticateLogin(session, connection);
-                return;
-            } catch (SmtpRelayException e) {
-                loginFailure = e;
-            }
-        }
-
-        if (authMechanisms.isEmpty() || authMechanisms.contains("PLAIN")) {
-            try {
-                authenticatePlain(session, connection);
-                return;
-            } catch (SmtpRelayException e) {
-                if (loginFailure == null) {
-                    loginFailure = e;
-                }
-            }
-        }
-
-        if (!authMechanisms.isEmpty()) {
-            throw new SmtpRelayException("SMTP server does not support usable AUTH mechanisms: " + authMechanisms);
-        }
-        throw loginFailure != null ? loginFailure : new SmtpRelayException("SMTP authentication failed");
-    }
-
-    private void authenticateLogin(SmtpSession session, SmtpRelayConnectionSettings connection)
-            throws IOException, SmtpRelayException {
-        SmtpResponse start = session.command("AUTH LOGIN");
-        if (start.code() == 503) {
-            return;
-        }
-        ensureExpected(start, "AUTH LOGIN", 334);
-        ensureExpected(session.command(base64(connection.username())), "AUTH LOGIN username", 334);
-        ensureExpected(session.command(base64(connection.password() == null ? "" : connection.password())),
-                "AUTH LOGIN password", 235);
-    }
-
-    private void authenticatePlain(SmtpSession session, SmtpRelayConnectionSettings connection)
-            throws IOException, SmtpRelayException {
-        String payload = "\0" + connection.username() + "\0" + (connection.password() == null ? "" : connection.password());
-        SmtpResponse response = session.command("AUTH PLAIN " + base64(payload));
-        if (response.code() == 503) {
-            return;
-        }
-        ensureExpected(response, "AUTH PLAIN", 235);
     }
 
     private SmtpSession openSession(SmtpRelayConnectionSettings connection, ProbeState probe)
@@ -272,42 +190,10 @@ public class SmtpRelayClient implements SmtpRelayProbe {
             if (connection.transportProfile().usesGmTls()) {
                 throw new SmtpRelayException("GM implicit TLS/TLCP probing requires SealMail Edge/Kona");
             }
-            TlsInfo tlsInfo = session.upgradeToTls(connection.host(), connection.port());
+            SmtpTlsInfo tlsInfo = session.upgradeToTls(connection.host(), connection.port(), tlsSupport);
             markTls(probe, tlsInfo);
         }
         return session;
-    }
-
-    private static void ensureExpected(SmtpResponse response, String operation, int... expectedCodes)
-            throws SmtpRelayException {
-        for (int expectedCode : expectedCodes) {
-            if (response.code() == expectedCode) {
-                return;
-            }
-        }
-        throw new SmtpRelayException(operation + " failed: " + response.singleLine());
-    }
-
-    private static boolean supportsCapability(List<String> capabilities, String capability) {
-        String target = capability.toUpperCase(Locale.ROOT);
-        return capabilities.stream()
-                .map(line -> line.toUpperCase(Locale.ROOT))
-                .anyMatch(line -> line.equals(target) || line.startsWith(target + " "));
-    }
-
-    private static Set<String> advertisedAuthMechanisms(List<String> capabilities) {
-        Set<String> mechanisms = new LinkedHashSet<>();
-        for (String capability : capabilities) {
-            String upper = capability.toUpperCase(Locale.ROOT);
-            if (!upper.startsWith("AUTH")) {
-                continue;
-            }
-            String[] parts = upper.split("\\s+");
-            for (int i = 1; i < parts.length; i++) {
-                mechanisms.add(parts[i]);
-            }
-        }
-        return mechanisms;
     }
 
     private static void stage(ProbeState probe, String stage) {
@@ -316,7 +202,7 @@ public class SmtpRelayClient implements SmtpRelayProbe {
         }
     }
 
-    private static void markTls(ProbeState probe, TlsInfo tlsInfo) {
+    private static void markTls(ProbeState probe, SmtpTlsInfo tlsInfo) {
         if (probe == null || tlsInfo == null) {
             return;
         }
@@ -324,54 +210,6 @@ public class SmtpRelayClient implements SmtpRelayProbe {
         probe.protocol = tlsInfo.protocol();
         probe.cipher = tlsInfo.cipher();
         probe.peerCertificateFingerprint = tlsInfo.peerCertificateFingerprint();
-    }
-
-    private static TlsInfo tlsInfo(SSLSession session) {
-        return new TlsInfo(
-                session.getProtocol(),
-                session.getCipherSuite(),
-                peerFingerprint(session)
-        );
-    }
-
-    private static String peerFingerprint(SSLSession session) {
-        try {
-            java.security.cert.Certificate[] certificates = session.getPeerCertificates();
-            if (certificates.length == 0 || !(certificates[0] instanceof X509Certificate certificate)) {
-                return null;
-            }
-            byte[] digest = MessageDigest.getInstance("SHA-256").digest(certificate.getEncoded());
-            return hex(digest);
-        } catch (SSLPeerUnverifiedException | CertificateEncodingException | NoSuchAlgorithmException e) {
-            return null;
-        }
-    }
-
-    private static String hex(byte[] bytes) {
-        StringBuilder builder = new StringBuilder(bytes.length * 2);
-        for (byte b : bytes) {
-            builder.append(String.format("%02X", b));
-        }
-        return builder.toString();
-    }
-
-    private static String resolveClientName() {
-        try {
-            String hostName = InetAddress.getLocalHost().getHostName();
-            if (hostName != null && !hostName.isBlank()) {
-                return hostName.replaceAll("[^A-Za-z0-9.-]", "-");
-            }
-        } catch (Exception ignored) {
-            // Fall back to a stable EHLO name.
-        }
-        return "sealmail.local";
-    }
-
-    private static String base64(String value) {
-        return Base64.getEncoder().encodeToString(value.getBytes(StandardCharsets.UTF_8));
-    }
-
-    private record TlsInfo(String protocol, String cipher, String peerCertificateFingerprint) {
     }
 
     private record SessionState(List<String> capabilities, boolean authenticated) {
@@ -423,221 +261,4 @@ public class SmtpRelayClient implements SmtpRelayProbe {
         }
     }
 
-    private record SmtpResponse(int code, List<String> lines, boolean ehloSucceeded) {
-
-        private SmtpResponse(int code, List<String> lines) {
-            this(code, lines, false);
-        }
-
-        private SmtpResponse withEhloSucceeded(boolean value) {
-            return new SmtpResponse(code, lines, value);
-        }
-
-        String singleLine() {
-            return code + " " + String.join(" | ", lines);
-        }
-    }
-
-    private final class SmtpSession implements AutoCloseable {
-
-        private Socket socket;
-        private InputStream input;
-        private OutputStream output;
-
-        private SmtpSession(Socket socket) throws IOException {
-            this.socket = socket;
-            this.input = new BufferedInputStream(socket.getInputStream());
-            this.output = new BufferedOutputStream(socket.getOutputStream());
-        }
-
-        private TlsInfo upgradeToTls(String host, int port) throws IOException {
-            SSLSocket sslSocket = (SSLSocket) sslSocketFactory
-                    .createSocket(socket, host, port, true);
-            sslSocket.setUseClientMode(true);
-            sslSocket.setSoTimeout(socket.getSoTimeout());
-            configureStandardTlsSocket(sslSocket);
-            sslSocket.startHandshake();
-            replaceSocket(sslSocket);
-            return tlsInfo(sslSocket.getSession());
-        }
-
-        private boolean tlsEstablished() {
-            return socket instanceof SSLSocket;
-        }
-
-        private void replaceSocket(Socket upgradedSocket) throws IOException {
-            this.socket = upgradedSocket;
-            this.input = new BufferedInputStream(upgradedSocket.getInputStream());
-            this.output = new BufferedOutputStream(upgradedSocket.getOutputStream());
-        }
-
-        private SmtpResponse command(String command) throws IOException, SmtpRelayException {
-            output.write(command.getBytes(StandardCharsets.US_ASCII));
-            output.write('\r');
-            output.write('\n');
-            output.flush();
-            return readResponse();
-        }
-
-        private SmtpResponse readResponse() throws IOException, SmtpRelayException {
-            String firstLine = readLine();
-            if (firstLine.length() < 3 || !Character.isDigit(firstLine.charAt(0))
-                    || !Character.isDigit(firstLine.charAt(1))
-                    || !Character.isDigit(firstLine.charAt(2))) {
-                throw new SmtpRelayException("Invalid SMTP response: " + firstLine);
-            }
-
-            int code = Integer.parseInt(firstLine.substring(0, 3));
-            List<String> lines = new ArrayList<>();
-            lines.add(extractText(firstLine));
-
-            if (firstLine.length() > 3 && firstLine.charAt(3) == '-') {
-                while (true) {
-                    String nextLine = readLine();
-                    if (nextLine.length() < 4 || Integer.parseInt(nextLine.substring(0, 3)) != code) {
-                        throw new SmtpRelayException("Invalid SMTP multiline response: " + nextLine);
-                    }
-                    lines.add(extractText(nextLine));
-                    if (nextLine.charAt(3) == ' ') {
-                        break;
-                    }
-                }
-            }
-
-            return new SmtpResponse(code, lines);
-        }
-
-        private void writeData(byte[] data) throws IOException {
-            boolean atLineStart = true;
-            boolean previousWasCarriageReturn = false;
-
-            for (byte datum : data) {
-                int unsigned = datum & 0xff;
-                if (atLineStart && unsigned == '.') {
-                    output.write('.');
-                }
-                if (unsigned == '\r') {
-                    output.write('\r');
-                    previousWasCarriageReturn = true;
-                    atLineStart = false;
-                    continue;
-                }
-                if (unsigned == '\n') {
-                    if (!previousWasCarriageReturn) {
-                        output.write('\r');
-                    }
-                    output.write('\n');
-                    previousWasCarriageReturn = false;
-                    atLineStart = true;
-                    continue;
-                }
-
-                output.write(unsigned);
-                previousWasCarriageReturn = false;
-                atLineStart = false;
-            }
-
-            if (!atLineStart) {
-                output.write('\r');
-                output.write('\n');
-            }
-            output.write('.');
-            output.write('\r');
-            output.write('\n');
-            output.flush();
-        }
-
-        private void quit() {
-            try {
-                command("QUIT");
-            } catch (Exception e) {
-                log.debug("Failed to send QUIT to downstream relay: {}", e.getMessage());
-            }
-        }
-
-        private static String extractText(String line) {
-            return line.length() <= 4 ? "" : line.substring(4).trim();
-        }
-
-        private String readLine() throws IOException {
-            ByteArrayOutputStream buffer = new ByteArrayOutputStream();
-            while (true) {
-                int next = input.read();
-                if (next == -1) {
-                    if (buffer.size() == 0) {
-                        throw new EOFException("SMTP server closed the connection");
-                    }
-                    break;
-                }
-                if (next == '\n') {
-                    break;
-                }
-                if (next != '\r') {
-                    buffer.write(next);
-                }
-            }
-            return buffer.toString(StandardCharsets.US_ASCII);
-        }
-
-        @Override
-        public void close() throws IOException {
-            socket.close();
-        }
-    }
-
-    private void configureStandardTlsSocket(SSLSocket sslSocket) {
-        List<String> protocols = standardTlsProperties.getProtocols();
-        if (protocols != null && !protocols.isEmpty()) {
-            sslSocket.setEnabledProtocols(protocols.toArray(String[]::new));
-        }
-        List<String> cipherSuites = standardTlsProperties.getCipherSuites();
-        if (cipherSuites != null && !cipherSuites.isEmpty()) {
-            sslSocket.setEnabledCipherSuites(cipherSuites.toArray(String[]::new));
-        }
-    }
-
-    private static SSLSocketFactory createSslSocketFactory(StandardTlsProperties properties) {
-        try {
-            SSLContext context = SSLContext.getInstance("TLS");
-            context.init(null, trustManagers(properties), new SecureRandom());
-            return context.getSocketFactory();
-        } catch (Exception e) {
-            throw new IllegalStateException("Failed to initialize standard TLS context: " + e.getMessage(), e);
-        }
-    }
-
-    private static TrustManager[] trustManagers(StandardTlsProperties properties) throws Exception {
-        if (!properties.isVerifyPeerCertificate() || properties.isTrustAll()) {
-            return new TrustManager[]{new TrustAllManager()};
-        }
-        String trustStorePath = properties.getTrustStorePath();
-        if (trustStorePath == null || trustStorePath.isBlank()) {
-            TrustManagerFactory factory = TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm());
-            factory.init((KeyStore) null);
-            return factory.getTrustManagers();
-        }
-
-        KeyStore trustStore = KeyStore.getInstance(properties.getTrustStoreType());
-        try (InputStream input = new FileInputStream(trustStorePath)) {
-            trustStore.load(input, properties.getTrustStorePassword().toCharArray());
-        }
-        TrustManagerFactory factory = TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm());
-        factory.init(trustStore);
-        return factory.getTrustManagers();
-    }
-
-    private static final class TrustAllManager implements X509TrustManager {
-        @Override
-        public void checkClientTrusted(X509Certificate[] chain, String authType) {
-        }
-
-        @Override
-        public void checkServerTrusted(X509Certificate[] chain, String authType) {
-        }
-
-        @Override
-        public X509Certificate[] getAcceptedIssuers() {
-            return new X509Certificate[0];
-        }
-    }
 }

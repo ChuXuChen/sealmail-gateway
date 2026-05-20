@@ -1,6 +1,5 @@
 package com.sealmail.web.controller.v1;
 
-import com.sealmail.app.exception.BusinessException;
 import com.sealmail.app.security.UserContext;
 import com.sealmail.app.usecase.mail.MailTestUseCase;
 import com.sealmail.web.util.ApiResponse;
@@ -47,7 +46,6 @@ public class MailTestController {
     @Operation(summary = "按当前配置发送测试邮件", description = "不强制 S/MIME；签名、加密与投递路由由当前域名配置决定")
     public ApiResponse<String> sendTestMail(@Valid @RequestBody SendMailWebRequest request,
                                             @AuthenticationPrincipal UserContext user) {
-        requireAdmin(user);
         return ApiResponse.ok(mailTestUseCase.sendConfigured(request.toAppRequest(), user));
     }
 
@@ -55,7 +53,6 @@ public class MailTestController {
     @Operation(summary = "发送受保护测试邮件", description = "高级入口：强制 S/MIME 签名和加密")
     public ApiResponse<String> sendEncryptedMail(@Valid @RequestBody SendMailWebRequest request,
                                                  @AuthenticationPrincipal UserContext user) {
-        requireAdmin(user);
         return ApiResponse.ok(mailTestUseCase.sendProtected(request.toAppRequest(), user));
     }
 
@@ -63,7 +60,6 @@ public class MailTestController {
     @Operation(summary = "探测当前投递路由", description = "使用 host + DeliveryTransportProfile 探测当前收件人域投递路由")
     public ApiResponse<String> probeCurrentRoute(@Valid @RequestBody SendMailWebRequest request,
                                                  @AuthenticationPrincipal UserContext user) {
-        requireAdmin(user);
         return ApiResponse.ok(mailTestUseCase.probeCurrentRoute(request.toAppRequest(), user));
     }
 
@@ -71,12 +67,6 @@ public class MailTestController {
     @Operation(summary = "测试SMTP配置", description = "测试SMTP配置连接")
     public ApiResponse<String> testSmtpConfig(@AuthenticationPrincipal UserContext user) {
         return ApiResponse.ok(mailTestUseCase.testSmtpConfig(user));
-    }
-
-    private void requireAdmin(UserContext user) {
-        if (user == null || !user.isAdmin()) {
-            throw BusinessException.forbidden("只有管理员可以使用邮件测试工具");
-        }
     }
 
 }

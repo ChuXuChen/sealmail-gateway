@@ -5,6 +5,7 @@ import { getApiErrorMessage } from '../../api/errors';
 import type {
   DlpPolicy,
   DlpPolicyRequest,
+  DlpEvaluation,
   DlpRule,
   DlpRuleGroup,
   DlpRuleGroupRequest,
@@ -15,6 +16,7 @@ import type {
 import type {
   DlpLegacySelectionFormValues,
   DlpPolicyFormValues,
+  DlpPolicySimulationFormValues,
   DlpRuleGroupFormValues,
 } from './dlpSelectionUtils';
 
@@ -30,11 +32,14 @@ export const useDlpSelection = () => {
   const [editingGroup, setEditingGroup] = useState<DlpRuleGroup | null>(null);
   const [editingPolicy, setEditingPolicy] = useState<DlpPolicy | null>(null);
   const [editingSelection, setEditingSelection] = useState<DlpSelection | null>(null);
+  const [simulationResult, setSimulationResult] = useState<DlpEvaluation | null>(null);
+  const [simulationRunning, setSimulationRunning] = useState(false);
   const [scopeType, setScopeType] = useState<DlpScopeType>('GLOBAL');
   const [patternMode, setPatternMode] = useState<'ALL' | 'SELECTED'>('ALL');
   const [groupForm] = Form.useForm<DlpRuleGroupFormValues>();
   const [policyForm] = Form.useForm<DlpPolicyFormValues>();
   const [legacyForm] = Form.useForm<DlpLegacySelectionFormValues>();
+  const [simulationForm] = Form.useForm<DlpPolicySimulationFormValues>();
 
   const ruleOptions = useMemo(() => rules.map((rule) => ({
     label: `${rule.name} · ${rule.type}`,
@@ -45,6 +50,11 @@ export const useDlpSelection = () => {
     label: `${group.name} (${group.ruleIds.length})`,
     value: group.id,
   })), [groups]);
+
+  const policyOptions = useMemo(() => policies.map((policy) => ({
+    label: `${policy.name} · ${policy.mode}`,
+    value: policy.id,
+  })), [policies]);
 
   const groupById = useMemo(() => new Map(groups.map((group) => [group.id, group])), [groups]);
 
@@ -174,6 +184,38 @@ export const useDlpSelection = () => {
     }
   }, [loadData]);
 
+  const simulatePolicy = useCallback(async (values: DlpPolicySimulationFormValues) => {
+    if (!values.policyId) {
+      message.warning('请选择要仿真的策略');
+      return;
+    }
+    const recipients = (values.recipients || '')
+      .split(',')
+      .map((recipient) => recipient.trim())
+      .filter(Boolean);
+    setSimulationRunning(true);
+    try {
+      const result = await dlpApi.simulatePolicy(values.policyId, {
+        body: values.body,
+        direction: values.direction,
+        recipients,
+        sender: values.sender,
+        subject: values.subject,
+      });
+      setSimulationResult(result);
+    } catch (error) {
+      message.error(getApiErrorMessage(error, '策略仿真失败'));
+    } finally {
+      setSimulationRunning(false);
+    }
+  }, []);
+
+  const clearSimulation = useCallback(() => {
+    simulationForm.resetFields();
+    simulationForm.setFieldsValue({ direction: 'OUTBOUND' });
+    setSimulationResult(null);
+  }, [simulationForm]);
+
   const showCreateLegacy = useCallback(() => {
     setEditingSelection(null);
     setScopeType('GLOBAL');
@@ -255,6 +297,7 @@ export const useDlpSelection = () => {
     loading,
     patternMode,
     policies,
+    policyOptions,
     policyForm,
     policyOpen,
     removeGroup,
@@ -266,6 +309,9 @@ export const useDlpSelection = () => {
     savePolicy,
     scopeType,
     selections,
+    simulationForm,
+    simulationResult,
+    simulationRunning,
     setPatternMode,
     setScopeType,
     showCreateGroup,
@@ -274,6 +320,8 @@ export const useDlpSelection = () => {
     showEditGroup,
     showEditLegacy,
     showEditPolicy,
+    simulatePolicy,
     unboundGroupCount,
+    clearSimulation,
   };
 };
