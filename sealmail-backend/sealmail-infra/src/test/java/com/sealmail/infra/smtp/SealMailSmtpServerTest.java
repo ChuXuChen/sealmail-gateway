@@ -12,6 +12,7 @@ import com.sealmail.infra.mail.pipeline.MailFlowErrorHandlingState;
 import org.junit.jupiter.api.Test;
 import org.springframework.messaging.MessageChannel;
 import org.springframework.messaging.MessageDeliveryException;
+import org.subethamail.smtp.util.EmailUtils;
 
 import java.time.Instant;
 import java.util.List;
@@ -20,6 +21,7 @@ import java.util.Optional;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -146,6 +148,20 @@ class SealMailSmtpServerTest {
 
         assertThrows(MessageDeliveryException.class,
                 () -> server.dispatchContentFilterMail("Subject: T\r\n\r\nBody".getBytes(), envelope));
+    }
+
+    @Test
+    void normalizesSmtpPathAndParametersBeforeEmailValidation() {
+        assertEquals("alice@example.com", SealMailSmtpServer.normalizeSmtpMailbox("<alice@example.com>"));
+        assertEquals("alice@example.com", SealMailSmtpServer.normalizeSmtpMailbox("<alice@example.com> SIZE=123"));
+        assertEquals("alice@example.com", SealMailSmtpServer.normalizeSmtpMailbox("MAIL FROM:<alice@example.com> SIZE=123"));
+        assertEquals("bob@example.net", SealMailSmtpServer.normalizeSmtpMailbox("RCPT TO:<bob@example.net>"));
+        assertEquals("carol@example.org", SealMailSmtpServer.normalizeSmtpMailbox("carol@example.org BODY=8BITMIME"));
+    }
+
+    @Test
+    void subethaAddressValidationWorksWithJavaMailApiOnlyClasspath() {
+        assertTrue(EmailUtils.isValidEmailAddress("alice@example.com"));
     }
 
     private static SealMailSmtpServer server(DomainConfigRepository domainConfigRepository) {

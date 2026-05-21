@@ -99,13 +99,13 @@ public class SealMailSmtpServer {
 
         @Override
         public void from(String from) {
-            this.from = new EmailAddress(from);
+            this.from = new EmailAddress(normalizeSmtpMailbox(from));
             log.debug("Mail from: {}", from);
         }
 
         @Override
         public void recipient(String recipient) {
-            recipients.add(new EmailAddress(recipient));
+            recipients.add(new EmailAddress(normalizeSmtpMailbox(recipient)));
             log.debug("Mail recipient: {}", recipient);
         }
 
@@ -193,6 +193,30 @@ public class SealMailSmtpServer {
 
     private boolean hasText(String value) {
         return value != null && !value.isBlank();
+    }
+
+    static String normalizeSmtpMailbox(String value) {
+        if (value == null) {
+            return null;
+        }
+        String mailbox = value.trim();
+        if (mailbox.regionMatches(true, 0, "MAIL FROM:", 0, "MAIL FROM:".length())) {
+            mailbox = mailbox.substring("MAIL FROM:".length()).trim();
+        } else if (mailbox.regionMatches(true, 0, "RCPT TO:", 0, "RCPT TO:".length())) {
+            mailbox = mailbox.substring("RCPT TO:".length()).trim();
+        }
+        if (mailbox.startsWith("<")) {
+            int end = mailbox.indexOf('>');
+            if (end > 0) {
+                mailbox = mailbox.substring(1, end).trim();
+            }
+        } else {
+            int parameterStart = mailbox.indexOf(' ');
+            if (parameterStart > 0) {
+                mailbox = mailbox.substring(0, parameterStart).trim();
+            }
+        }
+        return mailbox;
     }
 
     private MailProcessingException findMailProcessingException(Throwable error) {

@@ -60,6 +60,12 @@
                 </exclusion>
             </exclusions>
         </dependency>
+        <!-- SubEthaSMTP 3.x validates SMTP paths with javax.mail.internet.*.
+             Keep the API-only jar to avoid old javax mailcap handlers competing with Jakarta Mail. -->
+        <dependency>
+            <groupId>javax.mail</groupId>
+            <artifactId>javax.mail-api</artifactId>
+        </dependency>
 
         <!-- PostgreSQL -->
         <dependency>
