@@ -365,6 +365,18 @@ origin_from_host() {
   esac
 }
 
+local_tunnel_cors_origins() {
+  frontend_port="$1"
+  origins="http://localhost:$frontend_port,http://127.0.0.1:$frontend_port"
+  if [ "$frontend_port" != "8088" ]; then
+    origins="$origins,http://localhost:8088,http://127.0.0.1:8088"
+  fi
+  if [ "$frontend_port" != "8089" ]; then
+    origins="$origins,http://localhost:8089,http://127.0.0.1:8089"
+  fi
+  printf '%s' "$origins"
+}
+
 crl_base_url_from_host() {
   printf '%s/api/v1/crl/' "$(origin_from_host "$1")"
 }
@@ -440,8 +452,11 @@ generate_or_update_env() {
     set_env_value POSTFIX_HOSTNAME "$(derive_postfix_hostname "$site" "$local_domain")"
     set_env_value SEALMAIL_ADMIN_USER_ID "admin-$site"
     set_env_value SEALMAIL_ADMIN_EMAIL "admin@$local_domain"
-    frontend_port="$(env_value SEALMAIL_FRONTEND_HTTP_PORT 8088)"
-    set_env_value SEALMAIL_CORS_ALLOWED_ORIGINS "http://localhost:$frontend_port,http://127.0.0.1:$frontend_port"
+  fi
+  frontend_port="$(env_value SEALMAIL_FRONTEND_HTTP_PORT 8088)"
+  cors="$(env_value SEALMAIL_CORS_ALLOWED_ORIGINS)"
+  if is_placeholder "$cors" || [ "$cors" = "http://localhost:8088,http://127.0.0.1:8088" ]; then
+    set_env_value SEALMAIL_CORS_ALLOWED_ORIGINS "$(local_tunnel_cors_origins "$frontend_port")"
   fi
 
   route_mode="$(env_value REMOTE_ROUTE_MODE standard)"
@@ -466,7 +481,9 @@ generate_or_update_env() {
         public_host="$normalized_public_host"
       fi
       cors="$(env_value SEALMAIL_CORS_ALLOWED_ORIGINS)"
-      if is_placeholder "$cors" || [ "$cors" = "http://localhost:8088,http://127.0.0.1:8088" ]; then
+      if is_placeholder "$cors" \
+        || [ "$cors" = "http://localhost:8088,http://127.0.0.1:8088" ] \
+        || [ "$cors" = "http://localhost:8088,http://127.0.0.1:8088,http://localhost:8089,http://127.0.0.1:8089" ]; then
         set_env_value SEALMAIL_CORS_ALLOWED_ORIGINS "$(origin_from_host "$public_host")"
       fi
       crl_base_url="$(env_value SEALMAIL_CA_CRL_BASE_URL)"

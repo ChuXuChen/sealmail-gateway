@@ -91,7 +91,7 @@ Published in both modes:
 
 ```text
 2527  Postfix SMTP ingress, mapped to container port 25
-8088  Frontend, bound by SEALMAIL_FRONTEND_BIND
+8088  Frontend, bound by SEALMAIL_FRONTEND_BIND by default
 ```
 
 `POSTFIX_PUBLIC_SMTP_PORT` is a lab or gateway ingress port. It is not an RFC
@@ -120,7 +120,7 @@ Published only in debug mode, all bound to `127.0.0.1`:
 8080   Backend API
 10025  Backend SMTP content-filter entry
 1025   Mailpit SMTP
-8025   Mailpit UI
+8025   Mailpit UI, server-side default
 ```
 
 Published only when debug and GM are both enabled, bound to `127.0.0.1`:
@@ -132,10 +132,20 @@ Published only when debug and GM are both enabled, bound to `127.0.0.1`:
 For remote administration, keep the frontend bound to localhost and tunnel it:
 
 ```bash
-ssh -L 8088:127.0.0.1:8088 user@server
+ssh -L 8088:127.0.0.1:8088 user@alpha-server
+ssh -L 8089:127.0.0.1:8088 user@beta-server
 ```
 
-Then open `http://localhost:8088`.
+Then open `http://localhost:8088` for alpha and `http://localhost:8089` for
+beta. The default CORS allowlist includes both local tunnel origins.
+
+For the debug Mailpit UI, keep the server-side port at 8025 and use different
+local tunnel ports from your workstation:
+
+```bash
+ssh -L 8025:127.0.0.1:8025 user@alpha-server
+ssh -L 8026:127.0.0.1:8025 user@beta-server
+```
 
 ## HTTPS Front Door
 
