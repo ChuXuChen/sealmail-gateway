@@ -7,6 +7,7 @@ public enum MailFlowStep {
     MAIL_AUTH("mail-auth", MailProcessingErrorType.AUTHENTICATION),
     DECRYPT("decrypt", MailProcessingErrorType.DECRYPTION),
     VERIFY_SIGNATURE("verify-signature", MailProcessingErrorType.VERIFICATION),
+    ATTACHMENT_SECURITY("attachment-security", MailProcessingErrorType.ATTACHMENT_SECURITY),
     DLP("dlp", MailProcessingErrorType.DLP),
     SIGN("sign", MailProcessingErrorType.SIGNING),
     ENCRYPT("encrypt", MailProcessingErrorType.ENCRYPTION),

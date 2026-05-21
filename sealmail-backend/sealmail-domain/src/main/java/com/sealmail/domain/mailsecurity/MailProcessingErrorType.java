@@ -5,6 +5,7 @@ public enum MailProcessingErrorType {
     AUTHENTICATION,
     DECRYPTION,
     VERIFICATION,
+    ATTACHMENT_SECURITY,
     DLP,
     SIGNING,
     ENCRYPTION,

@@ -8,6 +8,7 @@ import com.sealmail.domain.certificate.CertificateSelector;
 import com.sealmail.domain.mailsecurity.CryptoProfileSelector;
 import com.sealmail.domain.mailsecurity.MailRouter;
 import com.sealmail.infra.config.properties.AuthProperties;
+import com.sealmail.infra.config.properties.AttachmentSecurityProperties;
 import com.sealmail.infra.config.properties.MailAuthProperties;
 import com.sealmail.infra.config.properties.PostfixProperties;
 import com.sealmail.infra.config.properties.RawContentStorageProperties;
@@ -29,6 +30,7 @@ import org.springframework.context.annotation.Configuration;
         SecurityProperties.class,
         MailAuthProperties.class,
         AuthProperties.class,
+        AttachmentSecurityProperties.class,
         SmimeCryptoProperties.class,
         StandardTlsProperties.class,
         RawContentStorageProperties.class

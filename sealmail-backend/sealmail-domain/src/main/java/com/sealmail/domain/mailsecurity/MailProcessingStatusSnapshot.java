@@ -7,6 +7,7 @@ public record MailProcessingStatusSnapshot(
         CertificateStatus certificate,
         SmimeStatus smime,
         DlpStatus dlp,
+        AttachmentSecurityStatus attachmentSecurity,
         DeliveryStatus delivery,
         FinalDispositionStatus finalDisposition,
         FailureStatus failure
@@ -25,6 +26,7 @@ public record MailProcessingStatusSnapshot(
         certificate = certificate != null ? certificate : CertificateStatus.pending();
         smime = smime != null ? smime : SmimeStatus.pending();
         dlp = dlp != null ? dlp : DlpStatus.pending();
+        attachmentSecurity = attachmentSecurity != null ? attachmentSecurity : AttachmentSecurityStatus.pending();
         delivery = delivery != null ? delivery : DeliveryStatus.pending();
         finalDisposition = finalDisposition != null ? finalDisposition : FinalDispositionStatus.pending();
         failure = failure != null ? failure : FailureStatus.pending();
@@ -36,37 +38,42 @@ public record MailProcessingStatusSnapshot(
                 CertificateStatus.pending(),
                 SmimeStatus.pending(),
                 DlpStatus.pending(),
+                AttachmentSecurityStatus.pending(),
                 DeliveryStatus.pending(),
                 FinalDispositionStatus.pending(),
                 FailureStatus.pending());
     }
 
     public MailProcessingStatusSnapshot withMailAuth(MailAuthStatus value) {
-        return new MailProcessingStatusSnapshot(value, certificate, smime, dlp, delivery, finalDisposition, failure);
+        return new MailProcessingStatusSnapshot(value, certificate, smime, dlp, attachmentSecurity, delivery, finalDisposition, failure);
     }
 
     public MailProcessingStatusSnapshot withCertificate(CertificateStatus value) {
-        return new MailProcessingStatusSnapshot(mailAuth, value, smime, dlp, delivery, finalDisposition, failure);
+        return new MailProcessingStatusSnapshot(mailAuth, value, smime, dlp, attachmentSecurity, delivery, finalDisposition, failure);
     }
 
     public MailProcessingStatusSnapshot withSmime(SmimeStatus value) {
-        return new MailProcessingStatusSnapshot(mailAuth, certificate, value, dlp, delivery, finalDisposition, failure);
+        return new MailProcessingStatusSnapshot(mailAuth, certificate, value, dlp, attachmentSecurity, delivery, finalDisposition, failure);
     }
 
     public MailProcessingStatusSnapshot withDlp(DlpStatus value) {
-        return new MailProcessingStatusSnapshot(mailAuth, certificate, smime, value, delivery, finalDisposition, failure);
+        return new MailProcessingStatusSnapshot(mailAuth, certificate, smime, value, attachmentSecurity, delivery, finalDisposition, failure);
+    }
+
+    public MailProcessingStatusSnapshot withAttachmentSecurity(AttachmentSecurityStatus value) {
+        return new MailProcessingStatusSnapshot(mailAuth, certificate, smime, dlp, value, delivery, finalDisposition, failure);
     }
 
     public MailProcessingStatusSnapshot withDelivery(DeliveryStatus value) {
-        return new MailProcessingStatusSnapshot(mailAuth, certificate, smime, dlp, value, finalDisposition, failure);
+        return new MailProcessingStatusSnapshot(mailAuth, certificate, smime, dlp, attachmentSecurity, value, finalDisposition, failure);
     }
 
     public MailProcessingStatusSnapshot withFinalDisposition(FinalDispositionStatus value) {
-        return new MailProcessingStatusSnapshot(mailAuth, certificate, smime, dlp, delivery, value, failure);
+        return new MailProcessingStatusSnapshot(mailAuth, certificate, smime, dlp, attachmentSecurity, delivery, value, failure);
     }
 
     public MailProcessingStatusSnapshot withFailure(FailureStatus value) {
-        return new MailProcessingStatusSnapshot(mailAuth, certificate, smime, dlp, delivery, finalDisposition, value);
+        return new MailProcessingStatusSnapshot(mailAuth, certificate, smime, dlp, attachmentSecurity, delivery, finalDisposition, value);
     }
 
     public record MailAuthStatus(
@@ -205,6 +212,27 @@ public record MailProcessingStatusSnapshot(
 
         public static DlpStatus pending() {
             return new DlpStatus(PENDING, null, null, null, null, List.of(), null, null, null, null, null, null);
+        }
+    }
+
+    public record AttachmentSecurityStatus(
+            String status,
+            AttachmentSecurityAction action,
+            Integer maxSeverity,
+            Integer attachmentCount,
+            Long totalBytes,
+            List<AttachmentSecurityFinding> findings,
+            List<String> warnings,
+            String failureReason
+    ) {
+        public AttachmentSecurityStatus {
+            status = status != null ? status : PENDING;
+            findings = findings != null ? List.copyOf(findings) : List.of();
+            warnings = warnings != null ? List.copyOf(warnings) : List.of();
+        }
+
+        public static AttachmentSecurityStatus pending() {
+            return new AttachmentSecurityStatus(PENDING, null, null, null, null, List.of(), List.of(), null);
         }
     }
 

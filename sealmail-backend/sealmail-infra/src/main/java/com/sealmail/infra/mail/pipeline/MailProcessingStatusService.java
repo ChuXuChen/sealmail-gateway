@@ -5,6 +5,9 @@ import com.sealmail.domain.mailauth.AuthenticationResult;
 import com.sealmail.domain.mailauth.AuthenticationResultSet;
 import com.sealmail.domain.mailauth.MailAuthDecision;
 import com.sealmail.domain.dlp.DlpEvaluationResult;
+import com.sealmail.domain.mailsecurity.AttachmentSecurityAction;
+import com.sealmail.domain.mailsecurity.AttachmentSecurityFinding;
+import com.sealmail.domain.mailsecurity.AttachmentSecurityResult;
 import com.sealmail.domain.mailsecurity.CertificateSelection;
 import com.sealmail.domain.mailsecurity.MailDirection;
 import com.sealmail.domain.mailsecurity.MailEnvelope;
@@ -15,6 +18,7 @@ import com.sealmail.domain.mailsecurity.MailProcessingRepository;
 import com.sealmail.domain.mailsecurity.MailProcessingStatusSnapshot;
 import com.sealmail.domain.mailsecurity.MailProcessingStatusSnapshot.AuthMechanismStatus;
 import com.sealmail.domain.mailsecurity.MailProcessingStatusSnapshot.CertificateStatus;
+import com.sealmail.domain.mailsecurity.MailProcessingStatusSnapshot.AttachmentSecurityStatus;
 import com.sealmail.domain.mailsecurity.MailProcessingStatusSnapshot.DeliveryStatus;
 import com.sealmail.domain.mailsecurity.MailProcessingStatusSnapshot.DlpStatus;
 import com.sealmail.domain.mailsecurity.MailProcessingStatusSnapshot.FailureStatus;
@@ -170,6 +174,39 @@ public class MailProcessingStatusService {
                         MailFlowStep.DLP.stepName(),
                         MailProcessingErrorType.DLP.name(),
                         MailProcessingErrorType.DLP.name(),
+                        safe(detail),
+                        false)));
+    }
+
+    public void recordAttachmentSecurity(MailProcessingContext context,
+                                         AttachmentSecurityResult result,
+                                         String summary) {
+        update(context, current -> {
+            AttachmentSecurityStatus status = attachmentSecurityStatus(result, summary, null);
+            MailProcessingStatusSnapshot updated = current.withAttachmentSecurity(status);
+            if (result != null && result.hasFindings()
+                    && (result.action() == AttachmentSecurityAction.QUARANTINE
+                    || result.action() == AttachmentSecurityAction.BLOCK)) {
+                updated = updated.withFailure(new FailureStatus(
+                        MailProcessingStatusSnapshot.FAIL,
+                        MailFlowStep.ATTACHMENT_SECURITY.stepName(),
+                        MailProcessingErrorType.ATTACHMENT_SECURITY.name(),
+                        result.action().name(),
+                        safe(summary),
+                        false));
+            }
+            return updated;
+        });
+    }
+
+    public void recordAttachmentSecurityFailure(MailProcessingContext context, String detail) {
+        update(context, current -> current
+                .withAttachmentSecurity(attachmentSecurityStatus(null, null, detail))
+                .withFailure(new FailureStatus(
+                        MailProcessingStatusSnapshot.FAIL,
+                        MailFlowStep.ATTACHMENT_SECURITY.stepName(),
+                        MailProcessingErrorType.ATTACHMENT_SECURITY.name(),
+                        MailProcessingErrorType.ATTACHMENT_SECURITY.name(),
                         safe(detail),
                         false)));
     }
@@ -378,6 +415,62 @@ public class MailProcessingStatusService {
                 result.ubaActionUpgraded(),
                 safe(summary),
                 null);
+    }
+
+    private AttachmentSecurityStatus attachmentSecurityStatus(AttachmentSecurityResult result,
+                                                              String summary,
+                                                              String failureReason) {
+        if (failureReason != null) {
+            return new AttachmentSecurityStatus(
+                    MailProcessingStatusSnapshot.FAIL,
+                    null,
+                    null,
+                    null,
+                    null,
+                    List.of(),
+                    List.of(),
+                    safe(failureReason));
+        }
+        if (result == null) {
+            return AttachmentSecurityStatus.pending();
+        }
+        List<AttachmentSecurityFinding> findings = result.findings().stream()
+                .limit(10)
+                .map(this::sanitizeFinding)
+                .toList();
+        List<String> warnings = safeList(result.warnings());
+        if (result.findings().size() > findings.size()) {
+            warnings = new java.util.ArrayList<>(warnings);
+            warnings.add("Additional attachment findings omitted: " + (result.findings().size() - findings.size()));
+            warnings = warnings.stream().distinct().toList();
+        }
+        return new AttachmentSecurityStatus(
+                result.status(),
+                result.action(),
+                result.maxSeverity(),
+                result.attachmentCount(),
+                result.totalBytes(),
+                findings,
+                warnings,
+                null);
+    }
+
+    private AttachmentSecurityFinding sanitizeFinding(AttachmentSecurityFinding finding) {
+        if (finding == null) {
+            return null;
+        }
+        return new AttachmentSecurityFinding(
+                safe(finding.code()),
+                finding.severity(),
+                finding.action(),
+                safe(finding.message()),
+                safe(finding.fileName()),
+                safe(finding.extension()),
+                safe(finding.declaredMimeType()),
+                safe(finding.detectedMimeType()),
+                finding.archive(),
+                finding.encrypted(),
+                safeList(finding.nestedPath()));
     }
 
     private String dlpSnapshotStatus(DlpEvaluationResult result) {
@@ -659,6 +752,7 @@ public class MailProcessingStatusService {
             case AUTHENTICATION -> MailFlowStep.MAIL_AUTH.stepName();
             case DECRYPTION -> MailFlowStep.DECRYPT.stepName();
             case VERIFICATION -> MailFlowStep.VERIFY_SIGNATURE.stepName();
+            case ATTACHMENT_SECURITY -> MailFlowStep.ATTACHMENT_SECURITY.stepName();
             case DLP -> MailFlowStep.DLP.stepName();
             case SIGNING -> MailFlowStep.SIGN.stepName();
             case ENCRYPTION -> MailFlowStep.ENCRYPT.stepName();

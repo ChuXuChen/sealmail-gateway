@@ -10,7 +10,6 @@ import com.sealmail.domain.dlp.DlpScanEvent;
 import com.sealmail.domain.dlp.DlpScanRequest;
 import com.sealmail.domain.dlp.DlpTestRequest;
 import com.sealmail.domain.dlp.DlpUbaAssessment;
-import com.sealmail.domain.dlp.spi.DlpContentExtractor;
 import com.sealmail.domain.dlp.spi.DlpDetector;
 import com.sealmail.domain.dlp.spi.DlpEvaluationPort;
 import com.sealmail.domain.dlp.spi.DlpEventRepository;
@@ -19,7 +18,9 @@ import com.sealmail.domain.dlp.spi.DlpPolicyResolver;
 import com.sealmail.domain.dlp.spi.DlpUbaRiskEvaluator;
 import com.sealmail.domain.mailsecurity.MailDirection;
 import com.sealmail.domain.mailsecurity.MailEnvelope;
+import com.sealmail.domain.mailsecurity.MailInspectionBundle;
 import com.sealmail.domain.mailsecurity.MailProcessingContext;
+import com.sealmail.infra.mail.inspection.MailInspectionService;
 import com.sealmail.domain.policy.DispositionAction;
 import com.sealmail.domain.shared.model.EmailAddress;
 import lombok.extern.slf4j.Slf4j;
@@ -39,20 +40,20 @@ import java.util.UUID;
 @Service
 public class DlpEvaluationService implements DlpEvaluationPort {
 
-    private final DlpContentExtractor contentExtractor;
+    private final MailInspectionService inspectionService;
     private final DlpPolicyResolver policyResolver;
     private final List<DlpDetector> detectors;
     private final DlpEvidenceMasker evidenceMasker;
     private final DlpEventRepository eventRepository;
     private final DlpUbaRiskEvaluator ubaRiskEvaluator;
 
-    public DlpEvaluationService(DlpContentExtractor contentExtractor,
+    public DlpEvaluationService(MailInspectionService inspectionService,
                                 DlpPolicyResolver policyResolver,
                                 List<DlpDetector> detectors,
                                 DlpEvidenceMasker evidenceMasker,
                                 DlpEventRepository eventRepository,
                                 DlpUbaRiskEvaluator ubaRiskEvaluator) {
-        this.contentExtractor = contentExtractor;
+        this.inspectionService = inspectionService;
         this.policyResolver = policyResolver;
         this.detectors = detectors == null ? List.of() : List.copyOf(detectors);
         this.evidenceMasker = evidenceMasker;
@@ -64,37 +65,41 @@ public class DlpEvaluationService implements DlpEvaluationPort {
     @Transactional
     public DlpEvaluationResult evaluate(byte[] rawMail, MailProcessingContext context, boolean persistEvent) {
         long start = System.currentTimeMillis();
-        DlpContentBundle content = contentExtractor.extract(rawMail, context);
+        MailInspectionBundle inspection = inspection(context, rawMail);
+        DlpContentBundle content = inspection.dlpContent();
         DlpPolicyResolution resolution = policyResolver.resolve(context, content);
-        return evaluateResolved(content, context, resolution, persistEvent, start);
+        return evaluateResolved(content, inspection.allWarnings(), context, resolution, persistEvent, start);
     }
 
     @Override
     @Transactional(readOnly = true)
     public DlpEvaluationResult test(DlpTestRequest request) {
         MailProcessingContext context = testContext(request);
-        DlpContentBundle content = contentExtractor.extract(testPayload(request), context);
+        MailInspectionBundle inspection = inspection(context, testPayload(request));
+        DlpContentBundle content = inspection.dlpContent();
         DlpPolicyResolution resolution = policyResolver.resolve(context, content);
-        return evaluateResolved(content, context, resolution, false, System.currentTimeMillis());
+        return evaluateResolved(content, inspection.allWarnings(), context, resolution, false, System.currentTimeMillis());
     }
 
     @Override
     @Transactional(readOnly = true)
     public DlpEvaluationResult simulatePolicy(String policyId, DlpTestRequest request) {
         MailProcessingContext context = testContext(request);
-        DlpContentBundle content = contentExtractor.extract(testPayload(request), context);
+        MailInspectionBundle inspection = inspection(context, testPayload(request));
+        DlpContentBundle content = inspection.dlpContent();
         DlpPolicyResolution resolution = policyResolver.resolvePolicy(policyId, context, content);
-        return evaluateResolved(content, context, resolution, false, System.currentTimeMillis());
+        return evaluateResolved(content, inspection.allWarnings(), context, resolution, false, System.currentTimeMillis());
     }
 
     private DlpEvaluationResult evaluateResolved(DlpContentBundle content,
+                                                 List<String> warnings,
                                                  MailProcessingContext context,
                                                  DlpPolicyResolution resolution,
                                                  boolean persistEvent,
                                                  long start) {
         DlpScanRequest scanRequest = new DlpScanRequest(content, resolution.rules(), resolution.policies(), context);
         List<DlpMatch> matches = new ArrayList<>();
-        List<String> warnings = new ArrayList<>(content.allWarnings());
+        List<String> warningsList = new ArrayList<>(warnings != null ? warnings : content.allWarnings());
         for (DlpDetector detector : orderedDetectors()) {
             boolean relevant = resolution.rules().stream().anyMatch(rule -> detector.supports(rule.type()));
             if (!relevant) {
@@ -103,10 +108,10 @@ public class DlpEvaluationService implements DlpEvaluationPort {
             try {
                 DlpDetectorResult result = detector.detect(scanRequest);
                 matches.addAll(result.matches());
-                warnings.addAll(result.warnings());
+                warningsList.addAll(result.warnings());
             } catch (Exception e) {
                 log.error("DLP detector {} failed: {}", detector.name(), e.getMessage(), e);
-                warnings.add("Detector failed: " + detector.name());
+                warningsList.add("Detector failed: " + detector.name());
                 matches.add(scanErrorMatch(scanRequest, e));
             }
         }
@@ -117,7 +122,7 @@ public class DlpEvaluationService implements DlpEvaluationPort {
                 : DlpUbaAssessment.low(recommended);
         if (ubaAssessment.actionUpgraded()) {
             recommended = ubaAssessment.upgradedAction();
-            warnings.add("UBA risk upgraded DLP action to " + recommended + ": "
+            warningsList.add("UBA risk upgraded DLP action to " + recommended + ": "
                     + String.join("; ", ubaAssessment.reasons()));
         }
         boolean monitorMode = resolution.monitorMode();
@@ -132,7 +137,7 @@ public class DlpEvaluationService implements DlpEvaluationPort {
         long duration = System.currentTimeMillis() - start;
 
         if (persistEvent && !matches.isEmpty()) {
-            DlpScanEvent event = event(eventId, context, resolution, action, maxSeverity, matches.size(), warnings, monitorMode, duration, ubaAssessment);
+            DlpScanEvent event = event(eventId, context, resolution, action, maxSeverity, matches.size(), warningsList, monitorMode, duration, ubaAssessment);
             eventRepository.save(event, evidence);
         }
 
@@ -143,7 +148,7 @@ public class DlpEvaluationService implements DlpEvaluationPort {
                 maxSeverity,
                 matches,
                 evidence,
-                warnings.stream().distinct().toList(),
+                warningsList.stream().distinct().toList(),
                 resolution.policyIds(),
                 resolution.ruleGroupIds(),
                 monitorMode,
@@ -151,6 +156,13 @@ public class DlpEvaluationService implements DlpEvaluationPort {
                 ubaAssessment.riskLevel(),
                 ubaAssessment.reasons(),
                 ubaAssessment.actionUpgraded());
+    }
+
+    private MailInspectionBundle inspection(MailProcessingContext context, byte[] rawMail) {
+        if (context != null && context.inspectionBundle() != null) {
+            return context.inspectionBundle();
+        }
+        return inspectionService.inspect(rawMail, context);
     }
 
     private DlpScanEvent event(String eventId,

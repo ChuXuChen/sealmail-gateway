@@ -83,6 +83,33 @@ export interface DlpSnapshot {
   failureReason?: string;
 }
 
+export type AttachmentSecurityAction = 'ALLOW' | 'WARN' | 'QUARANTINE' | 'BLOCK' | string;
+
+export interface AttachmentSecurityFinding {
+  code?: string;
+  severity?: number;
+  action?: AttachmentSecurityAction;
+  message?: string;
+  fileName?: string;
+  extension?: string;
+  declaredMimeType?: string;
+  detectedMimeType?: string;
+  archive?: boolean;
+  encrypted?: boolean;
+  nestedPath: string[];
+}
+
+export interface AttachmentSecuritySnapshot {
+  status: MailProcessingSnapshotStatus;
+  action?: AttachmentSecurityAction;
+  maxSeverity?: number;
+  attachmentCount?: number;
+  totalBytes?: number;
+  findings: AttachmentSecurityFinding[];
+  warnings: string[];
+  failureReason?: string;
+}
+
 export interface DeliverySnapshot {
   status: MailProcessingSnapshotStatus;
   route?: string;
@@ -117,6 +144,7 @@ export interface MailProcessingStatusSnapshot {
   certificate: CertificateSnapshot;
   smime: SmimeSnapshot;
   dlp: DlpSnapshot;
+  attachmentSecurity?: AttachmentSecuritySnapshot;
   delivery: DeliverySnapshot;
   finalDisposition: FinalDispositionSnapshot;
   failure: FailureSnapshot;

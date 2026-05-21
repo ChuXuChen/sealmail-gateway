@@ -13,9 +13,11 @@ import com.sealmail.domain.mailsecurity.MailEnvelope;
 import com.sealmail.domain.mailsecurity.MailProcessingContext;
 import com.sealmail.domain.policy.DispositionAction;
 import com.sealmail.domain.shared.model.EmailAddress;
+import com.sealmail.infra.config.properties.AttachmentSecurityProperties;
 import com.sealmail.infra.dlp.config.DlpRuntimeConfigPort;
 import com.sealmail.infra.dlp.detector.RegexDlpDetector;
 import com.sealmail.infra.mail.MimeMailMessageComposer;
+import com.sealmail.infra.mail.inspection.MailInspectionService;
 import org.junit.jupiter.api.Test;
 
 import java.time.Instant;
@@ -50,7 +52,8 @@ class DlpEvaluationServicePolicyChainTest {
         when(configService.activePolicies()).thenReturn(List.of(policy()));
         when(configService.activeRuleGroups()).thenReturn(List.of(ruleGroup()));
         when(configService.activeRules()).thenReturn(List.of(rule(DispositionAction.QUARANTINE)));
-        MimeContentExtractor extractor = new MimeContentExtractor();
+        MailInspectionService inspectionService = new MailInspectionService(new AttachmentSecurityProperties());
+        MimeContentExtractor extractor = new MimeContentExtractor(inspectionService);
         var content = extractor.extract(rawMail, context);
         assertTrue(content.parts().stream().anyMatch(part -> part.text().contains("hello")),
                 () -> "parts=" + content.parts() + ", warnings=" + content.allWarnings());
@@ -58,7 +61,7 @@ class DlpEvaluationServicePolicyChainTest {
         assertEquals(List.of("rule-1"), resolution.rules().stream().map(DlpRule::id).toList());
 
         DlpEvaluationService service = new DlpEvaluationService(
-                extractor,
+                inspectionService,
                 new ConfigDlpPolicyResolver(configService),
                 List.of(new RegexDlpDetector()),
                 new Sha256DlpEvidenceMasker(),
@@ -93,7 +96,8 @@ class DlpEvaluationServicePolicyChainTest {
         when(configService.activePolicies()).thenReturn(List.of(policy()));
         when(configService.activeRuleGroups()).thenReturn(List.of(ruleGroup()));
         when(configService.activeRules()).thenReturn(List.of(rule(DispositionAction.WARN)));
-        MimeContentExtractor extractor = new MimeContentExtractor();
+        MailInspectionService inspectionService = new MailInspectionService(new AttachmentSecurityProperties());
+        MimeContentExtractor extractor = new MimeContentExtractor(inspectionService);
         var content = extractor.extract(rawMail, context);
         assertTrue(content.parts().stream().anyMatch(part -> part.text().contains("hello")),
                 () -> "parts=" + content.parts() + ", warnings=" + content.allWarnings());
@@ -101,7 +105,7 @@ class DlpEvaluationServicePolicyChainTest {
         assertEquals(List.of("rule-1"), resolution.rules().stream().map(DlpRule::id).toList());
 
         DlpEvaluationService service = new DlpEvaluationService(
-                extractor,
+                inspectionService,
                 new ConfigDlpPolicyResolver(configService),
                 List.of(new RegexDlpDetector()),
                 new Sha256DlpEvidenceMasker(),

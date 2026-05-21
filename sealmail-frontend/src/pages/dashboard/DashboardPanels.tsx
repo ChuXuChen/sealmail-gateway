@@ -18,6 +18,8 @@ import DetailDrawer from '../../components/Page/DetailDrawer';
 import CryptoCapabilityTags from '../settings/CryptoCapabilityTags';
 import type { DashboardViewModel } from './dashboardModel';
 import type {
+  AttachmentSecurityFinding,
+  AttachmentSecuritySnapshot,
   AuditLog,
   MailAuthMechanismStatus,
   MailProcessingRecord,
@@ -149,6 +151,132 @@ const SmimeOperation: React.FC<{
     ) : null}
   </div>
 );
+
+const attachmentActionColor = (action?: string) => ({
+  ALLOW: 'success',
+  WARN: 'gold',
+  QUARANTINE: 'warning',
+  BLOCK: 'error',
+}[action ?? ''] ?? 'default');
+
+const attachmentActionLabel = (action?: string) => ({
+  ALLOW: '通过',
+  WARN: '告警',
+  QUARANTINE: '隔离',
+  BLOCK: '阻断',
+}[action ?? ''] ?? valueOrDash(action));
+
+const formatBytes = (value?: number) => {
+  if (value === undefined || value === null) {
+    return '未记录';
+  }
+  if (value < 1024) {
+    return `${value} B`;
+  }
+  const units = ['KB', 'MB', 'GB', 'TB'];
+  let size = value / 1024;
+  let unitIndex = 0;
+  while (size >= 1024 && unitIndex < units.length - 1) {
+    size /= 1024;
+    unitIndex += 1;
+  }
+  return `${size.toFixed(size >= 10 ? 0 : 1)} ${units[unitIndex]}`;
+};
+
+const attachmentFindingLabel = (finding: AttachmentSecurityFinding) => {
+  if (finding.fileName) {
+    return finding.fileName;
+  }
+  if (finding.nestedPath?.length) {
+    return finding.nestedPath.join('/');
+  }
+  return '未命名附件';
+};
+
+const AttachmentSecuritySection: React.FC<{ security?: AttachmentSecuritySnapshot }> = ({ security }) => {
+  const findings = security?.findings ?? [];
+  const warnings = security?.warnings ?? [];
+  const visibleFindings = findings.slice(0, 5);
+
+  return (
+    <DetailSection title="附件安全">
+      <Descriptions column={1} size="small">
+        <Descriptions.Item label="状态">
+          <SnapshotTag status={security?.status} />
+        </Descriptions.Item>
+        <Descriptions.Item label="最终动作">
+          <Tag color={attachmentActionColor(security?.action)}>
+            {attachmentActionLabel(security?.action)}
+          </Tag>
+        </Descriptions.Item>
+        <Descriptions.Item label="最高严重度">
+          {valueOrDash(security?.maxSeverity)}
+        </Descriptions.Item>
+        <Descriptions.Item label="附件数量">
+          {valueOrDash(security?.attachmentCount)}
+        </Descriptions.Item>
+        <Descriptions.Item label="总大小">
+          {formatBytes(security?.totalBytes)}
+        </Descriptions.Item>
+        <Descriptions.Item label="失败原因">
+          {valueOrDash(security?.failureReason)}
+        </Descriptions.Item>
+      </Descriptions>
+
+      {visibleFindings.length ? (
+        <div className="mail-processing-attachment-findings">
+          {visibleFindings.map((finding, index) => (
+            <div className="mail-processing-attachment-finding" key={`${finding.code ?? 'finding'}-${index}`}>
+              <div className="mail-processing-attachment-finding__head">
+                <Space size={8} className="min-width-zero" wrap>
+                  <Tag color={attachmentActionColor(finding.action)}>
+                    {finding.code ?? 'UNKNOWN'}
+                  </Tag>
+                  <Text className="mail-processing-attachment-finding__name" ellipsis>
+                    {attachmentFindingLabel(finding)}
+                  </Text>
+                </Space>
+                <Text className="mail-processing-attachment-finding__severity">
+                  {valueOrDash(finding.severity)}
+                </Text>
+              </div>
+              <Text className="mail-processing-attachment-finding__detail">
+                {valueOrDash(finding.message)}
+              </Text>
+              <Text className="mail-processing-attachment-finding__meta">
+                {[
+                  valueOrDash(finding.declaredMimeType),
+                  valueOrDash(finding.detectedMimeType),
+                  finding.extension ? `.${finding.extension}` : null,
+                  finding.archive ? '压缩包' : null,
+                  finding.encrypted ? '加密' : null,
+                ].filter(Boolean).join(' · ')}
+              </Text>
+            </div>
+          ))}
+          {findings.length > visibleFindings.length ? (
+            <Text className="mail-processing-attachment-findings__more">
+              还有 {findings.length - visibleFindings.length} 条风险项未展开
+            </Text>
+          ) : null}
+        </div>
+      ) : (
+        <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无附件风险项" />
+      )}
+
+      {warnings.length ? (
+        <div className="mail-processing-attachment-warnings">
+          <Text strong className="mail-processing-attachment-warnings__title">解析告警</Text>
+          {warnings.map((warning, index) => (
+            <Text className="mail-processing-attachment-warnings__item" key={`${warning}-${index}`}>
+              {warning}
+            </Text>
+          ))}
+        </div>
+      ) : null}
+    </DetailSection>
+  );
+};
 
 const DashboardPanels: React.FC<DashboardPanelsProps> = ({
   cryptoCapabilities,
@@ -526,6 +654,8 @@ const DashboardPanels: React.FC<DashboardPanelsProps> = ({
                 <SmimeOperation label="解密" operation={snapshot?.smime?.decrypt} />
               </div>
             </DetailSection>
+
+            <AttachmentSecuritySection security={snapshot?.attachmentSecurity} />
 
             <DetailSection title="DLP">
               <Descriptions column={1} size="small">

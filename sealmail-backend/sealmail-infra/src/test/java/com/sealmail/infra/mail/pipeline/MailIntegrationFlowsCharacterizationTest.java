@@ -9,6 +9,7 @@ import com.sealmail.domain.mailsecurity.MailProcessingException;
 import com.sealmail.domain.mailsecurity.MailRecordDisposition;
 import com.sealmail.domain.mailsecurity.ProcessingResult;
 import com.sealmail.domain.shared.model.EmailAddress;
+import com.sealmail.infra.mail.pipeline.step.AttachmentSecurityStep;
 import com.sealmail.infra.mail.pipeline.step.DecryptStep;
 import com.sealmail.infra.mail.pipeline.step.DkimSignStep;
 import com.sealmail.infra.mail.pipeline.step.DlpStep;
@@ -65,6 +66,7 @@ class MailIntegrationFlowsCharacterizationTest {
     private final RoutingService routingService;
     private final MailProcessingTracker tracker;
     private final DlpStep dlpStep;
+    private final AttachmentSecurityStep attachmentSecurityStep;
     private final SignStep signStep;
     private final EncryptStep encryptStep;
     private final DkimSignStep dkimSignStep;
@@ -83,6 +85,7 @@ class MailIntegrationFlowsCharacterizationTest {
                                              RoutingService routingService,
                                              MailProcessingTracker tracker,
                                              DlpStep dlpStep,
+                                             AttachmentSecurityStep attachmentSecurityStep,
                                              SignStep signStep,
                                              EncryptStep encryptStep,
                                              DkimSignStep dkimSignStep,
@@ -100,6 +103,7 @@ class MailIntegrationFlowsCharacterizationTest {
         this.routingService = routingService;
         this.tracker = tracker;
         this.dlpStep = dlpStep;
+        this.attachmentSecurityStep = attachmentSecurityStep;
         this.signStep = signStep;
         this.encryptStep = encryptStep;
         this.dkimSignStep = dkimSignStep;
@@ -112,7 +116,7 @@ class MailIntegrationFlowsCharacterizationTest {
 
     @BeforeEach
     void resetMocksAndChannels() {
-        reset(routingService, tracker, dlpStep, signStep, encryptStep, dkimSignStep,
+        reset(routingService, tracker, dlpStep, attachmentSecurityStep, signStep, encryptStep, dkimSignStep,
                 mailAuthenticationStep, decryptStep, verifyStep, relayStep, quarantineStep);
         drain(relayChannel);
         drain(quarantineChannel);
@@ -124,6 +128,7 @@ class MailIntegrationFlowsCharacterizationTest {
         byte[] raw = "raw".getBytes();
         when(routingService.routeOutbound(any())).thenAnswer(invocation ->
                 withProcessingId(invocation.getArgument(0), "processing-1"));
+        whenTracked("attachment-security", MailProcessingErrorType.ATTACHMENT_SECURITY, raw);
         whenTracked("dlp", MailProcessingErrorType.DLP, "after-dlp".getBytes());
         whenTracked("sign", MailProcessingErrorType.SIGNING, "signed".getBytes());
         whenTracked("encrypt", MailProcessingErrorType.ENCRYPTION, "encrypted".getBytes());
@@ -135,6 +140,7 @@ class MailIntegrationFlowsCharacterizationTest {
         assertArrayEquals("dkim".getBytes(), (byte[]) relayed.getPayload());
         assertNull(quarantineChannel.receive(0));
         verify(routingService).routeOutbound(any());
+        verifyTracked("attachment-security", MailProcessingErrorType.ATTACHMENT_SECURITY);
         verifyTracked("dlp", MailProcessingErrorType.DLP);
         verifyTracked("sign", MailProcessingErrorType.SIGNING);
         verifyTracked("encrypt", MailProcessingErrorType.ENCRYPTION);
@@ -147,6 +153,7 @@ class MailIntegrationFlowsCharacterizationTest {
         byte[] raw = "raw".getBytes();
         when(routingService.routeOutbound(any())).thenAnswer(invocation ->
                 withProcessingId(invocation.getArgument(0), "processing-1"));
+        whenTracked("attachment-security", MailProcessingErrorType.ATTACHMENT_SECURITY, raw);
         whenTrackedQuarantine("dlp", MailProcessingErrorType.DLP,
                 "POLICY_VIOLATION", "DLP QUARANTINE", MailRecordDisposition.DLP_QUARANTINE);
 
@@ -160,9 +167,32 @@ class MailIntegrationFlowsCharacterizationTest {
         assertEquals(MailRecordDisposition.DLP_QUARANTINE, context.recordDisposition());
         assertNull(relayChannel.receive(0));
         verify(tracker).completeProcessing("processing-1", ProcessingResult.FAILED);
+        verifyTracked("attachment-security", MailProcessingErrorType.ATTACHMENT_SECURITY);
         verifyNotTracked("sign");
         verifyNotTracked("encrypt");
         verifyNotTracked("dkim-sign");
+    }
+
+    @Test
+    void outboundAttachmentSecurityQuarantineCompletesFailedAndRoutesToQuarantineChannel() {
+        byte[] raw = "raw".getBytes();
+        when(routingService.routeOutbound(any())).thenAnswer(invocation ->
+                withProcessingId(invocation.getArgument(0), "processing-1"));
+        whenTrackedQuarantine("attachment-security", MailProcessingErrorType.ATTACHMENT_SECURITY,
+                "POLICY_VIOLATION", "attachment blocked", MailRecordDisposition.EXCEPTION);
+
+        assertTrue(mailOutboundChannel.send(outboundMessage(raw)));
+
+        Message<?> quarantined = quarantineChannel.receive(1000);
+        assertArrayEquals(raw, (byte[]) quarantined.getPayload());
+        MailProcessingContext context = context(quarantined);
+        assertEquals("POLICY_VIOLATION", context.decision().quarantine().reason());
+        assertEquals("attachment blocked", context.decision().quarantine().detail());
+        assertNull(relayChannel.receive(0));
+        verify(tracker).completeProcessing("processing-1", ProcessingResult.FAILED);
+        verifyTracked("attachment-security", MailProcessingErrorType.ATTACHMENT_SECURITY);
+        verifyNotTracked("dlp");
+        verifyNotTracked("sign");
     }
 
     @Test
@@ -196,6 +226,7 @@ class MailIntegrationFlowsCharacterizationTest {
         whenTracked("mail-auth", MailProcessingErrorType.AUTHENTICATION, "authenticated".getBytes());
         whenTracked("decrypt", MailProcessingErrorType.DECRYPTION, "decrypted".getBytes());
         whenTracked("verify-signature", MailProcessingErrorType.VERIFICATION, "verified".getBytes());
+        whenTracked("attachment-security", MailProcessingErrorType.ATTACHMENT_SECURITY, "verified".getBytes());
         whenTracked("dlp", MailProcessingErrorType.DLP, "after-dlp".getBytes());
 
         assertTrue(mailInboundChannel.send(inboundMessage(raw)));
@@ -207,6 +238,7 @@ class MailIntegrationFlowsCharacterizationTest {
         verifyTracked("mail-auth", MailProcessingErrorType.AUTHENTICATION);
         verifyTracked("decrypt", MailProcessingErrorType.DECRYPTION);
         verifyTracked("verify-signature", MailProcessingErrorType.VERIFICATION);
+        verifyTracked("attachment-security", MailProcessingErrorType.ATTACHMENT_SECURITY);
         verifyTracked("dlp", MailProcessingErrorType.DLP);
     }
 
@@ -251,6 +283,7 @@ class MailIntegrationFlowsCharacterizationTest {
         assertNull(relayChannel.receive(0));
         verify(tracker).completeProcessing("processing-1", ProcessingResult.FAILED);
         verifyNotTracked("verify-signature");
+        verifyNotTracked("attachment-security");
         verifyNotTracked("dlp");
     }
 
@@ -258,6 +291,7 @@ class MailIntegrationFlowsCharacterizationTest {
     void outboundStepExceptionRoutesToErrorChannelAndStopsRelay() {
         when(routingService.routeOutbound(any())).thenAnswer(invocation ->
                 withProcessingId(invocation.getArgument(0), "processing-1"));
+        whenTracked("attachment-security", MailProcessingErrorType.ATTACHMENT_SECURITY, "raw".getBytes());
         when(tracker.executeStep(any(), eq("dlp"), eq(MailProcessingErrorType.DLP), any()))
                 .thenThrow(new IllegalStateException("scanner down"));
 
@@ -272,6 +306,7 @@ class MailIntegrationFlowsCharacterizationTest {
         assertEquals("scanner down", payload.getCause().getMessage());
         assertNull(relayChannel.receive(0));
         assertNull(quarantineChannel.receive(0));
+        verifyTracked("attachment-security", MailProcessingErrorType.ATTACHMENT_SECURITY);
         verifyNotTracked("sign");
         verifyNotTracked("encrypt");
     }
@@ -292,6 +327,7 @@ class MailIntegrationFlowsCharacterizationTest {
         assertNull(relayChannel.receive(0));
         assertNull(quarantineChannel.receive(0));
         verifyNotTracked("mail-auth");
+        verifyNotTracked("attachment-security");
     }
 
     @Test
@@ -621,6 +657,7 @@ class MailIntegrationFlowsCharacterizationTest {
                                                   QuarantineStep quarantineStep,
                                                   RelayStep relayStep,
                                                   DlpStep dlpStep,
+                                                  AttachmentSecurityStep attachmentSecurityStep,
                                                   MailAuthenticationStep mailAuthenticationStep,
                                                   DkimSignStep dkimSignStep,
                                                   RoutingService routingService,
@@ -632,9 +669,9 @@ class MailIntegrationFlowsCharacterizationTest {
             MailFlowCompletionService completionService = new MailFlowCompletionService(tracker, null);
             return new MailIntegrationFlows(
                     new InboundMailFlowAssembler(routingStep, stepRunner, routeDecider,
-                            mailAuthenticationStep, decryptStep, verifyStep, dlpStep),
+                            mailAuthenticationStep, decryptStep, verifyStep, attachmentSecurityStep, dlpStep),
                     new OutboundMailFlowAssembler(routingStep, stepRunner, routeDecider,
-                            dlpStep, signStep, encryptStep, dkimSignStep),
+                            attachmentSecurityStep, dlpStep, signStep, encryptStep, dkimSignStep),
                     new QuarantineMailFlowAssembler(stepRunner, quarantineStep),
                     new RelayMailFlowAssembler(stepRunner, routeDecider, completionService, relayStep),
                     new QuarantineReleaseFlowAssembler(routingStep, stepRunner, routeDecider,
@@ -691,6 +728,11 @@ class MailIntegrationFlowsCharacterizationTest {
         @Bean
         DlpStep dlpStep() {
             return mock(DlpStep.class);
+        }
+
+        @Bean
+        AttachmentSecurityStep attachmentSecurityStep() {
+            return mock(AttachmentSecurityStep.class);
         }
 
         @Bean

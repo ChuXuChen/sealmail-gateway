@@ -3,6 +3,8 @@ package com.sealmail.infra.mail.pipeline;
 import com.sealmail.domain.dlp.DlpEvaluationResult;
 import com.sealmail.domain.mailauth.AuthenticationResultSet;
 import com.sealmail.domain.mailauth.MailAuthDecision;
+import com.sealmail.domain.mailsecurity.AttachmentSecurityAction;
+import com.sealmail.domain.mailsecurity.AttachmentSecurityResult;
 import com.sealmail.domain.mailsecurity.DlpDecision;
 import com.sealmail.domain.mailsecurity.MailProcessingContext;
 import com.sealmail.domain.mailsecurity.MailProcessingDecision;
@@ -54,8 +56,25 @@ public class UnifiedMailDecisionService {
                     "POLICY_VIOLATION",
                     "DLP QUARANTINE: " + violationSummary,
                     MailRecordDisposition.DLP_QUARANTINE);
-            case MUST_ENCRYPT -> updated.withDecision(updated.decision().withMustEncrypt(true));
-            case WARN -> updated;
+                case MUST_ENCRYPT -> updated.withDecision(updated.decision().withMustEncrypt(true));
+                case WARN -> updated;
+        };
+    }
+
+    public MailProcessingContext applyAttachmentSecurity(MailProcessingContext context,
+                                                         AttachmentSecurityResult result,
+                                                         String violationSummary) {
+        MailProcessingContext updated = requireContext(context, "attachment security evaluation");
+        if (result == null) {
+            return updated;
+        }
+        return switch (result.action()) {
+            case BLOCK, QUARANTINE -> markQuarantine(
+                    updated,
+                    "POLICY_VIOLATION",
+                    "ATTACHMENT " + result.action().name() + ": " + violationSummary,
+                    MailRecordDisposition.EXCEPTION);
+            case WARN, ALLOW -> updated;
         };
     }
 

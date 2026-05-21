@@ -1,6 +1,7 @@
 package com.sealmail.infra.mail.pipeline;
 
 import com.sealmail.infra.mail.pipeline.step.DecryptStep;
+import com.sealmail.infra.mail.pipeline.step.AttachmentSecurityStep;
 import com.sealmail.infra.mail.pipeline.step.DlpStep;
 import com.sealmail.infra.mail.pipeline.step.MailAuthenticationStep;
 import com.sealmail.infra.mail.pipeline.step.VerifyStep;
@@ -18,6 +19,7 @@ public class InboundMailFlowAssembler {
     private final MailAuthenticationStep mailAuthenticationStep;
     private final DecryptStep decryptStep;
     private final VerifyStep verifyStep;
+    private final AttachmentSecurityStep attachmentSecurityStep;
     private final DlpStep dlpStep;
 
     public InboundMailFlowAssembler(MailRoutingStep routingStep,
@@ -26,6 +28,7 @@ public class InboundMailFlowAssembler {
                                     MailAuthenticationStep mailAuthenticationStep,
                                     DecryptStep decryptStep,
                                     VerifyStep verifyStep,
+                                    AttachmentSecurityStep attachmentSecurityStep,
                                     DlpStep dlpStep) {
         this.routingStep = routingStep;
         this.stepRunner = stepRunner;
@@ -33,6 +36,7 @@ public class InboundMailFlowAssembler {
         this.mailAuthenticationStep = mailAuthenticationStep;
         this.decryptStep = decryptStep;
         this.verifyStep = verifyStep;
+        this.attachmentSecurityStep = attachmentSecurityStep;
         this.dlpStep = dlpStep;
     }
 
@@ -62,6 +66,13 @@ public class InboundMailFlowAssembler {
                 .handle(Message.class, (message, headers) ->
                         stepRunner.runTrackedStep(message, MailFlowStep.VERIFY_SIGNATURE,
                                 verifyStep::execute))
+                .route(Message.class, routeDecider::deliveryRoute,
+                        mapping -> mapping
+                                .channelMapping(MailFlowRoute.QUARANTINE, quarantineChannel)
+                                .defaultOutputToParentFlow())
+                .handle(Message.class, (message, headers) ->
+                        stepRunner.runTrackedStep(message, MailFlowStep.ATTACHMENT_SECURITY,
+                                attachmentSecurityStep::execute))
                 .route(Message.class, routeDecider::deliveryRoute,
                         mapping -> mapping
                                 .channelMapping(MailFlowRoute.QUARANTINE, quarantineChannel)

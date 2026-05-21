@@ -13,6 +13,8 @@ import com.sealmail.domain.dlp.DlpMatch;
 import com.sealmail.domain.dlp.DlpRule;
 import com.sealmail.domain.dlp.DlpRuleType;
 import com.sealmail.domain.dlp.DlpUbaRiskLevel;
+import com.sealmail.domain.mailsecurity.AttachmentSecurityAction;
+import com.sealmail.domain.mailsecurity.AttachmentSecurityFinding;
 import com.sealmail.domain.mailsecurity.MailDirection;
 import com.sealmail.domain.mailsecurity.MailEnvelope;
 import com.sealmail.domain.mailsecurity.MailProcessing;
@@ -119,6 +121,47 @@ class MailProcessingStatusServiceTest {
         assertEquals("event-1", snapshot.dlp().eventId());
         assertEquals("dlp", snapshot.failure().step());
         assertEquals("DLP", snapshot.failure().errorType());
+    }
+
+    @Test
+    void recordsAttachmentSecurityFindingsAndFailureWhenQuarantined() {
+        InMemoryMailProcessingRepository repository = new InMemoryMailProcessingRepository();
+        MailProcessing processing = processing();
+        repository.save(processing);
+        MailProcessingStatusService service = new MailProcessingStatusService(repository);
+
+        AttachmentSecurityFinding finding = new AttachmentSecurityFinding(
+                "HIGH_RISK_EXTENSION",
+                95,
+                AttachmentSecurityAction.QUARANTINE,
+                "Blocked extension detected",
+                "invoice.pdf.exe",
+                "exe",
+                "application/pdf",
+                "application/x-msdownload",
+                false,
+                false,
+                List.of("invoice.pdf.exe"));
+        com.sealmail.domain.mailsecurity.AttachmentSecurityResult result =
+                new com.sealmail.domain.mailsecurity.AttachmentSecurityResult(
+                        MailProcessingStatusSnapshot.QUARANTINED,
+                        AttachmentSecurityAction.QUARANTINE,
+                        95,
+                        1,
+                        512L,
+                        List.of(finding),
+                        List.of("Declared MIME mismatch"));
+
+        service.recordAttachmentSecurity(context(processing), result, "blocked attachment");
+
+        MailProcessingStatusSnapshot snapshot = processing.getStatusSnapshot();
+        assertEquals(MailProcessingStatusSnapshot.QUARANTINED, snapshot.attachmentSecurity().status());
+        assertEquals(AttachmentSecurityAction.QUARANTINE, snapshot.attachmentSecurity().action());
+        assertEquals(1, snapshot.attachmentSecurity().attachmentCount());
+        assertEquals("attachment-security", snapshot.failure().step());
+        assertEquals("ATTACHMENT_SECURITY", snapshot.failure().errorType());
+        assertTrue(snapshot.attachmentSecurity().findings().stream()
+                .anyMatch(item -> "HIGH_RISK_EXTENSION".equals(item.code())));
     }
 
     private static MailProcessing processing() {

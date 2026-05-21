@@ -114,6 +114,7 @@ public class MailErrorClassifier {
             case AUTHENTICATION -> "EMAIL_AUTH_FAILED";
             case DECRYPTION -> "DECRYPTION_FAILED";
             case VERIFICATION -> "SIGNATURE_INVALID";
+            case ATTACHMENT_SECURITY -> "POLICY_VIOLATION";
             case DLP -> "SCAN_ERROR";
             case ENCRYPTION -> "ENCRYPTION_FAILED";
             case ROUTING -> "DOMAIN_NOT_CONFIGURED";

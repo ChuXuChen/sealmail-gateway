@@ -482,6 +482,81 @@
   line-height: 20px;
 }
 
+.mail-processing-attachment-findings {
+  display: grid;
+  min-width: 0;
+  gap: 8px;
+}
+
+.mail-processing-attachment-finding {
+  display: grid;
+  min-width: 0;
+  gap: 5px;
+  padding: 10px 12px;
+  border: 1px solid rgba(32, 40, 39, 0.1);
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.mail-processing-attachment-finding__head {
+  display: flex;
+  min-width: 0;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.mail-processing-attachment-finding__name {
+  display: block;
+  min-width: 0;
+  color: #202827;
+  font-size: var(--text-xs);
+  font-weight: var(--weight-semibold);
+  line-height: 1.45;
+  word-break: break-word;
+}
+
+.mail-processing-attachment-finding__severity {
+  flex: 0 0 auto;
+  color: rgba(32, 40, 39, 0.58);
+  font-size: var(--text-xs);
+  line-height: 1.45;
+}
+
+.mail-processing-attachment-finding__detail,
+.mail-processing-attachment-finding__meta,
+.mail-processing-attachment-findings__more,
+.mail-processing-attachment-warnings__item {
+  display: block;
+  min-width: 0;
+  font-size: var(--text-xs);
+  line-height: 1.5;
+  word-break: break-word;
+}
+
+.mail-processing-attachment-finding__detail,
+.mail-processing-attachment-findings__more,
+.mail-processing-attachment-warnings__item {
+  color: rgba(32, 40, 39, 0.68);
+}
+
+.mail-processing-attachment-finding__meta {
+  color: rgba(32, 40, 39, 0.58);
+}
+
+.mail-processing-attachment-warnings {
+  display: grid;
+  min-width: 0;
+  gap: 6px;
+  padding-top: 4px;
+}
+
+.mail-processing-attachment-warnings__title {
+  color: #1d2825;
+  font-size: var(--text-xs);
+  line-height: 1.45;
+}
+
 .mail-processing-operation-grid {
   display: grid;
   min-width: 0;

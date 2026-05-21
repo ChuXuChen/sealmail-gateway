@@ -21,6 +21,7 @@ public record MailProcessingContext(
         String quarantineReleaseId,
         MailRecordDisposition recordDisposition,
         AuthenticationResultSet mailAuthResults,
+        MailInspectionBundle inspectionBundle,
         boolean smimeEncrypted,
         String smimeEncryptionSuite,
         List<EmailAddress> smimeEncryptedRecipients
@@ -47,6 +48,7 @@ public record MailProcessingContext(
                 CryptoProfile.AUTO,
                 MailProcessingDecision.none(),
                 CertificateSelection.empty(),
+                null,
                 null,
                 null,
                 null,
@@ -93,97 +95,106 @@ public record MailProcessingContext(
     public MailProcessingContext withProcessingId(String value) {
         MailProcessingContext context = new MailProcessingContext(envelope, value, direction, routingDecision,
                 cryptoProfile, decision, certificateSelection, relayProfile, auditTrace, originalMailContent,
-                subject, quarantineReleaseId, recordDisposition, mailAuthResults, smimeEncrypted, smimeEncryptionSuite,
-                smimeEncryptedRecipients);
+                subject, quarantineReleaseId, recordDisposition, mailAuthResults, inspectionBundle, smimeEncrypted,
+                smimeEncryptionSuite, smimeEncryptedRecipients);
         return context.syncAuditTraceProcessingId();
     }
 
     public MailProcessingContext withDirection(MailDirection value) {
         return new MailProcessingContext(envelope, processingId, value, routingDecision,
                 cryptoProfile, decision, certificateSelection, relayProfile, auditTrace, originalMailContent,
-                subject, quarantineReleaseId, recordDisposition, mailAuthResults, smimeEncrypted, smimeEncryptionSuite,
-                smimeEncryptedRecipients);
+                subject, quarantineReleaseId, recordDisposition, mailAuthResults, inspectionBundle, smimeEncrypted,
+                smimeEncryptionSuite, smimeEncryptedRecipients);
     }
 
     public MailProcessingContext withRoutingDecision(RoutingDecision value) {
         return new MailProcessingContext(envelope, processingId, direction, value,
                 cryptoProfile, decision, certificateSelection, relayProfile, auditTrace, originalMailContent,
-                subject, quarantineReleaseId, recordDisposition, mailAuthResults, smimeEncrypted, smimeEncryptionSuite,
-                smimeEncryptedRecipients);
+                subject, quarantineReleaseId, recordDisposition, mailAuthResults, inspectionBundle, smimeEncrypted,
+                smimeEncryptionSuite, smimeEncryptedRecipients);
     }
 
     public MailProcessingContext withCryptoProfile(CryptoProfile value) {
         return new MailProcessingContext(envelope, processingId, direction, routingDecision,
                 value, decision, certificateSelection, relayProfile, auditTrace, originalMailContent, subject,
-                quarantineReleaseId, recordDisposition, mailAuthResults, smimeEncrypted, smimeEncryptionSuite,
-                smimeEncryptedRecipients);
+                quarantineReleaseId, recordDisposition, mailAuthResults, inspectionBundle, smimeEncrypted,
+                smimeEncryptionSuite, smimeEncryptedRecipients);
     }
 
     public MailProcessingContext withDecision(MailProcessingDecision value) {
         return new MailProcessingContext(envelope, processingId, direction, routingDecision,
                 cryptoProfile, value, certificateSelection, relayProfile, auditTrace, originalMailContent, subject,
-                quarantineReleaseId, recordDisposition, mailAuthResults, smimeEncrypted, smimeEncryptionSuite,
-                smimeEncryptedRecipients);
+                quarantineReleaseId, recordDisposition, mailAuthResults, inspectionBundle, smimeEncrypted,
+                smimeEncryptionSuite, smimeEncryptedRecipients);
     }
 
     public MailProcessingContext withCertificateSelection(CertificateSelection value) {
         return new MailProcessingContext(envelope, processingId, direction, routingDecision,
                 cryptoProfile, decision, value, relayProfile, auditTrace, originalMailContent, subject,
-                quarantineReleaseId, recordDisposition, mailAuthResults, smimeEncrypted, smimeEncryptionSuite,
-                smimeEncryptedRecipients);
+                quarantineReleaseId, recordDisposition, mailAuthResults, inspectionBundle, smimeEncrypted,
+                smimeEncryptionSuite, smimeEncryptedRecipients);
     }
 
     public MailProcessingContext withRelayProfile(RelayProfile value) {
         return new MailProcessingContext(envelope, processingId, direction, routingDecision,
                 cryptoProfile, decision, certificateSelection, value, auditTrace, originalMailContent, subject,
-                quarantineReleaseId, recordDisposition, mailAuthResults, smimeEncrypted, smimeEncryptionSuite,
-                smimeEncryptedRecipients);
+                quarantineReleaseId, recordDisposition, mailAuthResults, inspectionBundle, smimeEncrypted,
+                smimeEncryptionSuite, smimeEncryptedRecipients);
     }
 
     public MailProcessingContext withAuditTrace(AuditTrace value) {
         return new MailProcessingContext(envelope, processingId, direction, routingDecision,
                 cryptoProfile, decision, certificateSelection, relayProfile, value, originalMailContent, subject,
-                quarantineReleaseId, recordDisposition, mailAuthResults, smimeEncrypted, smimeEncryptionSuite,
-                smimeEncryptedRecipients);
+                quarantineReleaseId, recordDisposition, mailAuthResults, inspectionBundle, smimeEncrypted,
+                smimeEncryptionSuite, smimeEncryptedRecipients);
     }
 
     public MailProcessingContext withOriginalMailContent(byte[] value) {
         return new MailProcessingContext(envelope, processingId, direction, routingDecision,
                 cryptoProfile, decision, certificateSelection, relayProfile, auditTrace, value, subject,
-                quarantineReleaseId, recordDisposition, mailAuthResults, smimeEncrypted, smimeEncryptionSuite,
-                smimeEncryptedRecipients);
+                quarantineReleaseId, recordDisposition, mailAuthResults, inspectionBundle, smimeEncrypted,
+                smimeEncryptionSuite, smimeEncryptedRecipients);
     }
 
     public MailProcessingContext withSubject(String value) {
         return new MailProcessingContext(envelope, processingId, direction, routingDecision,
                 cryptoProfile, decision, certificateSelection, relayProfile, auditTrace, originalMailContent, value,
-                quarantineReleaseId, recordDisposition, mailAuthResults, smimeEncrypted, smimeEncryptionSuite,
-                smimeEncryptedRecipients);
+                quarantineReleaseId, recordDisposition, mailAuthResults, inspectionBundle, smimeEncrypted,
+                smimeEncryptionSuite, smimeEncryptedRecipients);
     }
 
     public MailProcessingContext withQuarantineReleaseId(String value) {
         return new MailProcessingContext(envelope, processingId, direction, routingDecision,
                 cryptoProfile, decision, certificateSelection, relayProfile, auditTrace, originalMailContent, subject,
-                value, recordDisposition, mailAuthResults, smimeEncrypted, smimeEncryptionSuite, smimeEncryptedRecipients);
+                value, recordDisposition, mailAuthResults, inspectionBundle, smimeEncrypted, smimeEncryptionSuite,
+                smimeEncryptedRecipients);
     }
 
     public MailProcessingContext withRecordDisposition(MailRecordDisposition value) {
         return new MailProcessingContext(envelope, processingId, direction, routingDecision,
                 cryptoProfile, decision, certificateSelection, relayProfile, auditTrace, originalMailContent, subject,
-                quarantineReleaseId, value, mailAuthResults, smimeEncrypted, smimeEncryptionSuite, smimeEncryptedRecipients);
+                quarantineReleaseId, value, mailAuthResults, inspectionBundle, smimeEncrypted, smimeEncryptionSuite,
+                smimeEncryptedRecipients);
     }
 
     public MailProcessingContext withMailAuthResults(AuthenticationResultSet value) {
         return new MailProcessingContext(envelope, processingId, direction, routingDecision,
                 cryptoProfile, decision, certificateSelection, relayProfile, auditTrace, originalMailContent, subject,
-                quarantineReleaseId, recordDisposition, value, smimeEncrypted, smimeEncryptionSuite,
+                quarantineReleaseId, recordDisposition, value, inspectionBundle, smimeEncrypted, smimeEncryptionSuite,
+                smimeEncryptedRecipients);
+    }
+
+    public MailProcessingContext withInspectionBundle(MailInspectionBundle value) {
+        return new MailProcessingContext(envelope, processingId, direction, routingDecision,
+                cryptoProfile, decision, certificateSelection, relayProfile, auditTrace, originalMailContent, subject,
+                quarantineReleaseId, recordDisposition, mailAuthResults, value, smimeEncrypted, smimeEncryptionSuite,
                 smimeEncryptedRecipients);
     }
 
     public MailProcessingContext withSmimeEncryption(String suite, List<EmailAddress> recipients) {
         return new MailProcessingContext(envelope, processingId, direction, routingDecision,
                 cryptoProfile, decision, certificateSelection, relayProfile, auditTrace, originalMailContent, subject,
-                quarantineReleaseId, recordDisposition, mailAuthResults, true, suite, recipients);
+                quarantineReleaseId, recordDisposition, mailAuthResults, inspectionBundle, true, suite, recipients);
     }
 
     public MailContentSnapshot contentSnapshot() {
