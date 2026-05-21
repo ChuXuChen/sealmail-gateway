@@ -2,6 +2,7 @@ package com.sealmail.infra.crypto;
 
 import com.sealmail.domain.shared.model.EmailAddress;
 import com.sealmail.infra.crypto.util.PemUtils;
+import org.bouncycastle.jce.provider.BouncyCastleProvider;
 import org.bouncycastle.openssl.jcajce.JcaPEMWriter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -25,6 +26,7 @@ import java.security.cert.X509Certificate;
 public class KeyStoreService {
 
     private static final Logger log = LoggerFactory.getLogger(KeyStoreService.class);
+    private static final String KEYSTORE_TYPE = "PKCS12";
 
     private final KeyStore keyStore;
     private final Path keyStorePath;
@@ -40,7 +42,8 @@ public class KeyStoreService {
             throw new IllegalStateException("SEALMAIL_KEYSTORE_PASSWORD must be set when SEALMAIL_KEYSTORE_PATH is configured");
         }
         this.keyStorePassword = configuredPassword.toCharArray();
-        this.keyStore = KeyStore.getInstance("PKCS12");
+        ensureBouncyCastleProvider();
+        this.keyStore = KeyStore.getInstance(KEYSTORE_TYPE, BouncyCastleProvider.PROVIDER_NAME);
 
         if (this.keyStorePath == null) {
             log.warn("Keystore path is not configured; in-memory keystore will be used for this process");
@@ -203,6 +206,12 @@ public class KeyStoreService {
             log.debug("POSIX permissions are not supported for keystore {}", path);
         } catch (Exception e) {
             log.debug("Failed to set owner-only permissions for keystore {}: {}", path, e.getMessage());
+        }
+    }
+
+    private static void ensureBouncyCastleProvider() {
+        if (Security.getProvider(BouncyCastleProvider.PROVIDER_NAME) == null) {
+            Security.addProvider(new BouncyCastleProvider());
         }
     }
 }
