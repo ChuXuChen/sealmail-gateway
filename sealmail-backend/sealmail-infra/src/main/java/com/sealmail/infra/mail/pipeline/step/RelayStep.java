@@ -16,6 +16,7 @@ import com.sealmail.infra.mail.relay.SmtpRelayConnectionSettings;
 import com.sealmail.infra.mail.relay.SmtpRelayRequest;
 import com.sealmail.infra.mail.pipeline.MailProcessingAuditEvents;
 import com.sealmail.infra.mail.pipeline.MailProcessingMessages;
+import com.sealmail.infra.mail.pipeline.MailProcessingStatusService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.messaging.Message;
@@ -36,13 +37,16 @@ public class RelayStep {
     private final RelayPolicyService relayPolicyService;
     private final SmtpRelayClient smtpRelayClient;
     private final DomainEventPublisher domainEventPublisher;
+    private final MailProcessingStatusService statusService;
 
     public RelayStep(RelayPolicyService relayPolicyService,
                      SmtpRelayClient smtpRelayClient,
-                     DomainEventPublisher domainEventPublisher) {
+                     DomainEventPublisher domainEventPublisher,
+                     MailProcessingStatusService statusService) {
         this.relayPolicyService = relayPolicyService;
         this.smtpRelayClient = smtpRelayClient;
         this.domainEventPublisher = domainEventPublisher;
+        this.statusService = statusService;
     }
 
     public Message<byte[]> execute(Message<byte[]> message) {
@@ -58,6 +62,7 @@ public class RelayStep {
         byte[] mailContent = message.getPayload();
         if (mailContent == null || mailContent.length == 0) {
             recordRelayAudit(context, "SMTP_RELAY_FAILED", "Mail content is empty", false);
+            recordRelayFailure(context, "Mail content is empty", false);
             throw new MailProcessingException(
                     MailProcessingErrorType.RELAY,
                     "Mail content is empty",
@@ -73,6 +78,7 @@ public class RelayStep {
         if (relayProfile == null) {
             recordRelayAudit(context, "SMTP_RELAY_FAILED",
                     "Direct SMTP relay policy is disabled or not configured", false);
+            recordRelayFailure(context, "Direct SMTP relay policy is disabled or not configured", true);
             throw new MailProcessingException(
                     MailProcessingErrorType.RELAY,
                     "Direct SMTP relay policy is disabled or not configured",
@@ -117,6 +123,7 @@ public class RelayStep {
             log.info("  Size: {} bytes", mailContent.length);
             log.info("=================================");
             recordRelayAudit(context, "SMTP_RELAY", MailProcessingAuditEvents.relayProfileSummary(relayProfile), true);
+            recordRelaySuccess(context);
 
             return message;
 
@@ -129,6 +136,10 @@ public class RelayStep {
                                 + ", retryable=" + mailProcessingException.retryable()
                                 + MailProcessingAuditEvents.detailPresence(mailProcessingException.getMessage()),
                         false);
+                recordRelayFailure(
+                        mailProcessingException.context() != null ? mailProcessingException.context() : context,
+                        mailProcessingException.getMessage(),
+                        mailProcessingException.retryable());
                 throw mailProcessingException;
             }
             log.error("Relay step failed: {} - host: {}, port: {}, userConfigured: {}",
@@ -137,6 +148,7 @@ public class RelayStep {
                     "errorType=" + MailProcessingErrorType.RELAY
                             + MailProcessingAuditEvents.detailPresence(e.getMessage())
                             + ", " + MailProcessingAuditEvents.relayProfileSummary(relayProfile), false);
+            recordRelayFailure(context, e.getMessage(), true);
             throw new MailProcessingException(
                     MailProcessingErrorType.RELAY,
                     "Mail relay failed: " + e.getMessage(),
@@ -185,6 +197,7 @@ public class RelayStep {
     private void throwRelayGuardException(MailProcessingContext context, String detail) {
         log.error(detail);
         recordRelayAudit(context, "SMTP_RELAY_FAILED", detail, false);
+        recordRelayFailure(context, detail, false);
         throw new MailProcessingException(
                 MailProcessingErrorType.RELAY,
                 detail,
@@ -227,6 +240,18 @@ public class RelayStep {
                 action,
                 detail,
                 success);
+    }
+
+    private void recordRelaySuccess(MailProcessingContext context) {
+        if (statusService != null) {
+            statusService.recordRelaySuccess(context);
+        }
+    }
+
+    private void recordRelayFailure(MailProcessingContext context, String detail, boolean retryable) {
+        if (statusService != null) {
+            statusService.recordRelayFailure(context, detail, retryable);
+        }
     }
 
 }

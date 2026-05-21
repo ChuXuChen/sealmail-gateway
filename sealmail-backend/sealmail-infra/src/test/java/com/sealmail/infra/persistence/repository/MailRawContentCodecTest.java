@@ -5,7 +5,6 @@ import com.sealmail.infra.config.properties.RawContentStorageProperties;
 import org.junit.jupiter.api.Test;
 
 import java.nio.charset.StandardCharsets;
-import java.security.SecureRandom;
 import java.util.Base64;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -48,6 +47,15 @@ class MailRawContentCodecTest {
     }
 
     @Test
+    void validatesEncryptionKeyAtStartup() {
+        MailRawContentCodec codec = codec(null, true);
+
+        assertThatThrownBy(codec::validateConfiguration)
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("Raw mail content encryption key is not configured");
+    }
+
+    @Test
     void legacyModeStillEncodesBase64WhenExplicitlyDisabled() {
         MailRawContentCodec codec = codec(null, false);
         byte[] raw = "raw".getBytes(StandardCharsets.UTF_8);
@@ -75,17 +83,6 @@ class MailRawContentCodecTest {
         properties.getEncryption().setEnabled(encryptionEnabled);
         properties.getEncryption().setKeyRef("test:key");
         SecretReferenceResolver resolver = secretRef -> key;
-        return new MailRawContentCodec(properties, resolver, deterministicSecureRandom());
-    }
-
-    private static SecureRandom deterministicSecureRandom() {
-        return new SecureRandom() {
-            @Override
-            public void nextBytes(byte[] bytes) {
-                for (int i = 0; i < bytes.length; i++) {
-                    bytes[i] = (byte) (i + 1);
-                }
-            }
-        };
+        return new MailRawContentCodec(properties, resolver);
     }
 }

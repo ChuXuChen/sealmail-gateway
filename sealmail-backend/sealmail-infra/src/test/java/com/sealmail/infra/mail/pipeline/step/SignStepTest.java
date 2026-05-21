@@ -33,7 +33,8 @@ class SignStepTest {
         KeyManagementPort keyManagementPort = mock(KeyManagementPort.class);
         SignStep signStep = new SignStep(
                 keyManagementPort,
-                mock(DomainEventPublisher.class));
+                mock(DomainEventPublisher.class),
+                null);
 
         EmailAddress sender = new EmailAddress("sender@example.com");
         byte[] payload = "plain".getBytes();

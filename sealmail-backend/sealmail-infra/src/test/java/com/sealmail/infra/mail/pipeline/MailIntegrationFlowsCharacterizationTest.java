@@ -627,7 +627,7 @@ class MailIntegrationFlowsCharacterizationTest {
                                                   MailProcessingTracker tracker) {
             MailFlowStepRunner stepRunner = new MailFlowStepRunner(tracker);
             MailRoutingStep routingStep = new MailRoutingStep(routingService);
-            MailFlowRouteDecider routeDecider = new MailFlowRouteDecider(tracker);
+            MailFlowRouteDecider routeDecider = new MailFlowRouteDecider(tracker, new UnifiedMailDecisionService());
             QuarantineReleaseGuard releaseGuard = new QuarantineReleaseGuard(tracker);
             MailFlowCompletionService completionService = new MailFlowCompletionService(tracker, null);
             return new MailIntegrationFlows(

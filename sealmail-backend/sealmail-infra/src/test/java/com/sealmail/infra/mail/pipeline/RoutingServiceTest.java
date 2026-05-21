@@ -20,6 +20,7 @@ import com.sealmail.domain.mailsecurity.MailEnvelope;
 import com.sealmail.domain.mailsecurity.MailProcessingContext;
 import com.sealmail.domain.mailsecurity.CryptoProfile;
 import com.sealmail.domain.mailsecurity.CryptoProfileSelector;
+import com.sealmail.domain.mailsecurity.DeliveryRouteResolver;
 import com.sealmail.domain.mailsecurity.MailProcessingErrorType;
 import com.sealmail.domain.mailsecurity.MailProcessingException;
 import com.sealmail.domain.mailsecurity.MailProcessing;
@@ -65,7 +66,7 @@ class RoutingServiceTest {
         CertificateRepository certificateRepository = mock(CertificateRepository.class);
         MailProcessingRepository mailProcessingRepository = mock(MailProcessingRepository.class);
         PostfixProperties postfixProperties = postfixProperties();
-        RoutingService routingService = new RoutingService(
+        RoutingService routingService = routingService(
                 mailRouter,
                 domainConfigRepository,
                 cryptoSelectionService(certificateRepository),
@@ -125,7 +126,7 @@ class RoutingServiceTest {
         CertificateRepository certificateRepository = mock(CertificateRepository.class);
         MailProcessingRepository mailProcessingRepository = mock(MailProcessingRepository.class);
         PostfixProperties postfixProperties = postfixProperties();
-        RoutingService routingService = new RoutingService(
+        RoutingService routingService = routingService(
                 mailRouter,
                 domainConfigRepository,
                 cryptoSelectionService(certificateRepository),
@@ -175,7 +176,7 @@ class RoutingServiceTest {
         DomainConfigRepository domainConfigRepository = mock(DomainConfigRepository.class);
         CertificateRepository certificateRepository = mock(CertificateRepository.class);
         MailProcessingRepository mailProcessingRepository = mock(MailProcessingRepository.class);
-        RoutingService routingService = new RoutingService(
+        RoutingService routingService = routingService(
                 mailRouter,
                 domainConfigRepository,
                 cryptoSelectionService(certificateRepository),
@@ -224,7 +225,7 @@ class RoutingServiceTest {
         DomainConfigRepository domainConfigRepository = mock(DomainConfigRepository.class);
         CertificateRepository certificateRepository = mock(CertificateRepository.class);
         MailProcessingRepository mailProcessingRepository = mock(MailProcessingRepository.class);
-        RoutingService routingService = new RoutingService(
+        RoutingService routingService = routingService(
                 mailRouter,
                 domainConfigRepository,
                 cryptoSelectionService(certificateRepository),
@@ -261,7 +262,7 @@ class RoutingServiceTest {
         DomainConfigRepository domainConfigRepository = mock(DomainConfigRepository.class);
         CertificateRepository certificateRepository = mock(CertificateRepository.class);
         MailProcessingRepository mailProcessingRepository = mock(MailProcessingRepository.class);
-        RoutingService routingService = new RoutingService(
+        RoutingService routingService = routingService(
                 mailRouter,
                 domainConfigRepository,
                 cryptoSelectionService(certificateRepository),
@@ -303,7 +304,7 @@ class RoutingServiceTest {
         DomainConfigRepository domainConfigRepository = mock(DomainConfigRepository.class);
         CertificateRepository certificateRepository = mock(CertificateRepository.class);
         MailProcessingRepository mailProcessingRepository = mock(MailProcessingRepository.class);
-        RoutingService routingService = new RoutingService(
+        RoutingService routingService = routingService(
                 mailRouter,
                 domainConfigRepository,
                 cryptoSelectionService(certificateRepository),
@@ -345,7 +346,7 @@ class RoutingServiceTest {
         DomainConfigRepository domainConfigRepository = mock(DomainConfigRepository.class);
         CertificateRepository certificateRepository = mock(CertificateRepository.class);
         MailProcessingRepository mailProcessingRepository = mock(MailProcessingRepository.class);
-        RoutingService routingService = new RoutingService(
+        RoutingService routingService = routingService(
                 mailRouter,
                 domainConfigRepository,
                 cryptoSelectionService(certificateRepository),
@@ -381,7 +382,7 @@ class RoutingServiceTest {
         DomainConfigRepository domainConfigRepository = mock(DomainConfigRepository.class);
         CertificateRepository certificateRepository = mock(CertificateRepository.class);
         MailProcessingRepository mailProcessingRepository = mock(MailProcessingRepository.class);
-        RoutingService routingService = new RoutingService(
+        RoutingService routingService = routingService(
                 mailRouter,
                 domainConfigRepository,
                 cryptoSelectionService(certificateRepository),
@@ -425,7 +426,7 @@ class RoutingServiceTest {
         DomainConfigRepository domainConfigRepository = mock(DomainConfigRepository.class);
         CertificateRepository certificateRepository = mock(CertificateRepository.class);
         MailProcessingRepository mailProcessingRepository = mock(MailProcessingRepository.class);
-        RoutingService routingService = new RoutingService(
+        RoutingService routingService = routingService(
                 mailRouter,
                 domainConfigRepository,
                 cryptoSelectionService(certificateRepository),
@@ -472,7 +473,7 @@ class RoutingServiceTest {
         DomainConfigRepository domainConfigRepository = mock(DomainConfigRepository.class);
         CertificateRepository certificateRepository = mock(CertificateRepository.class);
         MailProcessingRepository mailProcessingRepository = mock(MailProcessingRepository.class);
-        RoutingService routingService = new RoutingService(
+        RoutingService routingService = routingService(
                 mailRouter,
                 domainConfigRepository,
                 cryptoSelectionService(certificateRepository),
@@ -511,7 +512,7 @@ class RoutingServiceTest {
         DomainConfigRepository domainConfigRepository = mock(DomainConfigRepository.class);
         CertificateRepository certificateRepository = mock(CertificateRepository.class);
         MailProcessingRepository mailProcessingRepository = mock(MailProcessingRepository.class);
-        RoutingService routingService = new RoutingService(
+        RoutingService routingService = routingService(
                 mailRouter,
                 domainConfigRepository,
                 cryptoSelectionService(certificateRepository),
@@ -550,7 +551,7 @@ class RoutingServiceTest {
         DomainConfigRepository domainConfigRepository = mock(DomainConfigRepository.class);
         CertificateRepository certificateRepository = mock(CertificateRepository.class);
         MailProcessingRepository mailProcessingRepository = mock(MailProcessingRepository.class);
-        RoutingService routingService = new RoutingService(
+        RoutingService routingService = routingService(
                 mailRouter,
                 domainConfigRepository,
                 cryptoSelectionService(certificateRepository),
@@ -591,7 +592,7 @@ class RoutingServiceTest {
         DomainConfigRepository domainConfigRepository = mock(DomainConfigRepository.class);
         CertificateRepository certificateRepository = mock(CertificateRepository.class);
         MailProcessingRepository mailProcessingRepository = mock(MailProcessingRepository.class);
-        RoutingService routingService = new RoutingService(
+        RoutingService routingService = routingService(
                 mailRouter,
                 domainConfigRepository,
                 cryptoSelectionService(certificateRepository),
@@ -632,7 +633,7 @@ class RoutingServiceTest {
         DomainConfigRepository domainConfigRepository = mock(DomainConfigRepository.class);
         CertificateRepository certificateRepository = mock(CertificateRepository.class);
         MailProcessingRepository mailProcessingRepository = mock(MailProcessingRepository.class);
-        RoutingService routingService = new RoutingService(
+        RoutingService routingService = routingService(
                 mailRouter,
                 domainConfigRepository,
                 cryptoSelectionService(certificateRepository),
@@ -679,7 +680,7 @@ class RoutingServiceTest {
         DomainConfigRepository domainConfigRepository = mock(DomainConfigRepository.class);
         CertificateRepository certificateRepository = mock(CertificateRepository.class);
         MailProcessingRepository mailProcessingRepository = mock(MailProcessingRepository.class);
-        RoutingService routingService = new RoutingService(
+        RoutingService routingService = routingService(
                 mailRouter,
                 domainConfigRepository,
                 cryptoSelectionService(certificateRepository),
@@ -764,6 +765,32 @@ class RoutingServiceTest {
 
     private static MailCryptoSelectionService cryptoSelectionService(CertificateRepository certificateRepository) {
         return new MailCryptoSelectionService(certificateRepository, new CryptoProfileSelector(), null);
+    }
+
+    private static RoutingService routingService(MailRouter mailRouter,
+                                                 DomainConfigRepository domainConfigRepository,
+                                                 MailCryptoSelectionService cryptoSelectionService,
+                                                 MailProcessingRepository mailProcessingRepository,
+                                                 PostfixProperties postfixProperties,
+                                                 MailAuthPolicyRepository mailAuthPolicyRepository,
+                                                 com.sealmail.infra.events.DomainEventPublisher domainEventPublisher,
+                                                 RelayPolicyPort relayPolicyPort,
+                                                 DeliveryRouteResolver deliveryRouteResolver) {
+        return new RoutingService(
+                mailRouter,
+                new DomainRoutingPolicyResolver(domainConfigRepository, relayPolicyPort),
+                cryptoSelectionService,
+                mailProcessingRepository,
+                mailAuthPolicyRepository,
+                new RelayProfileResolver(
+                        postfixProperties,
+                        deliveryRouteResolver != null
+                                ? deliveryRouteResolver
+                                : new DomainDeliveryRouteResolver(domainConfigRepository),
+                        "127.0.0.1",
+                        2526),
+                new RoutingAuditPublisher(domainEventPublisher),
+                null);
     }
 
     private static RelayPolicyPort relayPolicy(boolean allowUnconfiguredExternalRecipientDomains) {

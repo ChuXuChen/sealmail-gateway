@@ -40,6 +40,7 @@ public class MailProcessingMapper {
         entity.setDirection(mailProcessing.getDirection().name());
         entity.setRoutingDecision(serializeRoutingDecision(mailProcessing.getRoutingDecision()));
         entity.setResult(mailProcessing.getResult() != null ? mailProcessing.getResult().name() : null);
+        entity.setStatusSnapshot(serializeStatusSnapshot(mailProcessing.getStatusSnapshot()));
         return entity;
     }
 
@@ -70,6 +71,7 @@ public class MailProcessingMapper {
                         entity.getId(), entity.getResult());
             }
         }
+        processing.updateStatusSnapshot(deserializeStatusSnapshot(entity.getStatusSnapshot()));
 
         processing.clearDomainEvents();
         return processing;
@@ -131,6 +133,30 @@ public class MailProcessingMapper {
             };
         } catch (Exception ignored) {
             return null;
+        }
+    }
+
+    public String serializeStatusSnapshot(MailProcessingStatusSnapshot statusSnapshot) {
+        if (statusSnapshot == null) {
+            return null;
+        }
+        try {
+            return objectMapper.writeValueAsString(statusSnapshot);
+        } catch (JsonProcessingException e) {
+            log.warn("Failed to serialize mail processing status snapshot: {}", e.getMessage());
+            return null;
+        }
+    }
+
+    private MailProcessingStatusSnapshot deserializeStatusSnapshot(String json) {
+        if (json == null || json.isBlank()) {
+            return MailProcessingStatusSnapshot.empty();
+        }
+        try {
+            return objectMapper.readValue(json, MailProcessingStatusSnapshot.class);
+        } catch (Exception e) {
+            log.warn("Skipped invalid persisted mail processing status snapshot: {}", e.getMessage());
+            return MailProcessingStatusSnapshot.empty();
         }
     }
 }

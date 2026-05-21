@@ -2,6 +2,7 @@ package com.sealmail.infra.persistence.repository;
 
 import com.sealmail.domain.config.SecretReferenceResolver;
 import com.sealmail.infra.config.properties.RawContentStorageProperties;
+import jakarta.annotation.PostConstruct;
 import org.springframework.stereotype.Component;
 
 import javax.crypto.Cipher;
@@ -32,15 +33,16 @@ public class MailRawContentCodec {
 
     public MailRawContentCodec(RawContentStorageProperties properties,
                                SecretReferenceResolver secretReferenceResolver) {
-        this(properties, secretReferenceResolver, new SecureRandom());
-    }
-
-    MailRawContentCodec(RawContentStorageProperties properties,
-                        SecretReferenceResolver secretReferenceResolver,
-                        SecureRandom secureRandom) {
         this.properties = properties;
         this.secretReferenceResolver = secretReferenceResolver;
-        this.secureRandom = secureRandom;
+        this.secureRandom = new SecureRandom();
+    }
+
+    @PostConstruct
+    void validateConfiguration() {
+        if (properties.getEncryption().isEnabled()) {
+            keySpec();
+        }
     }
 
     public EncodedRawContent encode(byte[] rawContent) {

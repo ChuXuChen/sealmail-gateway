@@ -12,4 +12,8 @@ public interface MailProcessingRepository {
     List<MailProcessing> findByMessageId(String messageId);
 
     List<MailProcessing> findByResult(ProcessingResult result);
+
+    List<MailProcessing> findRecent(int page, int size);
+
+    long count();
 }

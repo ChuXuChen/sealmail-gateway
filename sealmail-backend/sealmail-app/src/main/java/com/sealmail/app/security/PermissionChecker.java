@@ -8,10 +8,6 @@ public class PermissionChecker {
 
     private final AppPermissionEvaluator permissionEvaluator;
 
-    public PermissionChecker() {
-        this(new AppPermissionEvaluator());
-    }
-
     public PermissionChecker(AppPermissionEvaluator permissionEvaluator) {
         this.permissionEvaluator = permissionEvaluator;
     }

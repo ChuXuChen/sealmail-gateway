@@ -10,6 +10,7 @@ import com.sealmail.domain.mailsecurity.event.MailVerified;
 import com.sealmail.infra.events.DomainEventPublisher;
 import com.sealmail.infra.mail.pipeline.MailProcessingAuditEvents;
 import com.sealmail.infra.mail.pipeline.MailProcessingMessages;
+import com.sealmail.infra.mail.pipeline.MailProcessingStatusService;
 import org.springframework.messaging.Message;
 import org.springframework.stereotype.Component;
 
@@ -21,11 +22,14 @@ public class VerifyStep {
 
     private final SMIMEOperations smimeOperations;
     private final DomainEventPublisher domainEventPublisher;
+    private final MailProcessingStatusService statusService;
 
     public VerifyStep(SMIMEOperations smimeOperations,
-                      DomainEventPublisher domainEventPublisher) {
+                      DomainEventPublisher domainEventPublisher,
+                      MailProcessingStatusService statusService) {
         this.smimeOperations = smimeOperations;
         this.domainEventPublisher = domainEventPublisher;
+        this.statusService = statusService;
     }
 
     public Message<byte[]> execute(Message<byte[]> message) {
@@ -40,6 +44,7 @@ public class VerifyStep {
 
         try {
             if (!smimeOperations.isSigned(message.getPayload())) {
+                recordSkipped(context, "S/MIME signature not present");
                 return message;
             }
 
@@ -67,6 +72,7 @@ public class VerifyStep {
                     envelope.getSender(),
                     true));
             recordAudit(context, "SMIME_VERIFY", "sender=" + envelope.getSender().getValue(), true);
+            recordSuccess(context);
             return MailProcessingMessages.withPayload(message, extracted);
 
         } catch (Exception e) {
@@ -77,11 +83,15 @@ public class VerifyStep {
                         "errorType=" + mailProcessingException.errorType().name()
                                 + MailProcessingAuditEvents.detailPresence(mailProcessingException.getMessage()),
                         false);
+                recordFailure(
+                        mailProcessingException.context() != null ? mailProcessingException.context() : context,
+                        mailProcessingException.getMessage());
                 throw mailProcessingException;
             }
             recordAudit(context, "SMIME_VERIFY_FAILED",
                     "errorType=" + MailProcessingErrorType.VERIFICATION
                             + MailProcessingAuditEvents.detailPresence(e.getMessage()), false);
+            recordFailure(context, e.getMessage());
             throw new MailProcessingException(
                     MailProcessingErrorType.VERIFICATION,
                     "Signature verification failed: " + e.getMessage(),
@@ -106,5 +116,33 @@ public class VerifyStep {
 
     private MailProcessingContext context(Message<?> message) {
         return MailProcessingMessages.context(message);
+    }
+
+    private void recordSuccess(MailProcessingContext context) {
+        if (statusService != null) {
+            statusService.recordSmimeSuccess(
+                    context,
+                    MailProcessingStatusService.SmimeOperation.VERIFY,
+                    context != null && context.cryptoProfile() != null ? context.cryptoProfile().name() : null,
+                    context != null ? context.certificateSelection().senderCertificateThumbprint() : null,
+                    java.util.List.of(),
+                    java.util.List.of());
+        }
+    }
+
+    private void recordSkipped(MailProcessingContext context, String reason) {
+        if (statusService != null) {
+            statusService.recordSmimeSkipped(context, MailProcessingStatusService.SmimeOperation.VERIFY, reason);
+        }
+    }
+
+    private void recordFailure(MailProcessingContext context, String detail) {
+        if (statusService != null) {
+            statusService.recordSmimeFailure(
+                    context,
+                    MailProcessingStatusService.SmimeOperation.VERIFY,
+                    MailProcessingErrorType.VERIFICATION,
+                    detail);
+        }
     }
 }

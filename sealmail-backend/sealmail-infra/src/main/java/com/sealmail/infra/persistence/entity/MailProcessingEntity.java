@@ -46,6 +46,9 @@ public class MailProcessingEntity {
     @Column(name = "result", length = 16)
     private String result;
 
+    @Column(name = "status_snapshot", columnDefinition = "TEXT")
+    private String statusSnapshot;
+
     // Steps are managed via native SQL queries, no JPA association needed
 
     @Column(name = "created_at", nullable = false)

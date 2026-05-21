@@ -48,6 +48,7 @@ public class MailProcessingRepositoryImpl implements MailProcessingRepository {
         entity.setDirection(mailProcessing.getDirection().name());
         entity.setRoutingDecision(mapper.serializeRoutingDecision(mailProcessing.getRoutingDecision()));
         entity.setResult(mailProcessing.getResult() != null ? mailProcessing.getResult().name() : null);
+        entity.setStatusSnapshot(mapper.serializeStatusSnapshot(mailProcessing.getStatusSnapshot()));
         entity.setUpdatedAt(Instant.now());
 
         // 检查是否存在
@@ -126,6 +127,32 @@ public class MailProcessingRepositoryImpl implements MailProcessingRepository {
                 .map(mapper::toDomain)
                 .map(this::withSteps)
                 .toList();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<MailProcessing> findRecent(int page, int size) {
+        int safePage = Math.max(1, page);
+        int safeSize = Math.max(1, size);
+        TypedQuery<MailProcessingEntity> query = entityManager.createQuery(
+                "SELECT m FROM MailProcessingEntity m ORDER BY m.updatedAt DESC, m.receivedAt DESC",
+                MailProcessingEntity.class
+        );
+        query.setFirstResult((safePage - 1) * safeSize);
+        query.setMaxResults(safeSize);
+        return query.getResultList().stream()
+                .map(mapper::toDomain)
+                .map(this::withSteps)
+                .toList();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public long count() {
+        return entityManager.createQuery(
+                        "SELECT COUNT(m) FROM MailProcessingEntity m",
+                        Long.class)
+                .getSingleResult();
     }
 
     private MailProcessing withSteps(MailProcessing processing) {

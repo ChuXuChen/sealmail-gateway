@@ -27,7 +27,7 @@ class QuarantineReleaseGuardTest {
     @Test
     void passesThroughReleaseMessageWhenNoQuarantineDecisionExists() {
         QuarantineReleaseGuard guard = new QuarantineReleaseGuard(
-                new MailProcessingTracker(new InMemoryMailProcessingRepository()));
+                new MailProcessingTracker(new InMemoryMailProcessingRepository(), null));
         Message<byte[]> message = message("raw".getBytes(), MailProcessingContext.create(envelope("raw".getBytes())));
 
         Message<byte[]> result = guard.failIfQuarantined(message, MailProcessingErrorType.ROUTING);
@@ -40,7 +40,7 @@ class QuarantineReleaseGuardTest {
         InMemoryMailProcessingRepository repository = new InMemoryMailProcessingRepository();
         MailProcessing processing = MailProcessing.create(envelope("raw".getBytes()), MailDirection.OUTBOUND);
         repository.save(processing);
-        QuarantineReleaseGuard guard = new QuarantineReleaseGuard(new MailProcessingTracker(repository));
+        QuarantineReleaseGuard guard = new QuarantineReleaseGuard(new MailProcessingTracker(repository, null));
         MailProcessingContext context = MailProcessingContext.create(envelope("raw".getBytes()))
                 .withProcessingId(processing.getId())
                 .withDecision(MailProcessingDecision.none().withQuarantine("DOMAIN_NOT_CONFIGURED", "domain disabled"));
@@ -92,6 +92,16 @@ class QuarantineReleaseGuardTest {
         @Override
         public List<MailProcessing> findByResult(ProcessingResult result) {
             return List.of();
+        }
+
+        @Override
+        public List<MailProcessing> findRecent(int page, int size) {
+            return value != null ? List.of(value) : List.of();
+        }
+
+        @Override
+        public long count() {
+            return value != null ? 1 : 0;
         }
     }
 }

@@ -25,7 +25,9 @@ class MailFlowRouteDeciderTest {
         InMemoryMailProcessingRepository repository = new InMemoryMailProcessingRepository();
         MailProcessing processing = MailProcessing.create(envelope("raw".getBytes()), MailDirection.OUTBOUND);
         repository.save(processing);
-        MailFlowRouteDecider decider = new MailFlowRouteDecider(new MailProcessingTracker(repository));
+        MailFlowRouteDecider decider = new MailFlowRouteDecider(
+                new MailProcessingTracker(repository, null),
+                new UnifiedMailDecisionService());
         MailProcessingContext context = MailProcessingContext.create(envelope("raw".getBytes()))
                 .withProcessingId(processing.getId())
                 .withDecision(MailProcessingDecision.none().withQuarantine("POLICY_VIOLATION", "blocked"));
@@ -38,7 +40,9 @@ class MailFlowRouteDeciderTest {
 
     @Test
     void releaseRoutingUsesContextDirectionAndEncryptionDecision() {
-        MailFlowRouteDecider decider = new MailFlowRouteDecider(new MailProcessingTracker(new InMemoryMailProcessingRepository()));
+        MailFlowRouteDecider decider = new MailFlowRouteDecider(
+                new MailProcessingTracker(new InMemoryMailProcessingRepository(), null),
+                new UnifiedMailDecisionService());
         MailProcessingContext inbound = MailProcessingContext.create(envelope("raw".getBytes()))
                 .withDirection(MailDirection.INBOUND);
         MailProcessingContext outbound = inbound.withDirection(MailDirection.OUTBOUND);
@@ -89,6 +93,16 @@ class MailFlowRouteDeciderTest {
         @Override
         public List<MailProcessing> findByResult(ProcessingResult result) {
             return List.of();
+        }
+
+        @Override
+        public List<MailProcessing> findRecent(int page, int size) {
+            return value != null ? List.of(value) : List.of();
+        }
+
+        @Override
+        public long count() {
+            return value != null ? 1 : 0;
         }
     }
 }

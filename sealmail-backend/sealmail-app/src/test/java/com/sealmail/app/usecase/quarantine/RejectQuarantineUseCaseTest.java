@@ -3,6 +3,7 @@ package com.sealmail.app.usecase.quarantine;
 import com.sealmail.app.dto.request.RejectQuarantineRequest;
 import com.sealmail.app.exception.QuarantineStateException;
 import com.sealmail.app.mapper.QuarantineDtoMapper;
+import com.sealmail.app.security.AppPermissionEvaluator;
 import com.sealmail.app.security.PermissionChecker;
 import com.sealmail.app.security.UserContext;
 import com.sealmail.domain.quarantine.QuarantineReason;
@@ -33,7 +34,7 @@ class RejectQuarantineUseCaseTest {
         RejectQuarantineUseCase useCase = new RejectQuarantineUseCase(
                 repository,
                 new QuarantineDtoMapper(),
-                new PermissionChecker()
+                new PermissionChecker(new AppPermissionEvaluator())
         );
 
         assertThrows(QuarantineStateException.class,
@@ -52,7 +53,7 @@ class RejectQuarantineUseCaseTest {
         RejectQuarantineUseCase useCase = new RejectQuarantineUseCase(
                 repository,
                 new QuarantineDtoMapper(),
-                new PermissionChecker()
+                new PermissionChecker(new AppPermissionEvaluator())
         );
 
         useCase.batchReject(List.of("q-1", "q-2"), new RejectQuarantineRequest(), admin());

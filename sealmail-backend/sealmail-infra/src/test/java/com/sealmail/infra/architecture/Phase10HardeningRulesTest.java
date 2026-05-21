@@ -14,6 +14,11 @@ class Phase10HardeningRulesTest {
 
     private static final Path REPO_ROOT = Path.of("../..").normalize();
     private static final Path BACKEND_ROOT = Path.of("..").normalize();
+    private static final String LEGACY_SPRING_INJECTION_ANNOTATION = "@" + "Autowired";
+    private static final String LEGACY_SPRING_INJECTION_IMPORT =
+            "org.springframework.beans.factory.annotation." + "Autowired";
+    private static final Pattern SPRING_COMPONENT_ANNOTATION = Pattern.compile(
+            "@(?:Component|Service|Repository|Configuration|RestController|Controller|ControllerAdvice)\\b");
 
     @Test
     void productionCodeDoesNotReintroduceOldPipelineAbstractionsOrStaticStepState() throws IOException {
@@ -43,6 +48,27 @@ class Phase10HardeningRulesTest {
                 .toList();
 
         assertTrue(violations.isEmpty(), () -> "String/reflection bypass violations: " + violations);
+    }
+
+    @Test
+    void productionCodeDoesNotUseAutowiredInjection() throws IOException {
+        List<Path> violations = productionJavaFiles(BACKEND_ROOT).stream()
+                .filter(path -> containsAny(path,
+                        LEGACY_SPRING_INJECTION_ANNOTATION,
+                        LEGACY_SPRING_INJECTION_IMPORT))
+                .toList();
+
+        assertTrue(violations.isEmpty(), () -> "Spring injection must use constructor injection: " + violations);
+    }
+
+    @Test
+    void springComponentsDoNotDeclareMultipleConstructors() throws IOException {
+        List<Path> violations = productionJavaFiles(BACKEND_ROOT).stream()
+                .filter(Phase10HardeningRulesTest::isSpringComponent)
+                .filter(path -> declaredConstructorCount(path) > 1)
+                .toList();
+
+        assertTrue(violations.isEmpty(), () -> "Spring components must expose a single constructor: " + violations);
     }
 
     @Test
@@ -336,6 +362,17 @@ class Phase10HardeningRulesTest {
             }
         }
         return false;
+    }
+
+    private static boolean isSpringComponent(Path path) {
+        return SPRING_COMPONENT_ANNOTATION.matcher(read(path)).find();
+    }
+
+    private static long declaredConstructorCount(Path path) {
+        String className = path.getFileName().toString().replaceFirst("\\.java$", "");
+        Pattern constructor = Pattern.compile(
+                "(?m)^\\s*(?:public|protected|private)?\\s+" + Pattern.quote(className) + "\\s*\\(");
+        return constructor.matcher(read(path)).results().count();
     }
 
     private static boolean isIgnoredPath(Path path) {

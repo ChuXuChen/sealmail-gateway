@@ -12,6 +12,7 @@ import com.sealmail.domain.mailsecurity.event.MailSigned;
 import com.sealmail.infra.events.DomainEventPublisher;
 import com.sealmail.infra.mail.pipeline.MailProcessingAuditEvents;
 import com.sealmail.infra.mail.pipeline.MailProcessingMessages;
+import com.sealmail.infra.mail.pipeline.MailProcessingStatusService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.messaging.Message;
@@ -27,11 +28,14 @@ public class SignStep {
 
     private final KeyManagementPort keyManagementPort;
     private final DomainEventPublisher domainEventPublisher;
+    private final MailProcessingStatusService statusService;
 
     public SignStep(KeyManagementPort keyManagementPort,
-                    DomainEventPublisher domainEventPublisher) {
+                    DomainEventPublisher domainEventPublisher,
+                    MailProcessingStatusService statusService) {
         this.keyManagementPort = keyManagementPort;
         this.domainEventPublisher = domainEventPublisher;
+        this.statusService = statusService;
     }
 
     public Message<byte[]> execute(Message<byte[]> message) {
@@ -45,6 +49,7 @@ public class SignStep {
         }
 
         if (!context.decision().signingRequired()) {
+            recordSkipped(context, "Signing not required");
             return message;
         }
 
@@ -80,6 +85,7 @@ public class SignStep {
                     + ", senderCertificateThumbprint=" + thumbprint
                     + ", keyId=" + signResult.keyRecord().getKeyId()
                     + ", ownerEmail=" + signResult.keyRecord().getOwner().getValue(), true);
+            recordSuccess(context, profile != null ? profile.name() : null, thumbprint);
 
             if (thumbprint != null && !thumbprint.isBlank()) {
                 domainEventPublisher.publishEvent(new MailSigned(
@@ -98,12 +104,16 @@ public class SignStep {
                         "errorType=" + mailProcessingException.errorType().name()
                                 + MailProcessingAuditEvents.detailPresence(mailProcessingException.getMessage()),
                         false);
+                recordFailure(
+                        mailProcessingException.context() != null ? mailProcessingException.context() : context,
+                        mailProcessingException.getMessage());
                 throw mailProcessingException;
             }
             log.error("S/MIME signing failed: {}", e.getMessage(), e);
             recordAudit(context, "SMIME_SIGN_FAILED",
                     "errorType=" + MailProcessingErrorType.SIGNING
                             + MailProcessingAuditEvents.detailPresence(e.getMessage()), false);
+            recordFailure(context, e.getMessage());
             throw new MailProcessingException(
                     MailProcessingErrorType.SIGNING,
                     "S/MIME signing failed: " + e.getMessage(),
@@ -135,5 +145,33 @@ public class SignStep {
             return profile + " profile 策略：" + detail;
         }
         return detail;
+    }
+
+    private void recordSuccess(MailProcessingContext context, String suite, String thumbprint) {
+        if (statusService != null) {
+            statusService.recordSmimeSuccess(
+                    context,
+                    MailProcessingStatusService.SmimeOperation.SIGN,
+                    suite,
+                    thumbprint,
+                    java.util.List.of(),
+                    java.util.List.of());
+        }
+    }
+
+    private void recordSkipped(MailProcessingContext context, String reason) {
+        if (statusService != null) {
+            statusService.recordSmimeSkipped(context, MailProcessingStatusService.SmimeOperation.SIGN, reason);
+        }
+    }
+
+    private void recordFailure(MailProcessingContext context, String detail) {
+        if (statusService != null) {
+            statusService.recordSmimeFailure(
+                    context,
+                    MailProcessingStatusService.SmimeOperation.SIGN,
+                    MailProcessingErrorType.SIGNING,
+                    detail);
+        }
     }
 }

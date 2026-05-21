@@ -7,3 +7,4 @@ export * from './domains';
 export * from './mailAuth';
 export * from './settings';
 export * from './dlp';
+export * from './mailProcessing';

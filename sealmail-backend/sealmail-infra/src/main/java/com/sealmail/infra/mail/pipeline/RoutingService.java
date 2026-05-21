@@ -9,7 +9,6 @@ import com.sealmail.domain.policy.DomainConfig;
 import com.sealmail.domain.policy.DomainConfigRepository;
 import com.sealmail.domain.quarantine.QuarantineReason;
 import com.sealmail.infra.config.properties.PostfixProperties;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.messaging.Message;
 import org.springframework.messaging.support.MessageBuilder;
 import org.springframework.stereotype.Service;
@@ -28,15 +27,16 @@ public class RoutingService {
     private final MailAuthPolicyRepository mailAuthPolicyRepository;
     private final RelayProfileResolver relayProfileResolver;
     private final RoutingAuditPublisher routingAuditPublisher;
+    private final MailProcessingStatusService statusService;
 
-    @Autowired
     public RoutingService(MailRouter mailRouter,
 	                           DomainRoutingPolicyResolver domainRoutingPolicyResolver,
 	                           MailCryptoSelectionService cryptoSelectionService,
 	                           MailProcessingRepository mailProcessingRepository,
 	                           MailAuthPolicyRepository mailAuthPolicyRepository,
 	                           RelayProfileResolver relayProfileResolver,
-	                           RoutingAuditPublisher routingAuditPublisher) {
+	                           RoutingAuditPublisher routingAuditPublisher,
+	                           MailProcessingStatusService statusService) {
         this.mailRouter = mailRouter;
         this.domainRoutingPolicyResolver = domainRoutingPolicyResolver;
         this.cryptoSelectionService = cryptoSelectionService;
@@ -44,31 +44,7 @@ public class RoutingService {
         this.mailAuthPolicyRepository = mailAuthPolicyRepository;
         this.relayProfileResolver = relayProfileResolver;
         this.routingAuditPublisher = routingAuditPublisher;
-    }
-
-    RoutingService(MailRouter mailRouter,
-                   DomainConfigRepository domainConfigRepository,
-                   MailCryptoSelectionService cryptoSelectionService,
-                   MailProcessingRepository mailProcessingRepository,
-                   PostfixProperties postfixProperties,
-                   MailAuthPolicyRepository mailAuthPolicyRepository,
-                   com.sealmail.infra.events.DomainEventPublisher domainEventPublisher,
-                   RelayPolicyPort relayPolicyPort,
-                   DeliveryRouteResolver deliveryRouteResolver) {
-        this(
-                mailRouter,
-                new DomainRoutingPolicyResolver(domainConfigRepository, relayPolicyPort),
-                cryptoSelectionService,
-                mailProcessingRepository,
-                mailAuthPolicyRepository,
-                new RelayProfileResolver(
-                        postfixProperties,
-                        deliveryRouteResolver != null
-                                ? deliveryRouteResolver
-                                : new DomainDeliveryRouteResolver(domainConfigRepository),
-                        "127.0.0.1",
-                        2526),
-                new RoutingAuditPublisher(domainEventPublisher));
+        this.statusService = statusService;
     }
 
     @Transactional
@@ -258,6 +234,7 @@ public class RoutingService {
                     relayProfile);
             routingAuditPublisher.publishRouting(failedContext, decision);
             routingAuditPublisher.publishCertificateSelection(failedContext);
+            recordRoutingStatus(failedContext);
             throw new MailProcessingException(
                     MailProcessingErrorType.ENCRYPTION,
                     ((RoutingDecision.Quarantine) decision).getDetail(),
@@ -311,6 +288,7 @@ public class RoutingService {
                 relayProfile);
         routingAuditPublisher.publishRouting(context, decision);
         routingAuditPublisher.publishCertificateSelection(context);
+        recordRoutingStatus(context);
         return MessageBuilder.withPayload(message.getPayload())
                 .setHeader(MailProcessingHeaders.CONTEXT, context)
                 .setHeader(MailProcessingHeaders.SKIP_DECRYPTION, skipDecryption)
@@ -381,6 +359,12 @@ public class RoutingService {
         return context != null && context.processingId() != null && !context.processingId().isBlank()
                 ? context.processingId()
                 : java.util.UUID.randomUUID().toString();
+    }
+
+    private void recordRoutingStatus(MailProcessingContext context) {
+        if (statusService != null) {
+            statusService.recordRouting(context);
+        }
     }
 
 }

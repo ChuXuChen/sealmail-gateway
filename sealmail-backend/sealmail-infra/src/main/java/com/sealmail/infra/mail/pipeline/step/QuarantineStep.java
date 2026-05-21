@@ -18,6 +18,7 @@ import com.sealmail.domain.quarantine.spi.QuarantineNotificationPort;
 import com.sealmail.infra.events.DomainEventPublisher;
 import com.sealmail.infra.mail.pipeline.MailProcessingAuditEvents;
 import com.sealmail.infra.mail.pipeline.MailProcessingMessages;
+import com.sealmail.infra.mail.pipeline.MailProcessingStatusService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.messaging.Message;
@@ -37,19 +38,22 @@ public class QuarantineStep {
     private final QuarantineNotificationPort quarantineNotificationPort;
     private final DomainEventPublisher domainEventPublisher;
     private final DlpEventRepository dlpEventRepository;
+    private final MailProcessingStatusService statusService;
 
     public QuarantineStep(QuarantineRepository quarantineRepository,
                           ExceptionMailRepository exceptionMailRepository,
                           QuarantinePolicyPort quarantinePolicyPort,
                           QuarantineNotificationPort quarantineNotificationPort,
                           DomainEventPublisher domainEventPublisher,
-                          DlpEventRepository dlpEventRepository) {
+                          DlpEventRepository dlpEventRepository,
+                          MailProcessingStatusService statusService) {
         this.quarantineRepository = quarantineRepository;
         this.exceptionMailRepository = exceptionMailRepository;
         this.quarantinePolicyPort = quarantinePolicyPort;
         this.quarantineNotificationPort = quarantineNotificationPort;
         this.domainEventPublisher = domainEventPublisher;
         this.dlpEventRepository = dlpEventRepository;
+        this.statusService = statusService;
     }
 
     public Message<byte[]> execute(Message<byte[]> message) {
@@ -82,6 +86,12 @@ public class QuarantineStep {
                 linkDlpEvent(context, quarantined.getId());
                 notifyIfEnabled(quarantined);
                 recordQuarantineAudit(context, quarantined.getId(), disposition, quarantineReason, detail(message, reason));
+                recordQuarantineStatus(
+                        context,
+                        quarantined.getId(),
+                        "DLP_QUARANTINE",
+                        quarantineReason,
+                        detail(message, reason));
             } else {
                 ExceptionMail exceptionMail = ExceptionMail.create(
                         java.util.UUID.randomUUID().toString(),
@@ -99,6 +109,12 @@ public class QuarantineStep {
                 exceptionMailRepository.save(exceptionMail);
                 linkDlpEvent(context, exceptionMail.getId());
                 recordQuarantineAudit(context, exceptionMail.getId(), disposition, quarantineReason, detail(message, reason));
+                recordQuarantineStatus(
+                        context,
+                        exceptionMail.getId(),
+                        "EXCEPTION_MAIL",
+                        quarantineReason,
+                        detail(message, reason));
             }
 
             return message;
@@ -246,5 +262,20 @@ public class QuarantineStep {
             return null;
         }
         return context.decision().quarantine().detail();
+    }
+
+    private void recordQuarantineStatus(MailProcessingContext context,
+                                        String targetId,
+                                        String targetType,
+                                        QuarantineReason reason,
+                                        String detail) {
+        if (statusService != null) {
+            statusService.recordQuarantine(
+                    context,
+                    targetId,
+                    targetType,
+                    reason != null ? reason.name() : null,
+                    detail);
+        }
     }
 }

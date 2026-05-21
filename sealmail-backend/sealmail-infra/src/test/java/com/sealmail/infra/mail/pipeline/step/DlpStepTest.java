@@ -20,6 +20,8 @@ import com.sealmail.domain.shared.model.EmailAddress;
 import com.sealmail.domain.shared.event.AuditEvent;
 import com.sealmail.infra.events.DomainEventPublisher;
 import com.sealmail.infra.mail.pipeline.MailProcessingHeaders;
+import com.sealmail.infra.mail.pipeline.MailProcessingStatusService;
+import com.sealmail.infra.mail.pipeline.UnifiedMailDecisionService;
 import org.junit.jupiter.api.Test;
 import org.springframework.messaging.support.MessageBuilder;
 
@@ -32,6 +34,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.argThat;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -77,6 +80,30 @@ class DlpStepTest {
     }
 
     @Test
+    void recordsDlpSnapshotForQuarantineAction() {
+        byte[] payload = mailPayload();
+        DlpEvaluationResult dlpResult = result(DispositionAction.QUARANTINE);
+        DlpEvaluationPort service = mock(DlpEvaluationPort.class);
+        DomainEventPublisher domainEventPublisher = mock(DomainEventPublisher.class);
+        MailProcessingStatusService statusService = mock(MailProcessingStatusService.class);
+        when(service.evaluate(any(), any(), any(Boolean.class))).thenReturn(dlpResult);
+        DlpStep step = new DlpStep(
+                service,
+                domainEventPublisher,
+                new UnifiedMailDecisionService(),
+                statusService);
+
+        step.execute(MessageBuilder.withPayload(payload)
+                .setHeader(MailProcessingHeaders.CONTEXT, context(payload))
+                .build());
+
+        verify(statusService).recordDlpEvaluation(
+                any(MailProcessingContext.class),
+                eq(dlpResult),
+                eq("rule matched"));
+    }
+
+    @Test
     void blockStopsMailAndMarksDlpBlock() {
         byte[] payload = mailPayload();
         DlpStep step = stepReturning(result(DispositionAction.BLOCK));
@@ -97,7 +124,7 @@ class DlpStepTest {
         DlpEvaluationPort service = mock(DlpEvaluationPort.class);
         DomainEventPublisher domainEventPublisher = mock(DomainEventPublisher.class);
         when(service.evaluate(any(), any(), any(Boolean.class))).thenThrow(new IllegalStateException("scanner down"));
-        DlpStep step = new DlpStep(service, domainEventPublisher);
+        DlpStep step = new DlpStep(service, domainEventPublisher, new UnifiedMailDecisionService(), null);
 
         MailProcessingException exception = assertThrows(MailProcessingException.class,
                 () -> step.execute(MessageBuilder.withPayload(payload)
@@ -113,7 +140,7 @@ class DlpStepTest {
         DlpEvaluationPort service = mock(DlpEvaluationPort.class);
         DomainEventPublisher domainEventPublisher = mock(DomainEventPublisher.class);
         when(service.evaluate(any(), any(), any(Boolean.class))).thenReturn(result);
-        return new DlpStep(service, domainEventPublisher);
+        return new DlpStep(service, domainEventPublisher, new UnifiedMailDecisionService(), null);
     }
 
     @Test
@@ -122,12 +149,14 @@ class DlpStepTest {
         DlpEvaluationPort service = mock(DlpEvaluationPort.class);
         DomainEventPublisher domainEventPublisher = mock(DomainEventPublisher.class);
         when(service.evaluate(any(), any(), any(Boolean.class))).thenReturn(result(DispositionAction.WARN));
-        DlpStep step = new DlpStep(service, domainEventPublisher);
+        DlpStep step = new DlpStep(service, domainEventPublisher, new UnifiedMailDecisionService(), null);
 
-        step.execute(MessageBuilder.withPayload(payload)
+        var result = step.execute(MessageBuilder.withPayload(payload)
                 .setHeader(MailProcessingHeaders.CONTEXT, context(payload))
                 .build());
 
+        assertEquals(DispositionAction.WARN, context(result).decision().dlpDecision().action());
+        assertEquals("event-1", context(result).decision().dlpDecision().eventId());
         verify(domainEventPublisher).publishEvent(argThat((AuditEvent event) ->
                 AuditLogType.DLP_VIOLATION.name().equals(event.getEventType())
                         && "MAIL_PROCESSING".equals(event.getResourceType())

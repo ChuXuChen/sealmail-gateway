@@ -2,6 +2,7 @@ package com.sealmail.app.usecase.quarantine;
 
 import com.sealmail.app.dto.request.ReleaseQuarantineRequest;
 import com.sealmail.app.mapper.QuarantineDtoMapper;
+import com.sealmail.app.security.AppPermissionEvaluator;
 import com.sealmail.app.security.PermissionChecker;
 import com.sealmail.app.security.UserContext;
 import com.sealmail.domain.config.QuarantinePolicyPort;
@@ -44,7 +45,7 @@ class ReleaseQuarantineUseCaseTest {
     private final ReleaseQuarantineUseCase useCase = new ReleaseQuarantineUseCase(
             repository,
             new QuarantineDtoMapper(),
-            new PermissionChecker(),
+            new PermissionChecker(new AppPermissionEvaluator()),
             releaseRelay,
             quarantinePolicyPort,
             transactionManager
@@ -120,7 +121,7 @@ class ReleaseQuarantineUseCaseTest {
         ReleaseQuarantineUseCase useCase = new ReleaseQuarantineUseCase(
                 repository,
                 new QuarantineDtoMapper(),
-                new PermissionChecker(),
+                new PermissionChecker(new AppPermissionEvaluator()),
                 releaseRelay,
                 quarantinePolicyPort,
                 transactionManager

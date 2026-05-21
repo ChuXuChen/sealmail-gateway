@@ -20,6 +20,7 @@ import com.sealmail.domain.mailsecurity.MailProcessingContext;
 import com.sealmail.domain.mailsecurity.MailRecordDisposition;
 import com.sealmail.domain.shared.model.EmailAddress;
 import com.sealmail.infra.mail.pipeline.MailProcessingHeaders;
+import com.sealmail.infra.mail.pipeline.UnifiedMailDecisionService;
 import com.sealmail.infra.mailauth.AuthenticationResultsHeaderWriter;
 import org.junit.jupiter.api.Test;
 import org.springframework.messaging.support.MessageBuilder;
@@ -45,7 +46,9 @@ class MailAuthenticationStepTest {
                 repository(policy),
                 trustedSource,
                 verifier,
-                new AuthenticationResultsHeaderWriter());
+                new AuthenticationResultsHeaderWriter(),
+                new UnifiedMailDecisionService(),
+                null);
         MailEnvelope envelope = envelope("127.0.0.1");
         byte[] payload = payload();
 
@@ -75,7 +78,9 @@ class MailAuthenticationStepTest {
                 repository(policy()),
                 (rawContent, candidate, policy) -> candidate,
                 (rawContent, sourceIdentity, policy) -> failResult(),
-                new AuthenticationResultsHeaderWriter());
+                new AuthenticationResultsHeaderWriter(),
+                new UnifiedMailDecisionService(),
+                null);
         byte[] payload = payload();
 
         var result = step.execute(MessageBuilder.withPayload(payload)

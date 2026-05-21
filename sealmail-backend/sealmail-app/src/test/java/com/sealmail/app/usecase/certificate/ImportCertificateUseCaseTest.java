@@ -4,6 +4,7 @@ import com.sealmail.app.dto.request.ImportCertificateRequest;
 import com.sealmail.app.dto.response.CertificateResponse;
 import com.sealmail.app.exception.CertificateException;
 import com.sealmail.app.mapper.CertificateDtoMapper;
+import com.sealmail.app.security.AppPermissionEvaluator;
 import com.sealmail.app.security.PermissionChecker;
 import com.sealmail.app.security.UserContext;
 import com.sealmail.domain.certificate.Certificate;
@@ -43,7 +44,7 @@ class ImportCertificateUseCaseTest {
                 repository,
                 pem -> CertificateValidator.ValidationResult.ok(),
                 new CertificateDtoMapper(chainService),
-                new PermissionChecker(),
+                new PermissionChecker(new AppPermissionEvaluator()),
                 cryptoPort,
                 new CertificateMaterialAssembler(),
                 new CertificatePrivateKeyMaterialService(keyManagementPort)

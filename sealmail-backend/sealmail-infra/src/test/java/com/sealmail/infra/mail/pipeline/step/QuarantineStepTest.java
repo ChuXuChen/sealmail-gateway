@@ -40,6 +40,7 @@ class QuarantineStepTest {
                 policy(false),
                 notificationPort,
                 null,
+                null,
                 null);
 
         step.execute(message("DLP QUARANTINE: rule matched", MailRecordDisposition.DLP_QUARANTINE));
@@ -60,6 +61,7 @@ class QuarantineStepTest {
                 policy(true),
                 notificationPort,
                 null,
+                null,
                 null);
 
         step.execute(message("DLP QUARANTINE: rule matched", MailRecordDisposition.DLP_QUARANTINE));
@@ -78,6 +80,7 @@ class QuarantineStepTest {
                 exceptionMailRepository,
                 policy(true),
                 notificationPort,
+                null,
                 null,
                 null);
 

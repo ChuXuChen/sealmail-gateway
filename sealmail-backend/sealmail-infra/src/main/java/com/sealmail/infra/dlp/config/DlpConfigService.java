@@ -23,9 +23,6 @@ import com.sealmail.domain.dlp.config.DlpConfigPort.DlpRuleSettingsUpdate;
 import com.sealmail.domain.dlp.config.DlpConfigPort.DlpSelectionSettings;
 import com.sealmail.domain.dlp.config.DlpConfigPort.DlpSelectionSettingsUpdate;
 import com.sealmail.domain.mailsecurity.MailEnvelope;
-import com.sealmail.infra.events.DomainEventPublisher;
-import jakarta.persistence.EntityManager;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Primary;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -49,28 +46,16 @@ public class DlpConfigService implements DlpConfigPort,
     private final DlpDatasetConfigStore datasetStore;
     private final DlpConfigMapper mapper;
 
-    @Autowired
-    DlpConfigService(DlpPatternConfigStore patternStore,
-                     DlpSelectionConfigStore selectionStore,
-                     DlpRuleGroupPolicyStore policyStore,
-                     DlpDatasetConfigStore datasetStore,
-                     DlpConfigMapper mapper) {
+    public DlpConfigService(DlpPatternConfigStore patternStore,
+                            DlpSelectionConfigStore selectionStore,
+                            DlpRuleGroupPolicyStore policyStore,
+                            DlpDatasetConfigStore datasetStore,
+                            DlpConfigMapper mapper) {
         this.patternStore = patternStore;
         this.selectionStore = selectionStore;
         this.policyStore = policyStore;
         this.datasetStore = datasetStore;
         this.mapper = mapper;
-    }
-
-    public DlpConfigService(EntityManager entityManager,
-                            DomainEventPublisher domainEventPublisher,
-                            ObjectMapper objectMapper) {
-        this.mapper = new DlpConfigMapper(objectMapper);
-        DlpConfigEvents events = new DlpConfigEvents(domainEventPublisher);
-        this.patternStore = new DlpPatternConfigStore(entityManager, mapper, events);
-        this.selectionStore = new DlpSelectionConfigStore(entityManager, mapper, events, patternStore);
-        this.policyStore = new DlpRuleGroupPolicyStore(entityManager, mapper, patternStore);
-        this.datasetStore = new DlpDatasetConfigStore(entityManager, mapper);
     }
 
     @Override

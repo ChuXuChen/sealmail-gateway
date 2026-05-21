@@ -43,7 +43,7 @@ class RelayStepTest {
 
         SmtpRelayClient smtpRelayClient = mock(SmtpRelayClient.class);
         doNothing().when(smtpRelayClient).send(org.mockito.ArgumentMatchers.any(SmtpRelayRequest.class));
-        RelayStep relayStep = new RelayStep(relayPolicyService, smtpRelayClient, null);
+        RelayStep relayStep = new RelayStep(relayPolicyService, smtpRelayClient, null, null);
 
         byte[] payload = "Subject: Test\r\n\r\nBody".getBytes();
         Message<byte[]> message = message(
@@ -76,7 +76,7 @@ class RelayStepTest {
 
         SmtpRelayClient smtpRelayClient = mock(SmtpRelayClient.class);
         doNothing().when(smtpRelayClient).send(org.mockito.ArgumentMatchers.any(SmtpRelayRequest.class));
-        RelayStep relayStep = new RelayStep(relayPolicyService, smtpRelayClient, null);
+        RelayStep relayStep = new RelayStep(relayPolicyService, smtpRelayClient, null, null);
 
         byte[] payload = "Subject: Test\r\n\r\nBody".getBytes();
         Message<byte[]> message = message(payload, "sender@example.com", List.of("recipient@example.com"),
@@ -97,7 +97,7 @@ class RelayStepTest {
 
         SmtpRelayClient smtpRelayClient = mock(SmtpRelayClient.class);
         doNothing().when(smtpRelayClient).send(org.mockito.ArgumentMatchers.any(SmtpRelayRequest.class));
-        RelayStep relayStep = new RelayStep(relayPolicyService, smtpRelayClient, null);
+        RelayStep relayStep = new RelayStep(relayPolicyService, smtpRelayClient, null, null);
 
         byte[] payload = "Subject: Test\r\n\r\nBody".getBytes();
         Message<byte[]> message = message(payload, "sender@example.com", List.of("recipient@example.com"),
@@ -119,7 +119,7 @@ class RelayStepTest {
 
         SmtpRelayClient smtpRelayClient = mock(SmtpRelayClient.class);
         doNothing().when(smtpRelayClient).send(org.mockito.ArgumentMatchers.any(SmtpRelayRequest.class));
-        RelayStep relayStep = new RelayStep(relayPolicyService, smtpRelayClient, null);
+        RelayStep relayStep = new RelayStep(relayPolicyService, smtpRelayClient, null, null);
 
         byte[] payload = "Subject: Test\r\n\r\nBody".getBytes();
         MailEnvelope envelope = envelope("sender@example.com", List.of("recipient@example.com"), payload);
@@ -151,7 +151,7 @@ class RelayStepTest {
                 "smtp.example.com", 25, "", "", 5000, null));
 
         SmtpRelayClient smtpRelayClient = mock(SmtpRelayClient.class);
-        RelayStep relayStep = new RelayStep(relayPolicyService, smtpRelayClient, null);
+        RelayStep relayStep = new RelayStep(relayPolicyService, smtpRelayClient, null, null);
 
         byte[] payload = "Content-Type: application/pkcs7-mime\r\n\r\nencrypted".getBytes();
         EmailAddress missing = new EmailAddress("1261017453@qq.com");
@@ -178,7 +178,7 @@ class RelayStepTest {
                 "smtp.example.com", 25, "", "", 5000, null));
 
         SmtpRelayClient smtpRelayClient = mock(SmtpRelayClient.class);
-        RelayStep relayStep = new RelayStep(relayPolicyService, smtpRelayClient, null);
+        RelayStep relayStep = new RelayStep(relayPolicyService, smtpRelayClient, null, null);
 
         byte[] payload = """
                 MIME-Version: 1.0\r

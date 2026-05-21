@@ -2,6 +2,7 @@ package com.sealmail.app.usecase.quarantine;
 
 import com.sealmail.app.dto.request.RepairQuarantineReleaseRequest;
 import com.sealmail.app.mapper.QuarantineDtoMapper;
+import com.sealmail.app.security.AppPermissionEvaluator;
 import com.sealmail.app.security.PermissionChecker;
 import com.sealmail.app.security.UserContext;
 import com.sealmail.domain.quarantine.QuarantineReason;
@@ -27,7 +28,7 @@ class RepairQuarantineReleaseUseCaseTest {
     private final RepairQuarantineReleaseUseCase useCase = new RepairQuarantineReleaseUseCase(
             repository,
             new QuarantineDtoMapper(),
-            new PermissionChecker());
+            new PermissionChecker(new AppPermissionEvaluator()));
 
     @Test
     void completeMarksReleasingMailReleasedWithoutRelay() {

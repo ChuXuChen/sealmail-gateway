@@ -154,6 +154,11 @@ class DeadLetterHandlerTest {
 
     private static MailErrorDecisionHandler decisionHandler(MailProcessingRepository repository,
                                                             DomainEventPublisher publisher) {
-        return new MailErrorDecisionHandler(repository, publisher, new MailErrorClassifier());
+        return new MailErrorDecisionHandler(
+                repository,
+                publisher,
+                new MailErrorClassifier(),
+                new UnifiedMailDecisionService(),
+                null);
     }
 }

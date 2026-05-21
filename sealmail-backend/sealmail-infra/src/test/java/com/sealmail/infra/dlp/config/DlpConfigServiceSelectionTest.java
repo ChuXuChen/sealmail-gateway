@@ -76,7 +76,13 @@ class DlpConfigServiceSelectionTest {
                 "SELECT s FROM DlpSelectionEntity s ORDER BY s.scopeType ASC, s.scopeValue ASC",
                 DlpSelectionEntity.class)).thenReturn(selectionQuery);
 
-        return new DlpConfigService(entityManager, mock(DomainEventPublisher.class), new ObjectMapper());
+        DlpConfigMapper mapper = new DlpConfigMapper(new ObjectMapper());
+        DlpConfigEvents events = new DlpConfigEvents(mock(DomainEventPublisher.class));
+        DlpPatternConfigStore patternStore = new DlpPatternConfigStore(entityManager, mapper, events);
+        DlpSelectionConfigStore selectionStore = new DlpSelectionConfigStore(entityManager, mapper, events, patternStore);
+        DlpRuleGroupPolicyStore policyStore = new DlpRuleGroupPolicyStore(entityManager, mapper, patternStore);
+        DlpDatasetConfigStore datasetStore = new DlpDatasetConfigStore(entityManager, mapper);
+        return new DlpConfigService(patternStore, selectionStore, policyStore, datasetStore, mapper);
     }
 
     private static DlpPatternEntity pattern(String id, DispositionAction action) {

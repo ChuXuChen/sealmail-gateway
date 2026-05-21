@@ -5,5 +5,6 @@ export { caApi, certificateApi, certificateBindingApi, crlUrls } from './certifi
 export { domainConfigApi } from './domains';
 export { dlpApi, dlpQuarantineApi, exceptionMailApi } from './dlp';
 export { mailAuthApi } from './mailAuth';
+export { mailProcessingApi } from './mailProcessing';
 export { mailTestApi, runtimePolicyApi, systemSettingsApi } from './settings';
 export { userApi } from './users';

@@ -2,6 +2,7 @@ package com.sealmail.app.usecase.certificate;
 
 import com.sealmail.app.dto.request.CertificateBindingRequest;
 import com.sealmail.app.exception.BusinessException;
+import com.sealmail.app.security.AppPermissionEvaluator;
 import com.sealmail.app.security.PermissionChecker;
 import com.sealmail.app.security.UserContext;
 import com.sealmail.domain.certificate.Certificate;
@@ -80,7 +81,7 @@ class ManageCertificateBindingUseCaseTest {
         return new ManageCertificateBindingUseCase(
                 bindingRepository,
                 certificateRepository,
-                new PermissionChecker(),
+                new PermissionChecker(new AppPermissionEvaluator()),
                 new CertificateChainService(certificateRepository));
     }
 

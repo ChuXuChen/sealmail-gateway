@@ -2,6 +2,7 @@ package com.sealmail.app.usecase.certificate;
 
 import com.sealmail.app.dto.request.SubmitCertRequestRequest;
 import com.sealmail.app.exception.BusinessException;
+import com.sealmail.app.security.AppPermissionEvaluator;
 import com.sealmail.app.security.PermissionChecker;
 import com.sealmail.domain.certificate.CertificateRequest;
 import com.sealmail.domain.certificate.CertificateRequestRepository;
@@ -23,7 +24,7 @@ class CertificateRequestUseCaseTest {
             repository,
             null,
             cryptoPort,
-            new PermissionChecker());
+            new PermissionChecker(new AppPermissionEvaluator()));
 
     @Test
     void submitRejectsRequestedOwnerThatDiffersFromCsrSubjectEmail() {

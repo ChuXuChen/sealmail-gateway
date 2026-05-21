@@ -16,9 +16,12 @@ public class MailProcessingTracker {
     private static final Logger log = LoggerFactory.getLogger(MailProcessingTracker.class);
 
     private final MailProcessingRepository mailProcessingRepository;
+    private final MailProcessingStatusService statusService;
 
-    public MailProcessingTracker(MailProcessingRepository mailProcessingRepository) {
+    public MailProcessingTracker(MailProcessingRepository mailProcessingRepository,
+                                 MailProcessingStatusService statusService) {
         this.mailProcessingRepository = mailProcessingRepository;
+        this.statusService = statusService;
     }
 
     public Message<byte[]> executeStep(Message<byte[]> message,
@@ -51,6 +54,10 @@ public class MailProcessingTracker {
     }
 
     public void completeProcessing(String processingId, ProcessingResult result) {
+        completeProcessing(processingId, result, null);
+    }
+
+    public void completeProcessing(String processingId, ProcessingResult result, MailProcessingContext context) {
         if (processingId == null) {
             return;
         }
@@ -59,6 +66,9 @@ public class MailProcessingTracker {
             mailProcessingRepository.save(processing);
             log.info("Mail processing completed: {} with result: {}", processingId, result);
         });
+        if (statusService != null) {
+            statusService.recordProcessingResult(processingId, result, context);
+        }
     }
 
     private void addStep(String processingId, String stepName) {

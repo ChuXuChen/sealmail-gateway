@@ -14,6 +14,7 @@ import com.sealmail.infra.events.DomainEventPublisher;
 import com.sealmail.infra.mail.pipeline.MailProcessingHeaders;
 import com.sealmail.infra.mail.pipeline.MailProcessingAuditEvents;
 import com.sealmail.infra.mail.pipeline.MailProcessingMessages;
+import com.sealmail.infra.mail.pipeline.MailProcessingStatusService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.messaging.Message;
@@ -30,13 +31,16 @@ public class DecryptStep {
     private final SMIMEOperations smimeOperations;
     private final KeyManagementPort keyManagementPort;
     private final DomainEventPublisher domainEventPublisher;
+    private final MailProcessingStatusService statusService;
 
     public DecryptStep(SMIMEOperations smimeOperations,
                        KeyManagementPort keyManagementPort,
-                       DomainEventPublisher domainEventPublisher) {
+                       DomainEventPublisher domainEventPublisher,
+                       MailProcessingStatusService statusService) {
         this.smimeOperations = smimeOperations;
         this.keyManagementPort = keyManagementPort;
         this.domainEventPublisher = domainEventPublisher;
+        this.statusService = statusService;
     }
 
     public Message<byte[]> execute(Message<byte[]> message) {
@@ -51,10 +55,12 @@ public class DecryptStep {
 
         try {
             if (skipDecryption(message)) {
+                recordSkipped(context, "Decryption skipped by route policy");
                 return message;
             }
 
             if (!smimeOperations.isEncrypted(message.getPayload())) {
+                recordSkipped(context, "S/MIME encrypted content not present");
                 return message;
             }
 
@@ -81,6 +87,7 @@ public class DecryptStep {
                             + ", keyId=" + decryptResult.keyRecord().getKeyId()
                             + ", ownerEmail=" + decryptResult.keyRecord().getOwner().getValue(),
                     true);
+            recordSuccess(context, thumbprint, recipient);
             return MailProcessingMessages.withPayload(message, decrypted);
 
         } catch (Exception e) {
@@ -91,11 +98,15 @@ public class DecryptStep {
                         "errorType=" + mailProcessingException.errorType().name()
                                 + MailProcessingAuditEvents.detailPresence(mailProcessingException.getMessage()),
                         false);
+                recordFailure(
+                        mailProcessingException.context() != null ? mailProcessingException.context() : context,
+                        mailProcessingException.getMessage());
                 throw mailProcessingException;
             }
             recordAudit(context, "SMIME_DECRYPT_FAILED",
                     "errorType=" + MailProcessingErrorType.DECRYPTION
                             + MailProcessingAuditEvents.detailPresence(e.getMessage()), false);
+            recordFailure(context, e.getMessage());
             throw new MailProcessingException(
                     MailProcessingErrorType.DECRYPTION,
                     "Decryption failed: " + e.getMessage(),
@@ -131,5 +142,33 @@ public class DecryptStep {
                 .map(EmailAddress::getValue)
                 .collect(java.util.stream.Collectors.joining(", "));
         return "Encrypted S/MIME mail cannot be decrypted: missing managed key for recipient(s): " + recipients;
+    }
+
+    private void recordSuccess(MailProcessingContext context, String thumbprint, EmailAddress recipient) {
+        if (statusService != null) {
+            statusService.recordSmimeSuccess(
+                    context,
+                    MailProcessingStatusService.SmimeOperation.DECRYPT,
+                    context != null && context.cryptoProfile() != null ? context.cryptoProfile().name() : null,
+                    thumbprint,
+                    java.util.List.of(),
+                    recipient != null ? java.util.List.of(recipient.getValue()) : java.util.List.of());
+        }
+    }
+
+    private void recordSkipped(MailProcessingContext context, String reason) {
+        if (statusService != null) {
+            statusService.recordSmimeSkipped(context, MailProcessingStatusService.SmimeOperation.DECRYPT, reason);
+        }
+    }
+
+    private void recordFailure(MailProcessingContext context, String detail) {
+        if (statusService != null) {
+            statusService.recordSmimeFailure(
+                    context,
+                    MailProcessingStatusService.SmimeOperation.DECRYPT,
+                    MailProcessingErrorType.DECRYPTION,
+                    detail);
+        }
     }
 }

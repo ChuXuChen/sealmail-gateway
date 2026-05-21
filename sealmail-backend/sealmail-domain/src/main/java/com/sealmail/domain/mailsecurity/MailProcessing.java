@@ -16,12 +16,14 @@ public class MailProcessing extends AggregateRoot<String> {
     private final MailDirection direction;
     private RoutingDecision routingDecision;
     private ProcessingResult result;
+    private MailProcessingStatusSnapshot statusSnapshot;
     private final List<ProcessingStep> steps;
 
     private MailProcessing(String id, MailEnvelope envelope, MailDirection direction) {
         super(id);
         this.envelope = envelope;
         this.direction = direction;
+        this.statusSnapshot = MailProcessingStatusSnapshot.empty();
         this.steps = new ArrayList<>();
     }
 
@@ -87,6 +89,10 @@ public class MailProcessing extends AggregateRoot<String> {
         registerEvent(new MailQuarantined(envelope.getMessageId(), reason, detail));
     }
 
+    public void updateStatusSnapshot(MailProcessingStatusSnapshot statusSnapshot) {
+        this.statusSnapshot = statusSnapshot != null ? statusSnapshot : MailProcessingStatusSnapshot.empty();
+    }
+
     public MailEnvelope getEnvelope() {
         return envelope;
     }
@@ -101,6 +107,10 @@ public class MailProcessing extends AggregateRoot<String> {
 
     public ProcessingResult getResult() {
         return result;
+    }
+
+    public MailProcessingStatusSnapshot getStatusSnapshot() {
+        return statusSnapshot != null ? statusSnapshot : MailProcessingStatusSnapshot.empty();
     }
 
     public List<ProcessingStep> getSteps() {

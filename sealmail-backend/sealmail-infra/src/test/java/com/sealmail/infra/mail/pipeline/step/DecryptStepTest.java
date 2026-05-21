@@ -35,7 +35,8 @@ class DecryptStepTest {
         DecryptStep decryptStep = new DecryptStep(
                 smimeOperations,
                 mock(KeyManagementPort.class),
-                mock(DomainEventPublisher.class)
+                mock(DomainEventPublisher.class),
+                null
         );
         byte[] payload = "plain-text".getBytes();
         when(smimeOperations.isEncrypted(payload)).thenReturn(false);
@@ -53,7 +54,8 @@ class DecryptStepTest {
         DecryptStep decryptStep = new DecryptStep(
                 smimeOperations,
                 mock(KeyManagementPort.class),
-                mock(DomainEventPublisher.class)
+                mock(DomainEventPublisher.class),
+                null
         );
         byte[] payload = "cipher-text".getBytes();
 
@@ -72,7 +74,8 @@ class DecryptStepTest {
         DecryptStep decryptStep = new DecryptStep(
                 smimeOperations,
                 keyManagementPort,
-                mock(DomainEventPublisher.class)
+                mock(DomainEventPublisher.class),
+                null
         );
         byte[] payload = "cipher-text".getBytes();
         when(smimeOperations.isEncrypted(payload)).thenReturn(true);

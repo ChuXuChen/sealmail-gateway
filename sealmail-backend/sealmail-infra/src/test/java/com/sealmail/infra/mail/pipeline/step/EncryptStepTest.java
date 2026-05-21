@@ -42,7 +42,7 @@ class EncryptStepTest {
     void encryptsAllRecipientsInOneSmimeEnvelope() {
         SMIMEOperations smimeOperations = mock(SMIMEOperations.class);
         DomainEventPublisher domainEventPublisher = mock(DomainEventPublisher.class);
-        EncryptStep encryptStep = new EncryptStep(smimeOperations, domainEventPublisher);
+        EncryptStep encryptStep = new EncryptStep(smimeOperations, domainEventPublisher, null);
 
         EmailAddress sender = new EmailAddress("sender@example.com");
         EmailAddress recipientA = new EmailAddress("a@example.com");
@@ -79,7 +79,7 @@ class EncryptStepTest {
     @Test
     void mustEncryptQuarantinesWhenNoRecipientCertificateExists() {
         SMIMEOperations smimeOperations = mock(SMIMEOperations.class);
-        EncryptStep encryptStep = new EncryptStep(smimeOperations, mock(DomainEventPublisher.class));
+        EncryptStep encryptStep = new EncryptStep(smimeOperations, mock(DomainEventPublisher.class), null);
 
         byte[] payload = "hello".getBytes();
         Message<byte[]> message = message(payload, new EmailAddress("sender@example.com"),
@@ -97,7 +97,7 @@ class EncryptStepTest {
     @Test
     void mustEncryptFailureIsRecordedAsExceptionMail() {
         SMIMEOperations smimeOperations = mock(SMIMEOperations.class);
-        EncryptStep encryptStep = new EncryptStep(smimeOperations, mock(DomainEventPublisher.class));
+        EncryptStep encryptStep = new EncryptStep(smimeOperations, mock(DomainEventPublisher.class), null);
 
         byte[] payload = "hello".getBytes();
         Message<byte[]> message = message(payload, new EmailAddress("sender@example.com"),
@@ -113,7 +113,7 @@ class EncryptStepTest {
     @Test
     void mustEncryptUsesCertificatesSelectedByRoutingEntry() {
         SMIMEOperations smimeOperations = mock(SMIMEOperations.class);
-        EncryptStep encryptStep = new EncryptStep(smimeOperations, mock(DomainEventPublisher.class));
+        EncryptStep encryptStep = new EncryptStep(smimeOperations, mock(DomainEventPublisher.class), null);
 
         EmailAddress recipient = new EmailAddress("a@example.com");
         byte[] payload = "hello".getBytes();
@@ -136,7 +136,7 @@ class EncryptStepTest {
     @Test
     void mustEncryptQuarantinesWhenAnyRecipientCertificateIsMissing() {
         SMIMEOperations smimeOperations = mock(SMIMEOperations.class);
-        EncryptStep encryptStep = new EncryptStep(smimeOperations, mock(DomainEventPublisher.class));
+        EncryptStep encryptStep = new EncryptStep(smimeOperations, mock(DomainEventPublisher.class), null);
 
         EmailAddress recipientA = new EmailAddress("a@example.com");
         EmailAddress recipientB = new EmailAddress("b@example.com");
@@ -156,7 +156,7 @@ class EncryptStepTest {
     @Test
     void failsWhenRoutingEntryCouldNotDetermineSharedCryptoProfile() {
         SMIMEOperations smimeOperations = mock(SMIMEOperations.class);
-        EncryptStep encryptStep = new EncryptStep(smimeOperations, mock(DomainEventPublisher.class));
+        EncryptStep encryptStep = new EncryptStep(smimeOperations, mock(DomainEventPublisher.class), null);
 
         EmailAddress recipientA = new EmailAddress("a@example.com");
         EmailAddress recipientB = new EmailAddress("b@example.com");
@@ -178,7 +178,7 @@ class EncryptStepTest {
     @Test
     void gmOnlyUsesGmSuiteWhenAllRecipientsHaveSm2Certificates() {
         SMIMEOperations smimeOperations = mock(SMIMEOperations.class);
-        EncryptStep encryptStep = new EncryptStep(smimeOperations, mock(DomainEventPublisher.class));
+        EncryptStep encryptStep = new EncryptStep(smimeOperations, mock(DomainEventPublisher.class), null);
 
         EmailAddress recipientA = new EmailAddress("a@example.com");
         EmailAddress recipientB = new EmailAddress("b@example.com");
@@ -204,7 +204,7 @@ class EncryptStepTest {
     @Test
     void encryptsWhenOnlyContextRequiresEncryption() {
         SMIMEOperations smimeOperations = mock(SMIMEOperations.class);
-        EncryptStep encryptStep = new EncryptStep(smimeOperations, mock(DomainEventPublisher.class));
+        EncryptStep encryptStep = new EncryptStep(smimeOperations, mock(DomainEventPublisher.class), null);
 
         EmailAddress recipient = new EmailAddress("a@example.com");
         byte[] payload = "hello".getBytes();

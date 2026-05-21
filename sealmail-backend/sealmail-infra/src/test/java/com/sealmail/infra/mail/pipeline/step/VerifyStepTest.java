@@ -31,7 +31,7 @@ class VerifyStepTest {
     @Test
     void extractsOriginalContentAfterSuccessfulSignatureVerification() {
         SMIMEOperations smimeOperations = mock(SMIMEOperations.class);
-        VerifyStep verifyStep = new VerifyStep(smimeOperations, mock(DomainEventPublisher.class));
+        VerifyStep verifyStep = new VerifyStep(smimeOperations, mock(DomainEventPublisher.class), null);
         byte[] signedPayload = "signed".getBytes();
         byte[] extractedPayload = "plain".getBytes();
 
@@ -50,7 +50,7 @@ class VerifyStepTest {
     @Test
     void signedMailWithoutSenderCertificateEntersUnifiedErrorFlow() {
         SMIMEOperations smimeOperations = mock(SMIMEOperations.class);
-        VerifyStep verifyStep = new VerifyStep(smimeOperations, mock(DomainEventPublisher.class));
+        VerifyStep verifyStep = new VerifyStep(smimeOperations, mock(DomainEventPublisher.class), null);
         byte[] signedPayload = "signed".getBytes();
 
         when(smimeOperations.isSigned(signedPayload)).thenReturn(true);
@@ -68,7 +68,7 @@ class VerifyStepTest {
     @Test
     void invalidSignatureEntersUnifiedErrorFlow() {
         SMIMEOperations smimeOperations = mock(SMIMEOperations.class);
-        VerifyStep verifyStep = new VerifyStep(smimeOperations, mock(DomainEventPublisher.class));
+        VerifyStep verifyStep = new VerifyStep(smimeOperations, mock(DomainEventPublisher.class), null);
         byte[] signedPayload = "signed".getBytes();
 
         when(smimeOperations.isSigned(signedPayload)).thenReturn(true);

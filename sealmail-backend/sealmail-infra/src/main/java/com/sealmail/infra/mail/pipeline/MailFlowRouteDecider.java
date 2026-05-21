@@ -10,14 +10,17 @@ import org.springframework.stereotype.Component;
 public class MailFlowRouteDecider {
 
     private final MailProcessingTracker tracker;
+    private final UnifiedMailDecisionService decisionService;
 
-    public MailFlowRouteDecider(MailProcessingTracker tracker) {
+    public MailFlowRouteDecider(MailProcessingTracker tracker,
+                                UnifiedMailDecisionService decisionService) {
         this.tracker = tracker;
+        this.decisionService = decisionService;
     }
 
     public MailFlowRoute deliveryRoute(Message<?> message) {
         MailProcessingContext context = MailProcessingMessages.context(message);
-        if (context != null && context.decision().requiresQuarantine()) {
+        if (decisionService.requiresQuarantine(context)) {
             tracker.completeProcessing(context.processingId(), ProcessingResult.FAILED);
             return MailFlowRoute.QUARANTINE;
         }

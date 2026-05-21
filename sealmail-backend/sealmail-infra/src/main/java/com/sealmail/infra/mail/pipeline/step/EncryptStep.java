@@ -14,6 +14,7 @@ import com.sealmail.domain.shared.model.EmailAddress;
 import com.sealmail.infra.events.DomainEventPublisher;
 import com.sealmail.infra.mail.pipeline.MailProcessingAuditEvents;
 import com.sealmail.infra.mail.pipeline.MailProcessingMessages;
+import com.sealmail.infra.mail.pipeline.MailProcessingStatusService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.messaging.Message;
@@ -34,11 +35,14 @@ public class EncryptStep {
 
     private final SMIMEOperations smimeOperations;
     private final DomainEventPublisher domainEventPublisher;
+    private final MailProcessingStatusService statusService;
 
     public EncryptStep(SMIMEOperations smimeOperations,
-                       DomainEventPublisher domainEventPublisher) {
+                       DomainEventPublisher domainEventPublisher,
+                       MailProcessingStatusService statusService) {
         this.smimeOperations = smimeOperations;
         this.domainEventPublisher = domainEventPublisher;
+        this.statusService = statusService;
     }
 
     public Message<byte[]> execute(Message<byte[]> message) {
@@ -54,6 +58,7 @@ public class EncryptStep {
         boolean encryptionEnabled = context.decision().encryptionRequired();
         boolean mustEncrypt = context.decision().mustEncrypt();
         if (!encryptionEnabled && !mustEncrypt) {
+            recordSkipped(context, "Encryption not required");
             return message;
         }
 
@@ -90,6 +95,7 @@ public class EncryptStep {
                     + ", recipientThumbprints=" + plan.thumbprints().values().stream()
                     .filter(value -> value != null && !value.isBlank())
                     .collect(java.util.stream.Collectors.joining(",")), true);
+            recordSuccess(context, plan);
             events.forEach(domainEventPublisher::publishEvent);
             return MailProcessingMessages.withPayloadAndContext(message, payload, context);
 
@@ -101,12 +107,16 @@ public class EncryptStep {
                         "errorType=" + mailProcessingException.errorType().name()
                                 + MailProcessingAuditEvents.detailPresence(mailProcessingException.getMessage()),
                         false);
+                recordFailure(
+                        mailProcessingException.context() != null ? mailProcessingException.context() : context,
+                        mailProcessingException.getMessage());
                 throw mailProcessingException;
             }
             log.error("S/MIME encryption failed: {}", e.getMessage(), e);
             recordAudit(context, "SMIME_ENCRYPT_FAILED",
                     "errorType=" + MailProcessingErrorType.ENCRYPTION
                             + MailProcessingAuditEvents.detailPresence(e.getMessage()), false);
+            recordFailure(context, e.getMessage());
             throw new MailProcessingException(
                     MailProcessingErrorType.ENCRYPTION,
                     "S/MIME encryption failed: " + e.getMessage(),
@@ -187,6 +197,39 @@ public class EncryptStep {
 
         static EncryptionPlan failure(String detail) {
             return new EncryptionPlan(false, null, Map.of(), Map.of(), detail);
+        }
+    }
+
+    private void recordSuccess(MailProcessingContext context, EncryptionPlan plan) {
+        if (statusService == null) {
+            return;
+        }
+        statusService.recordSmimeSuccess(
+                context,
+                MailProcessingStatusService.SmimeOperation.ENCRYPT,
+                plan.profile() != null ? plan.profile().name() : null,
+                null,
+                plan.thumbprints().values().stream()
+                        .filter(value -> value != null && !value.isBlank())
+                        .toList(),
+                plan.certificates().keySet().stream()
+                        .map(EmailAddress::getValue)
+                        .toList());
+    }
+
+    private void recordSkipped(MailProcessingContext context, String reason) {
+        if (statusService != null) {
+            statusService.recordSmimeSkipped(context, MailProcessingStatusService.SmimeOperation.ENCRYPT, reason);
+        }
+    }
+
+    private void recordFailure(MailProcessingContext context, String detail) {
+        if (statusService != null) {
+            statusService.recordSmimeFailure(
+                    context,
+                    MailProcessingStatusService.SmimeOperation.ENCRYPT,
+                    MailProcessingErrorType.ENCRYPTION,
+                    detail);
         }
     }
 }

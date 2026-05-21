@@ -5,6 +5,7 @@ import com.sealmail.app.dto.request.IssueEndEntityRequest;
 import com.sealmail.app.dto.request.SignCsrRequest;
 import com.sealmail.app.exception.BusinessException;
 import com.sealmail.app.mapper.CertificateDtoMapper;
+import com.sealmail.app.security.AppPermissionEvaluator;
 import com.sealmail.app.security.PermissionChecker;
 import com.sealmail.app.security.UserContext;
 import com.sealmail.domain.certificate.Certificate;
@@ -38,7 +39,7 @@ class CertificateIssuanceAlgorithmPolicyTest {
     private final CertificatePrivateKeyMaterialService privateKeyMaterialService =
             new CertificatePrivateKeyMaterialService(keyManagementPort);
     private final CertificateAlgorithmPolicy algorithmPolicy = new CertificateAlgorithmPolicy();
-    private final PermissionChecker permissionChecker = new PermissionChecker();
+    private final PermissionChecker permissionChecker = new PermissionChecker(new AppPermissionEvaluator());
     private final CertificateMaterialAssembler materialAssembler = new CertificateMaterialAssembler();
 
     @Test

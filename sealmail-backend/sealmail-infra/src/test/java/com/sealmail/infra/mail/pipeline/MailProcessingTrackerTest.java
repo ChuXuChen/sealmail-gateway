@@ -30,7 +30,7 @@ class MailProcessingTrackerTest {
         InMemoryMailProcessingRepository repository = new InMemoryMailProcessingRepository();
         MailProcessing processing = MailProcessing.create(envelope("raw".getBytes()), com.sealmail.domain.mailsecurity.MailDirection.OUTBOUND);
         repository.save(processing);
-        MailProcessingTracker tracker = new MailProcessingTracker(repository);
+        MailProcessingTracker tracker = new MailProcessingTracker(repository, null);
         Message<byte[]> message = MessageBuilder.withPayload("raw".getBytes())
                 .setHeader(MailProcessingHeaders.CONTEXT,
                         MailProcessingContext.create(envelope("raw".getBytes())).withProcessingId(processing.getId()))
@@ -54,7 +54,7 @@ class MailProcessingTrackerTest {
         InMemoryMailProcessingRepository repository = new InMemoryMailProcessingRepository();
         MailProcessing processing = MailProcessing.create(envelope("raw".getBytes()), com.sealmail.domain.mailsecurity.MailDirection.OUTBOUND);
         repository.save(processing);
-        MailProcessingTracker tracker = new MailProcessingTracker(repository);
+        MailProcessingTracker tracker = new MailProcessingTracker(repository, null);
         MailProcessingContext context = MailProcessingContext.create(envelope("raw".getBytes()))
                 .withProcessingId(processing.getId())
                 .withDecision(MailProcessingDecision.none().withQuarantine(
@@ -111,6 +111,16 @@ class MailProcessingTrackerTest {
         @Override
         public List<MailProcessing> findByResult(ProcessingResult result) {
             return List.of();
+        }
+
+        @Override
+        public List<MailProcessing> findRecent(int page, int size) {
+            return value != null ? List.of(value) : List.of();
+        }
+
+        @Override
+        public long count() {
+            return value != null ? 1 : 0;
         }
     }
 }

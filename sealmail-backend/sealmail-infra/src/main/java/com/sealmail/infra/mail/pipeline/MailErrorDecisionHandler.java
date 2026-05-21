@@ -2,7 +2,6 @@ package com.sealmail.infra.mail.pipeline;
 
 import com.sealmail.domain.audit.AuditLogType;
 import com.sealmail.domain.mailsecurity.MailProcessingContext;
-import com.sealmail.domain.mailsecurity.MailProcessingDecision;
 import com.sealmail.domain.mailsecurity.MailProcessingRepository;
 import com.sealmail.infra.events.DomainEventPublisher;
 import org.slf4j.Logger;
@@ -19,18 +18,25 @@ public class MailErrorDecisionHandler {
     private final MailProcessingRepository mailProcessingRepository;
     private final DomainEventPublisher domainEventPublisher;
     private final MailErrorClassifier classifier;
+    private final UnifiedMailDecisionService decisionService;
+    private final MailProcessingStatusService statusService;
 
     public MailErrorDecisionHandler(MailProcessingRepository mailProcessingRepository,
                                     DomainEventPublisher domainEventPublisher,
-                                    MailErrorClassifier classifier) {
+                                    MailErrorClassifier classifier,
+                                    UnifiedMailDecisionService decisionService,
+                                    MailProcessingStatusService statusService) {
         this.mailProcessingRepository = mailProcessingRepository;
         this.domainEventPublisher = domainEventPublisher;
         this.classifier = classifier;
+        this.decisionService = decisionService;
+        this.statusService = statusService;
     }
 
     public ErrorDecision decide(Message<?> errorMessage) {
         MailErrorClassification classification = classifier.classify(errorMessage);
         updateProcessing(classification);
+        recordStatus(classification);
         recordAudit(classification);
 
         if (classification.target() == MailErrorTarget.QUARANTINE) {
@@ -70,13 +76,19 @@ public class MailErrorDecisionHandler {
                 false);
     }
 
+    private void recordStatus(MailErrorClassification classification) {
+        if (statusService != null) {
+            statusService.recordError(classification);
+        }
+    }
+
     private Message<byte[]> quarantineMessage(MailErrorClassification classification) {
         MailProcessingContext context = classification.context();
-        MailProcessingContext quarantineContext = context
-                .withDecision(MailProcessingDecision.none().withQuarantine(
-                        classification.quarantineReason(),
-                        classification.quarantineDetail()))
-                .withRecordDisposition(classification.recordDisposition());
+        MailProcessingContext quarantineContext = decisionService.markQuarantine(
+                context,
+                classification.quarantineReason(),
+                classification.quarantineDetail(),
+                classification.recordDisposition());
         return MessageBuilder.withPayload(context.originalMailContent())
                 .setHeader(MailProcessingHeaders.CONTEXT, quarantineContext)
                 .build();
