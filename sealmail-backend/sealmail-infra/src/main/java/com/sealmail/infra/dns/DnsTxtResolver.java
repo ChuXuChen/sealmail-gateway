@@ -52,11 +52,47 @@ public class DnsTxtResolver {
         }
     }
 
-    private String clean(String value) {
+    String clean(String value) {
         String cleaned = value.trim();
-        if (cleaned.startsWith("\"") && cleaned.endsWith("\"")) {
-            cleaned = cleaned.substring(1, cleaned.length() - 1);
+        return concatenateQuotedStrings(cleaned);
+    }
+
+    private String concatenateQuotedStrings(String value) {
+        if (value.isEmpty() || value.charAt(0) != '"') {
+            return value;
         }
-        return cleaned.replace("\" \"", "");
+
+        StringBuilder result = new StringBuilder();
+        int index = 0;
+        while (index < value.length()) {
+            while (index < value.length() && Character.isWhitespace(value.charAt(index))) {
+                index++;
+            }
+            if (index >= value.length()) {
+                return result.toString();
+            }
+            if (value.charAt(index) != '"') {
+                return value;
+            }
+
+            index++;
+            boolean closed = false;
+            while (index < value.length()) {
+                char current = value.charAt(index++);
+                if (current == '\\' && index < value.length()) {
+                    result.append(value.charAt(index++));
+                    continue;
+                }
+                if (current == '"') {
+                    closed = true;
+                    break;
+                }
+                result.append(current);
+            }
+            if (!closed) {
+                return value;
+            }
+        }
+        return result.toString();
     }
 }
