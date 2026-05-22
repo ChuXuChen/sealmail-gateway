@@ -14,6 +14,13 @@ class DnsTxtResolverTest {
     }
 
     @Test
+    void concatenatesJndiSplitDnsTxtCharacterStrings() {
+        assertEquals(
+                "v=DKIM1; k=rsa; p=abc/def",
+                clean("\"v=DKIM1; k=rsa; p=abc\" /def"));
+    }
+
+    @Test
     void leavesUnquotedTxtValuesUnchanged() {
         assertEquals("v=spf1 mx ~all", clean("v=spf1 mx ~all"));
     }

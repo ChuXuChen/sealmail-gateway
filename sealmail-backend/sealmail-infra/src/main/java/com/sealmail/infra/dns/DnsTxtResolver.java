@@ -72,7 +72,8 @@ public class DnsTxtResolver {
                 return result.toString();
             }
             if (value.charAt(index) != '"') {
-                return value;
+                result.append(value.substring(index).trim());
+                return result.toString();
             }
 
             index++;
