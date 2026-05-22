@@ -16,9 +16,13 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
 import java.util.Properties;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 @Component
 public class PostfixTrustedSourceResolver implements TrustedMailSourcePort {
+
+    private static final Pattern BRACKETED_IP = Pattern.compile("\\[([^\\]]+)]");
 
     private final MailAuthProperties properties;
 
@@ -41,7 +45,8 @@ public class PostfixTrustedSourceResolver implements TrustedMailSourcePort {
         if (!trustedRelay(candidate.sourceIp())) {
             return withDetail(candidate, "remote source is not a trusted relay");
         }
-        return originalIpFromHeaders(rawContent)
+        return originalIpFromForwardingHeaders(rawContent)
+                .or(() -> originalIpFromReceivedHeaders(rawContent))
                 .map(originalIp -> new MailSourceIdentity(
                         originalIp,
                         candidate.envelopeFromDomain(),
@@ -52,7 +57,7 @@ public class PostfixTrustedSourceResolver implements TrustedMailSourcePort {
                 .orElseGet(() -> withDetail(candidate, "trusted relay did not provide an original client IP header"));
     }
 
-    private Optional<String> originalIpFromHeaders(byte[] rawContent) {
+    private Optional<String> originalIpFromForwardingHeaders(byte[] rawContent) {
         if (rawContent == null || rawContent.length == 0) {
             return Optional.empty();
         }
@@ -78,6 +83,30 @@ public class PostfixTrustedSourceResolver implements TrustedMailSourcePort {
         return Optional.empty();
     }
 
+    private Optional<String> originalIpFromReceivedHeaders(byte[] rawContent) {
+        if (rawContent == null || rawContent.length == 0) {
+            return Optional.empty();
+        }
+        try {
+            MimeMessage message = new MimeMessage(
+                    Session.getInstance(new Properties()),
+                    new ByteArrayInputStream(rawContent));
+            String[] receivedHeaders = message.getHeader("Received");
+            if (receivedHeaders == null || receivedHeaders.length == 0) {
+                return Optional.empty();
+            }
+            for (String received : receivedHeaders) {
+                Optional<String> publicIp = firstPublicBracketedIp(received);
+                if (publicIp.isPresent()) {
+                    return publicIp;
+                }
+            }
+        } catch (Exception ignored) {
+            return Optional.empty();
+        }
+        return Optional.empty();
+    }
+
     private Optional<String> firstValidIp(String value) {
         if (value == null) {
             return Optional.empty();
@@ -88,6 +117,20 @@ public class PostfixTrustedSourceResolver implements TrustedMailSourcePort {
                 candidate = candidate.substring(1, candidate.length() - 1);
             }
             if (validIp(candidate)) {
+                return Optional.of(candidate);
+            }
+        }
+        return Optional.empty();
+    }
+
+    private Optional<String> firstPublicBracketedIp(String value) {
+        if (value == null) {
+            return Optional.empty();
+        }
+        Matcher matcher = BRACKETED_IP.matcher(value);
+        while (matcher.find()) {
+            String candidate = matcher.group(1).trim();
+            if (validIp(candidate) && !privateIp(candidate)) {
                 return Optional.of(candidate);
             }
         }
@@ -149,6 +192,18 @@ public class PostfixTrustedSourceResolver implements TrustedMailSourcePort {
             return normalized.contains(".") || normalized.contains(":");
         } catch (Exception e) {
             return false;
+        }
+    }
+
+    private boolean privateIp(String value) {
+        try {
+            InetAddress address = InetAddress.getByName(value.trim());
+            return address.isAnyLocalAddress()
+                    || address.isLoopbackAddress()
+                    || address.isLinkLocalAddress()
+                    || address.isSiteLocalAddress();
+        } catch (Exception e) {
+            return true;
         }
     }
 

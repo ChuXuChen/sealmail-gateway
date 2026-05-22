@@ -8,6 +8,7 @@ import com.sealmail.infra.config.properties.MailAuthProperties;
 import org.junit.jupiter.api.Test;
 
 import java.nio.charset.StandardCharsets;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -54,8 +55,33 @@ class PostfixTrustedSourceResolverTest {
         assertTrue(result.trustedProxyOverride());
     }
 
+    @Test
+    void trustedHeadersModeFallsBackToPublicIpFromPostfixReceivedHeader() {
+        MailAuthProperties properties = new MailAuthProperties();
+        properties.getTrustedSource().setTrustedRelayCidrs(List.of("172.16.0.0/12"));
+        PostfixTrustedSourceResolver resolver = new PostfixTrustedSourceResolver(properties);
+
+        MailSourceIdentity result = resolver.resolve(
+                receivedMessage("8.217.136.171"),
+                candidate("172.18.0.8"),
+                policy(TrustedProxyMode.TRUSTED_HEADERS));
+
+        assertEquals("8.217.136.171", result.sourceIp());
+        assertTrue(result.trustedProxyOverride());
+    }
+
     private static byte[] message(String originalIp) {
         return ("X-Original-Client-IP: " + originalIp + "\r\n"
+                + "From: sender@example.com\r\n"
+                + "\r\n"
+                + "body\r\n").getBytes(StandardCharsets.ISO_8859_1);
+    }
+
+    private static byte[] receivedMessage(String originalIp) {
+        return ("Received: from relay.internal (sealmail-gateway-beta-postfix-1 [172.18.0.8])\r\n"
+                + "\tby backend.internal with SMTP; Fri, 22 May 2026 03:44:13 +0000\r\n"
+                + "Received: from mx-alpha.example (unknown [" + originalIp + "])\r\n"
+                + "\tby mx-beta.example with ESMTP; Fri, 22 May 2026 03:44:13 +0000\r\n"
                 + "From: sender@example.com\r\n"
                 + "\r\n"
                 + "body\r\n").getBytes(StandardCharsets.ISO_8859_1);
